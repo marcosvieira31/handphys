@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+    <title>Spike 0.2 — Cardboard estéreo</title>
+  </head>
+  <body class="spike cardboard">
+    <canvas id="view"></canvas>
+
+    <div id="portrait" class="overlay hidden">
+      <p>Gire o celular na <strong>horizontal</strong> para entrar no modo Cardboard.</p>
+    </div>
+
+    <div id="gate" class="overlay">
+      <div class="gate-box">
+        <h1>Spike0.2 · Cardboard</h1>
+        <p>Estéreo split-screen + giroscópio. Precisa de HTTPS para os sensores.</p>
+        <button id="start" type="button">Iniciar (ativa giroscópio)</button>
+        <p id="gate-msg" class="msg"></p>
+      </div>
+    </div>
+
+    <div class="hud-actions">
+      <button id="toggle-stereo" type="button">Estéreo: ON</button>
+      <button id="fullscreen" type="button">Tela cheia</button>
+      <a href="/" class="hud-link">← início</a>
+    </div>
+
+    <div class="legend">Toque = selecionar objeto · arrastar = girar (modo fallback) · “S” = alterna estéreo</div>
+
+    <script type="module" src="/src/spikes/cardboard/main.ts"></script>
+  </body>
+</html>

@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Spike 0.1 — Hand tracking na webcam</title>
+  </head>
+  <body class="spike">
+    <header class="bar">
+      <h1>Spike0.1 · Hand tracking (webcam)</h1>
+      <nav>
+        <a href="/">← início</a>
+      </nav>
+    </header>
+
+    <section class="stage">
+      <video id="video" playsinline muted autoplay></video>
+      <canvas id="overlay"></canvas>
+      <p id="status" class="status">Clique em “Iniciar câmera” para começar.</p>
+    </section>
+
+    <aside class="panel">
+      <div class="actions">
+        <button id="start" type="button">Iniciar câmera</button>
+        <button id="stop" type="button" disabled>Parar</button>
+      </div>
+
+      <label class="slider">
+        Limiar de pinça: <output id="thr">0.25</output>
+        <input id="threshold" type="range" min="0.10" max="0.60" step="0.01" value="0.25" />
+      </label>
+
+      <dl class="stats">
+        <dt>Render FPS</dt><dd id="fps">–</dd>
+        <dt>Detecções/s</dt><dd id="det">–</dd>
+        <dt>Latência média</dt><dd id="lat">–</dd>
+        <dt>Mãos vistas</dt><dd id="hands">–</dd>
+        <dt>Pinça E / D</dt><dd id="pinch">–</dd>
+        <dt>Trocas agarrado↔solto (5s)</dt><dd id="flicker">–</dd>
+        <dt>Delegate</dt><dd id="delegate">–</dd>
+      </dl>
+
+      <p class="hint">
+        Teste: <strong>segure a pinça por 10 s</strong> com o cursor quadrado visível.
+        “Trocas” altas = gesto instável → ajustar suavização/limiar na Fase 2.
+        O quadradinho segue o ponto de pinça quando você agarra; solte para largá-lo.
+      </p>
+    </aside>
+
+    <script type="module" src="/src/spikes/hands/main.ts"></script>
+  </body>
+</html>

@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { clientToCell } from './coords';
-import { handFrame } from './handDraw';
+import { handFrame, tipMid } from './handDraw';
 import { hands } from '../hands/controller';
 
 const CONNECTIONS: Array<[number, number]> = [
@@ -90,15 +90,15 @@ export function HandsLayer() {
       }
       wasPinched = c?.active ?? false;
 
-      // Esqueleto a uma escala fixa, ancorado no PONTO DA PINÇA (ponta do
-      // polegar 4 + ponta do indicador 8) — que é exatamente onde a mira fica.
-      // Ancorar no centroide, como antes, fazia o ponto nascer sempre no meio
-      // da mão desenhada, longe dos dedos (ver handDraw.test.ts).
+      // Esqueleto a uma escala fixa, ancorado num ponto MATERIAL da mão:
+      // na mão da mira, a própria mira (que é travada na palma, portanto não
+      // desliza quando os dedos fecham); nas outras, o ponto médio das pontas.
       ctx.lineCap = 'round';
       for (const hand of frame.hands) {
         const pts = hand.pts;
         if (!pts.length) continue;
-        const f = handFrame(pts, c, W, H, HAND_RADIUS_PX);
+        const ref = hand.cursor && c ? c : tipMid(pts);
+        const f = handFrame(pts, ref, W, H, HAND_RADIUS_PX);
         if (!f) continue;
         ctx.strokeStyle = hand.pinched ? '#3fb950' : 'rgba(88,166,255,0.85)';
         ctx.lineWidth = 2;

@@ -1,81 +1,78 @@
 import { describe, expect, it } from 'vitest';
-import { handFrame } from './handDraw';
+import { handFrame, tipMid, type Pt } from './handDraw';
 
-/** 21 landmarks normalizados numa mão "aberta" (dedos espalhados). */
-function hand(ox = 0.4, oy = 0.5): { x: number; y: number }[] {
+const W = 1200;
+const H = 800;
+
+/** 21 landmarks numa mão "aberta": polegar à esquerda, indicador à direita. */
+function aberta(ox = 0.4, oy = 0.5): Pt[] {
   const pts = Array.from({ length: 21 }, (_, i) => ({ x: ox + i * 0.001, y: oy - i * 0.001 }));
-  // polegar 4 e indicador 8 bem afastados (mão ABERTA: o caso que expunha o bug)
-  pts[4] = { x: ox - 0.06, y: oy - 0.05 };
-  pts[8] = { x: ox + 0.05, y: oy - 0.07 };
-  // punho para baixo, para o centroide não coincidir com a pinça
-  pts[0] = { x: ox, y: oy + 0.1 };
+  pts[4] = { x: ox - 0.06, y: oy - 0.05 }; // ponta do polegar
+  pts[8] = { x: ox + 0.05, y: oy - 0.07 }; // ponta do indicador
+  pts[0] = { x: ox, y: oy + 0.1 }; // punho (o mais distante => a escala)
   return pts;
 }
 
-const mid = (a: { x: number; y: number }, b: { x: number; y: number }) => ({
-  x: (a.x + b.x) / 2,
-  y: (a.y + b.y) / 2,
-});
+/** A mesma mão com os dedos JÁ FECHADOS: só o indicador anda (em direção ao polegar). */
+function fechada(ox = 0.4, oy = 0.5): Pt[] {
+  const pts = aberta(ox, oy);
+  pts[8] = { x: ox - 0.04, y: oy - 0.05 };
+  return pts;
+}
 
-describe('esqueleto ancorado na ponta dos dedos (handFrame)', () => {
-  it('o ponto da pinça projetado cai EXATAMENTE na mira', () => {
-    const pts = hand();
-    const cursor = mid(pts[4], pts[8]); // a mira é a média 4/8
-    const f = handFrame(pts, cursor, 1200, 800, 70)!;
+const mid = (a: Pt, b: Pt): Pt => ({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 });
+const dist = (a: { x: number; y: number }, b: { x: number; y: number }) =>
+  Math.hypot(a.x - b.x, a.y - b.y);
+
+describe('esqueleto ancorado num ponto material (handFrame)', () => {
+  it('o ponto escolhido cai exatamente onde ele está na tela', () => {
+    const pts = aberta();
+    const ref = tipMid(pts); // mão secundária: ancora no próprio meio das pontas
+    const f = handFrame(pts, ref, W, H, 70)!;
     const drawn = mid(f.project(pts[4]), f.project(pts[8]));
-    expect(drawn.x).toBeCloseTo(cursor.x * 1200, 6);
-    expect(drawn.y).toBeCloseTo(cursor.y * 800, 6);
+    expect(drawn.x).toBeCloseTo(ref.x * W, 6);
+    expect(drawn.y).toBeCloseTo(ref.y * H, 6);
+    expect(f.anchor).toEqual({ x: ref.x * W, y: ref.y * H });
   });
 
-  it('fica longe do centroide (que era o bug: ponto no meio da mão)', () => {
-    const pts = hand();
-    const cursor = mid(pts[4], pts[8]);
-    const f = handFrame(pts, cursor, 1200, 800, 70)!;
-    const centroid = pts.reduce(
-      (s, p) => ({ x: s.x + p.x / pts.length, y: s.y + p.y / pts.length }),
-      { x: 0, y: 0 },
-    );
-    const drawnCentroid = pts.reduce(
-      (s, p) => ({ x: s.x + f.project(p).x / pts.length, y: s.y + f.project(p).y / pts.length }),
-      { x: 0, y: 0 },
-    );
-    // o centroide desenhado NÃO fica na mira (fica onde ele realmente está)
-    const pincha = f.project(cursor);
-    expect(Math.hypot(drawnCentroid.x - pincha.x, drawnCentroid.y - pincha.y)).toBeGreaterThan(10);
-    // e o centroide projetado bate com o centroide real, só na escala nova
-    expect(drawnCentroid.x).toBeGreaterThan(centroid.x * 1200 - 100);
+  it('COM A TRAVA: fechar os dedos não desloca o punho desenhado', () => {
+    const a = aberta();
+    const p = fechada();
+    const travada = tipMid(a); // a mira travou quando a mão estava aberta
+    const f1 = handFrame(a, travada, W, H, 70);
+    const f2 = handFrame(p, travada, W, H, 70);
+    expect(f1 && f2).toBeTruthy();
+    // o punho é o mesmo ponto material nas duas — não pode andar
+    expect(dist(f2!.project(p[0]), f1!.project(a[0]))).toBeLessThan(0.75);
+    // e o esqueleto inteiro fica onde estava (o dedo que fechou muda de lugar
+    // de verdade — menos ele)
+    for (let i = 0; i < 21; i++) {
+      if (i === 8) continue;
+      expect(dist(f2!.project(p[i]), f1!.project(a[i]))).toBeLessThan(0.75);
+    }
   });
 
-  it('mão que não gerou a mira é ancorada na própria ponta, não na mira', () => {
-    const outra = hand(0.8, 0.3);
-    const mira = { x: 0.2, y: 0.7 };
-    const f = handFrame(outra, mira, 1200, 800, 70)!;
-    const drawn = mid(f.project(outra[4]), f.project(outra[8]));
-    expect(drawn.x).toBeCloseTo(((outra[4].x + outra[8].x) / 2) * 1200, 6);
-    expect(drawn.x).not.toBeCloseTo(mira.x * 1200, 1);
-  });
-
-  it('mão sem cursor (sem mira) também fica na ponta dos dedos', () => {
-    const pts = hand();
-    const f = handFrame(pts, null, 1200, 800, 70)!;
-    const drawn = mid(f.project(pts[4]), f.project(pts[8]));
-    expect(drawn.x).toBeCloseTo(((pts[4].x + pts[8].x) / 2) * 1200, 6);
-    expect(drawn.y).toBeCloseTo(((pts[4].y + pts[8].y) / 2) * 800, 6);
+  it('SEM a trava (ancorar no meio das pontas atuais) o desenho desliza — era o bug', () => {
+    const a = aberta();
+    const p = fechada();
+    const f1 = handFrame(a, tipMid(a), W, H, 70);
+    const f2 = handFrame(p, tipMid(p), W, H, 70); // ancora no ponto que escorrega
+    expect(dist(f2!.project(p[0]), f1!.project(a[0]))).toBeGreaterThan(10);
   });
 
   it('a mão desenhada cabe no raio pedido', () => {
-    const pts = hand();
-    const f = handFrame(pts, mid(pts[4], pts[8]), 1200, 800, 70)!;
-    const pincha = f.project(mid(pts[4], pts[8]));
-    const maxR = Math.max(
-      ...pts.map((p) => Math.hypot(f.project(p).x - pincha.x, f.project(p).y - pincha.y)),
-    );
+    const pts = aberta();
+    const ref = tipMid(pts);
+    const f = handFrame(pts, ref, W, H, 70)!;
+    const anchor = f.anchor;
+    const maxR = Math.max(...pts.map((p) => dist(f.project(p), anchor)));
     expect(maxR).toBeLessThanOrEqual(70 + 1);
     expect(maxR).toBeGreaterThan(20);
   });
 
-  it('landmarks insuficientes devolvem null', () => {
-    expect(handFrame([], null, 1200, 800, 70)).toBeNull();
-    expect(handFrame([{ x: 0, y: 0 }], null, 1200, 800, 70)).toBeNull();
+  it('devolve null sem landmarks suficientes ou com âncora inválida', () => {
+    expect(handFrame([], { x: 0.5, y: 0.5 }, W, H, 70)).toBeNull();
+    expect(handFrame(aberta(), { x: NaN, y: 0.5 }, W, H, 70)).toBeNull();
+    expect(handFrame(aberta(), { x: 0.5, y: Infinity }, W, H, 70)).toBeNull();
   });
 });

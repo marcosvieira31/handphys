@@ -61,6 +61,11 @@ export function HandsPanel() {
             {st.cursor && (
               <li>
                 Mira em {Math.round(st.cursor.x * 100)}% , {Math.round(st.cursor.y * 100)}%
+                {st.mira === 'travada' && (
+                  <span title="Dedos fechando: a mira segue só a mão e não escorrega com a pinça">
+                    {' '}· trava
+                  </span>
+                )}
               </li>
             )}
             {st.lastCalib && <li>Última calibração: {st.lastCalib}</li>}

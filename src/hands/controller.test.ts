@@ -3,11 +3,14 @@ import { useEditor } from '../editor/store';
 import { HandsController, type HandPoint } from './controller';
 import type { FrameHand } from './tracker';
 
-/** Mão sintética: polegar e indicador onde se quer; resto fixo (mão de 0,4). */
+/** Mão sintética: polegar e indicador onde se quer; a mão INTEIRA acompanha
+ *  (movimento rígido — pulso e palma andam junto, como num braço de verdade;
+ *  sem isso a mira travada na palma não acompanharia o arraste). */
 function hand(side: string, tx: number, ix: number, y = 0.35): FrameHand {
   const pts = Array.from({ length: 21 }, () => ({ x: 0.5, y: 0.5, z: 0 }));
-  pts[0] = { x: 0.5, y: 0.9, z: 0 };
-  pts[9] = { x: 0.5, y: 0.5, z: 0 };
+  const dx = tx - 0.8;
+  pts[0] = { x: 0.5 + dx, y: 0.9, z: 0 };
+  pts[9] = { x: 0.5 + dx, y: 0.5, z: 0 };
   pts[4] = { x: tx, y, z: 0 };
   pts[8] = { x: ix, y, z: 0 };
   return { side, pts, world: null };
@@ -106,6 +109,49 @@ describe('HandsController sem câmera (ingest)', () => {
     now += 500; // some por mais que a graça (400 ms)
     ctl.ingest([], 5, now);
     expect(useEditor.getState().grip).toBeNull();
+  });
+
+  it('BUG: dedos convergindo com a mão PARADA não deslocam a mira', () => {
+    const ctl = wireUp();
+    let now = 0;
+    const feed = (h: FrameHand, n = 6) => {
+      for (let i = 0; i < n; i++) {
+        now += 33;
+        ctl.ingest([h], 5, now);
+      }
+    };
+    // mão ABERTA sobre a lâmpada: a mira é crua, no ponto médio dos dedos
+    feed(hand('Right', 0.45, 0.7867));
+    expect(ctl.getSnapshot().cursor).not.toBeNull();
+    // a mão NÃO anda: só os dedos fecham (razão 0,84 -> 0,08)
+    feed(hand('Right', 0.45, 0.4834));
+    const travada = ctl.getSnapshot().cursor!;
+    // e seguem fechando, ainda sem a mão andar
+    feed(hand('Right', 0.45, 0.46));
+    const depois = ctl.getSnapshot().cursor!;
+    // os dedos andaram de verdade (sem a trava a mira escorreria junto) ...
+    expect(1 - (0.45 + 0.46) / 2).not.toBeCloseTo(1 - (0.45 + 0.4834) / 2, 4);
+    // ... e a mira ficou redondinha onde estava
+    expect(depois.x).toBeCloseTo(travada.x, 6);
+    expect(depois.y).toBeCloseTo(travada.y, 6);
+  });
+
+  it('mão INTEIRA andando durante a pinça move a mira (o arraste continua)', () => {
+    const ctl = wireUp();
+    let now = 0;
+    const feed = (h: FrameHand, n = 14) => {
+      for (let i = 0; i < n; i++) {
+        now += 33;
+        ctl.ingest([h], 5, now);
+      }
+    };
+    feed(hand('Right', 0.45, 0.4834)); // já fechada: trava no 1º quadro
+    const a = ctl.getSnapshot().cursor!;
+    feed(hand('Right', 0.7, 0.7334)); // mesma pinça, o braço andou +0,25
+    const b = ctl.getSnapshot().cursor!;
+    // espelhado: andar p/ a direita na mão desloca a mira p/ a esquerda na tela
+    expect(b.x).toBeCloseTo(a.x - 0.25, 2);
+    expect(b.y).toBeCloseTo(a.y, 2);
   });
 
   it('status acompanha mãos e pinça', () => {

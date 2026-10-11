@@ -1,5 +1,6 @@
 import { useSyncExternalStore } from 'react';
 import { useEditor } from '../editor/store';
+import { Clutch } from './clutch';
 import { OneEuroFilter } from './oneEuro';
 import { PinchTracker } from './pinch';
 import { HandTracker, pinchRatio2D, pinchRatio3D, type FrameHand } from './tracker';
@@ -14,6 +15,8 @@ export interface DrawHand {
   /** Pontos suavizados, normalizados e ESPELHADOS (prontos para desenhar). */
   pts: HandPoint[];
   pinched: boolean;
+  /** true = esta mão é a que fornece a mira (o esqueleto é ancorado nela). */
+  cursor: boolean;
 }
 
 export interface DrawCursor {
@@ -32,6 +35,8 @@ export interface HandsStatus {
   ratio: number | null;
   /** Cursor da mão piloto (0..1, já espelhado). */
   cursor: HandPoint | null;
+  /** 'travada' = mira congelada na palma (dedos fechando não deslocam o ponto). */
+  mira: 'livre' | 'travada';
   /** 'rVFC' = no ritmo do vídeo; 'rAF' = laço de reserva (iOS). */
   mode: 'rVFC' | 'rAF' | '–';
   fps: number;
@@ -78,6 +83,9 @@ export class HandsController {
   private lastCell = new Map<string, { x: number; y: number }>();
   private pressed = new Set<string>();
   private driver: string | null = null;
+  /** Trava de mira da mão piloto (a mira não escorrega quando os dedos convergem). */
+  private clutch = new Clutch();
+  private clutchId: string | null = null;
   private hiddenVideo: HTMLVideoElement | null = null;
   private previewVideo: HTMLVideoElement | null = null;
   private listeners = new Set<() => void>();
@@ -89,6 +97,7 @@ export class HandsController {
     pinched: [],
     ratio: null,
     cursor: null,
+    mira: 'livre',
     mode: '–',
     fps: 0,
     latencyMs: 0,
@@ -217,6 +226,8 @@ export class HandsController {
     this.lastCell.clear();
     this.pressed.clear();
     this.driver = null;
+    this.clutch.reset();
+    this.clutchId = null;
     this.calib = null;
     this.draw = { hands: [], cursor: null };
     this.setStatus(
@@ -253,6 +264,8 @@ export class HandsController {
     this.pressed.clear();
     this.lastCell.clear();
     this.driver = null;
+    this.clutch.reset();
+    this.clutchId = null;
   }
 
   // ---- calibração: 2,5 s fechada + 2,5 s aberta; limiar = meio do caminho ----
@@ -264,6 +277,8 @@ export class HandsController {
     st.releaseGrip();
     this.pressed.clear();
     this.driver = null;
+    this.clutch.reset();
+    this.clutchId = null;
     // `until` arma no primeiro quadro (usa o mesmo relógio do ingest)
     this.calib = { phase: 'closed', until: 0, startMark: 0, samples: [] };
     this.setStatus({ calibrating: { phase: 'closed', leftMs: CALIB_MS }, error: null }, true);
@@ -287,7 +302,7 @@ export class HandsController {
     // 1) identidade estável por centroide (a etiqueta Left/Right oscila e
     // teleportava o cursor) + suavização dupla: lenta p/ a razão, rápida p/ o cursor
     const t = now / 1000;
-    const seen = new Map<string, { sm: HandPoint[]; fast: HandPoint[]; pinched: boolean; edge: 'down' | 'up' | null; label: string; ratio: number }>();
+    const seen = new Map<string, { sm: HandPoint[]; fast: HandPoint[]; mir: HandPoint[]; pinched: boolean; edge: 'down' | 'up' | null; label: string; ratio: number }>();
     let firstRatio: number | null = null;
     for (const h of hands) {
       const id = this.stableId(h, now);
@@ -296,7 +311,7 @@ export class HandsController {
       const ratio = h.world ? pinchRatio3D(h.world) : pinchRatio2D(sm);
       if (firstRatio === null) firstRatio = ratio;
       const { pinched, edge } = this.pinch.update(id, ratio, now);
-      seen.set(id, { sm, fast, pinched, edge, label: h.side, ratio });
+      seen.set(id, { sm, fast, mir: this.mirroredFast(id), pinched, edge, label: h.side, ratio });
     }
     // calibração: UMA mão (a primeira) — duas mãos misturam as amostras
     if (firstRatio !== null && this.calib) this.collectCalib(firstRatio, now);
@@ -310,6 +325,10 @@ export class HandsController {
       this.slowFilters.delete(side);
       this.fastFilters.delete(side);
       if (this.driver === side) this.driver = null;
+      if (this.clutchId === side) {
+        this.clutch.reset();
+        this.clutchId = null;
+      }
     }
 
     // 3) solturas primeiro: a borda 'up' chega junto com pinched=false,
@@ -331,12 +350,31 @@ export class HandsController {
       this.driver = pinchedNow[0] ?? null;
     }
 
+    // 4.5) TRAVA DE MIRA. A mira crua é o meio entre as pontas 4 e 8, mas elas
+    // se CONVERGEM ao fechar a mão: o meio escorrega em direção ao polegar e
+    // o esqueleto (ancorado na mira) deslizava junto — seleção errando alvo.
+    // A trava congela a "apontada" dos dedos pouco antes da pinça e daí a mira
+    // é palma + apontada: os dedos fecham em volta dela, ela não anda.
+    const hoverId = this.driver ?? [...seen.keys()][0] ?? null;
+    let cursorPoint: HandPoint | null = null;
+    const hover = hoverId !== null ? seen.get(hoverId) : undefined;
+    if (hover && hover.mir.length >= 10) {
+      if (this.clutchId !== hoverId) {
+        this.clutch.reset();
+        this.clutchId = hoverId;
+      }
+      cursorPoint = this.clutch.update({
+        ratio: hover.ratio,
+        tip: midOf(hover.mir, 4, 8),
+        palm: midOf(hover.mir, 0, 9),
+      });
+    }
+
     // 5) aperto/movimento do piloto ( contention: quem nunca apertou, aperta;
     // quem já apertou, move — a soltura foi tratada no passo 3).
-    // O cursor usa o filtro RÁPIDO (sem o lag do filtro da razão).
     const d = this.driver !== null ? seen.get(this.driver) : undefined;
-    if (this.driver !== null && d?.pinched) {
-      const cell = this.resolveCell(midpoint(d.fast));
+    if (this.driver !== null && d?.pinched && cursorPoint) {
+      const cell = this.resolveCell(cursorPoint);
       if (cell) {
         if (!this.pressed.has(this.driver)) {
           st.pressAt(cell);
@@ -351,23 +389,22 @@ export class HandsController {
     // 6) quadro para desenho (esqueleto rápido) + status com etiquetas legíveis
     const drawHands: DrawHand[] = [...seen].map(([id, s]) => ({
       side: s.label,
-      pts: this.mirroredFast(id),
+      pts: s.mir,
       pinched: s.pinched,
+      cursor: id === hoverId,
     }));
-    const cursorHand = this.driver !== null ? seen.get(this.driver) : undefined;
-    const hoverSeen = cursorHand ?? [...seen.values()][0];
-    const cursorPoint = hoverSeen ? midpoint(hoverSeen.fast) : null;
     this.draw = {
       hands: drawHands,
       cursor: cursorPoint
-        ? { ...cursorPoint, active: this.driver !== null && !!hoverSeen?.pinched }
+        ? { ...cursorPoint, active: this.driver !== null && !!d?.pinched }
         : null,
     };
     this.setStatus({
       hands: hands.length,
       pinched: pinchedNow.map((id) => seen.get(id)?.label ?? id),
-      ratio: (cursorHand ?? hoverSeen)?.ratio ?? null,
+      ratio: hover?.ratio ?? null,
       cursor: cursorPoint,
+      mira: this.clutch.isFrozen ? 'travada' : 'livre',
       mode: this.tracker.usingVideoCallback ? 'rVFC' : 'rAF',
       calibrating: this.calib
         ? { phase: this.calib.phase, leftMs: Math.max(0, this.calib.until - now) }
@@ -512,10 +549,11 @@ export class HandsController {
   private closedRef = 0;
 }
 
-function midpoint(pts: HandPoint[]): HandPoint {
-  const a = pts[4] ?? { x: 0.5, y: 0.5 };
-  const b = pts[8] ?? { x: 0.5, y: 0.5 };
-  return { x: 1 - (a.x + b.x) / 2, y: (a.y + b.y) / 2 }; // já sai espelhado
+/** Média de dois landmarks num array JÁ espelhado (espaço da janela). */
+function midOf(pts: HandPoint[], i: number, j: number): HandPoint {
+  const a = pts[i] ?? { x: 0.5, y: 0.5 };
+  const b = pts[j] ?? { x: 0.5, y: 0.5 };
+  return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
 }
 
 /** Percentil (0 se vazio): p90 do teto, p10 do piso — robustos a tropeços. */

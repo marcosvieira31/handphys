@@ -37,15 +37,34 @@
       // bloqueador), o portão ficaria morto sem explicação. Este script
       // clássico roda mesmo que o módulo falhe.
       window.__cbBoot = false;
-      setTimeout(function () {
-        if (!window.__cbBoot) {
+      window.__cbReady = false;
+      window.__cbLoadErrors = [];
+      // captura (true): pega até erro de DOWNLOAD de cada arquivo
+      window.addEventListener('error', function (e) {
+        var t = e.target;
+        if (t && (t.src || t.href) && t !== window) {
+          window.__cbLoadErrors.push(t.src || t.href);
           var m = document.querySelector('#gate-msg');
           if (m) {
-            m.textContent = 'O programa não carregou aqui (rede ou navegador). Recarregue a página ou tente outro navegador.';
+            m.textContent = 'Falhou ao baixar: ' + (t.src || t.href).split('/').pop();
             m.style.color = '#ff7b72';
           }
         }
-      }, 4000);
+      }, true);
+      function cbAlarm() {
+        if (window.__cbReady) return;
+        var m = document.querySelector('#gate-msg');
+        if (!m) return;
+        if (!window.__cbBoot) {
+          m.textContent = 'O programa não carregou aqui (rede ou navegador). Recarregue a página ou tente outro navegador.';
+          m.style.color = '#ff7b72';
+        } else {
+          m.textContent = 'Carregou, mas travou iniciando. Recarregue a página.';
+          m.style.color = '#d29922';
+        }
+      }
+      setTimeout(cbAlarm, 6000);
+      setTimeout(cbAlarm, 20000);
     </script>
     <script type="module" src="/src/cardboard/main.ts"></script>
   </body>

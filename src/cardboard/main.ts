@@ -2,6 +2,10 @@ import * as THREE from 'three';
 import './style.css';
 import { readCircuit, type Reading } from '../core/netlist';
 import { EXAMPLES } from '../editor/examples';
+
+// Módulo avaliado (imports baixados): avisa o alarme de carga. O "pronto"
+// (__cbReady) só vem após a bancada montar, no fim do arquivo.
+(window as unknown as { __cbBoot?: boolean }).__cbBoot = true;
 import { voltageColor } from '../editor/colors';
 import { applyLayoutReading, buildBoard, buildCircuitGroup, compIdOf, disposeGroup } from '../scene/buildScene';
 import { layoutScene } from '../scene/layout';
@@ -417,7 +421,7 @@ function renderFrame() {
 
 loadCircuit(0);
 bootLog(`WebGL ok · bancada pronta (${EXAMPLES.length} circuitos)`);
-(window as unknown as { __cbBoot?: boolean }).__cbBoot = true;
+(window as unknown as { __cbReady?: boolean }).__cbReady = true;
 frame();
 
 // Gancho mínimo de suporte (estado legível por automação/remoto).

@@ -45,9 +45,24 @@ export function HandsPanel() {
               )}
             </li>
             <li>
-              {st.fps} det/s · {st.latencyMs} ms · {st.delegate}
+              {st.fps} det/s · {st.latencyMs} ms · {st.delegate} · {st.mode}
             </li>
-            <li>Limiar da pinça: {st.threshold.toFixed(2)}</li>
+            <li>
+              Limiar da pinça: {st.threshold.toFixed(2)}
+              {st.ratio !== null && (
+                <>
+                  {' '}· razão agora:{' '}
+                  <strong className={st.ratio < st.threshold ? 'pinch-on' : undefined}>
+                    {st.ratio.toFixed(2)}
+                  </strong>
+                </>
+              )}
+            </li>
+            {st.cursor && (
+              <li>
+                Mira em {Math.round(st.cursor.x * 100)}% , {Math.round(st.cursor.y * 100)}%
+              </li>
+            )}
             {st.lastCalib && <li>Última calibração: {st.lastCalib}</li>}
           </ul>
           {st.calibrating ? (

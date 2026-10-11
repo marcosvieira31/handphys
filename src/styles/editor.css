@@ -248,9 +248,13 @@ body.editor-page {
 
 .hands-video {
   position: absolute;
-  width: 2px;
-  height: 2px;
-  opacity: 0;
+  left: 0;
+  top: 0;
+  width: 1px;
+  height: 1px;
+  /* opacidade quase nula (nunca display:none): o navegador precisa DECODIFICAR
+     o vídeo para a detecção rodar — escondido demais, ele pausa o fluxo. */
+  opacity: 0.01;
   pointer-events: none;
 }
 

@@ -28,6 +28,12 @@ export interface HandsStatus {
   starting: boolean;
   hands: number;
   pinched: string[];
+  /** Razão polegar–indicador da mão piloto (para diagnóstico em aula). */
+  ratio: number | null;
+  /** Cursor da mão piloto (0..1, já espelhado). */
+  cursor: HandPoint | null;
+  /** 'rVFC' = no ritmo do vídeo; 'rAF' = laço de reserva (iOS). */
+  mode: 'rVFC' | 'rAF' | '–';
   fps: number;
   latencyMs: number;
   delegate: string;
@@ -81,6 +87,9 @@ export class HandsController {
     starting: false,
     hands: 0,
     pinched: [],
+    ratio: null,
+    cursor: null,
+    mode: '–',
     fps: 0,
     latencyMs: 0,
     delegate: '–',
@@ -168,6 +177,16 @@ export class HandsController {
       }
       this.fpsAt = performance.now();
       this.setStatus({ active: true, starting: false, delegate: this.tracker.gpuDelegate }, true);
+      // Vigia de prontidão: se a câmera não entregar quadros em 2,5 s (vídeo
+      // pausado, permissão estranha, elemento oculto), avisa em vez de ficar mudo.
+      window.setTimeout(() => {
+        if (this.status.active && this.frames === 0) {
+          this.setStatus(
+            { error: 'A câmera não está entregando quadros: verifique a permissão e recarregue.' },
+            true,
+          );
+        }
+      }, 2500);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       this.setStatus(
@@ -268,7 +287,7 @@ export class HandsController {
     // 1) identidade estável por centroide (a etiqueta Left/Right oscila e
     // teleportava o cursor) + suavização dupla: lenta p/ a razão, rápida p/ o cursor
     const t = now / 1000;
-    const seen = new Map<string, { sm: HandPoint[]; fast: HandPoint[]; pinched: boolean; edge: 'down' | 'up' | null; label: string }>();
+    const seen = new Map<string, { sm: HandPoint[]; fast: HandPoint[]; pinched: boolean; edge: 'down' | 'up' | null; label: string; ratio: number }>();
     let firstRatio: number | null = null;
     for (const h of hands) {
       const id = this.stableId(h, now);
@@ -277,7 +296,7 @@ export class HandsController {
       const ratio = h.world ? pinchRatio3D(h.world) : pinchRatio2D(sm);
       if (firstRatio === null) firstRatio = ratio;
       const { pinched, edge } = this.pinch.update(id, ratio, now);
-      seen.set(id, { sm, fast, pinched, edge, label: h.side });
+      seen.set(id, { sm, fast, pinched, edge, label: h.side, ratio });
     }
     // calibração: UMA mão (a primeira) — duas mãos misturam as amostras
     if (firstRatio !== null && this.calib) this.collectCalib(firstRatio, now);
@@ -337,15 +356,19 @@ export class HandsController {
     }));
     const cursorHand = this.driver !== null ? seen.get(this.driver) : undefined;
     const hoverSeen = cursorHand ?? [...seen.values()][0];
+    const cursorPoint = hoverSeen ? midpoint(hoverSeen.fast) : null;
     this.draw = {
       hands: drawHands,
-      cursor: hoverSeen
-        ? { ...midpoint(hoverSeen.fast), active: this.driver !== null && hoverSeen.pinched }
+      cursor: cursorPoint
+        ? { ...cursorPoint, active: this.driver !== null && !!hoverSeen?.pinched }
         : null,
     };
     this.setStatus({
       hands: hands.length,
       pinched: pinchedNow.map((id) => seen.get(id)?.label ?? id),
+      ratio: (cursorHand ?? hoverSeen)?.ratio ?? null,
+      cursor: cursorPoint,
+      mode: this.tracker.usingVideoCallback ? 'rVFC' : 'rAF',
       calibrating: this.calib
         ? { phase: this.calib.phase, leftMs: Math.max(0, this.calib.until - now) }
         : null,

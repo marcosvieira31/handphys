@@ -104,6 +104,10 @@ export class HandTracker {
       v.cancelVideoFrameCallback?.(this.videoFrameHandle);
     }
     this.videoFrameHandle = 0;
+    if (this.rafHandle) {
+      cancelAnimationFrame(this.rafHandle);
+      this.rafHandle = 0;
+    }
     this.stream?.getTracks().forEach((t) => t.stop());
     this.stream = null;
     if (this.video) this.video.srcObject = null;
@@ -124,17 +128,47 @@ export class HandTracker {
     return this.videoFrameHandle !== 0;
   }
 
+  /** true quando a detecção está no ritmo do vídeo (rVFC); false = laço rAF. */
+  get usingVideoCallback(): boolean {
+    return this.usingRvfc;
+  }
+
+  private usingRvfc = false;
+  private rafHandle = 0;
+
   private scheduleVideoFrame() {
     const v = this.video as (HTMLVideoElement & {
       requestVideoFrameCallback?: (cb: () => void) => number;
     }) | null;
-    if (this.stopped || !v || typeof v.requestVideoFrameCallback !== 'function') return;
+    if (this.stopped || !v) return;
+    if (typeof v.requestVideoFrameCallback !== 'function') {
+      // iOS Safari (e alguns Androids) não têm rVFC: sem este laço a detecção
+      // NUNCA rodava e a mira ficava parada no centro. O rAF com guarda de
+      // quadro repetido faz o mesmo trabalho (60 Hz, detecta só em quadro novo).
+      this.usingRvfc = false;
+      this.startRafFallback();
+      return;
+    }
+    this.usingRvfc = true;
     this.videoFrameHandle = v.requestVideoFrameCallback(() => {
       if (this.stopped) return;
       this.onVideoTick();
       this.detectOnce();
       this.scheduleVideoFrame();
     });
+  }
+
+  private startRafFallback() {
+    const tick = () => {
+      if (this.stopped) return;
+      this.rafHandle = requestAnimationFrame(tick);
+      const v = this.video;
+      if (!v || v.readyState < 2 || v.currentTime === this.lastVideoTime) return;
+      this.lastVideoTime = v.currentTime;
+      this.onVideoTick();
+      this.detectOnce();
+    };
+    this.rafHandle = requestAnimationFrame(tick);
   }
 
   private detectOnce() {

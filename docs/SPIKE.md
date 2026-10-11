@@ -78,7 +78,7 @@ Testes manuais: celular **sem** giroscópio (fallback "arraste"); entrar em tela
 | Métrica | Alvo | Medido | |
 |---|---|---|---|
 | Render fps | – | 61 | ✅ |
-| Detecções/s | ≥ 24 | **15 → corrigido (esperado ~30)** | ⚠️ câmera confirmada30 fps; reconfirmar no reteste |
+| Detecções/s | ≥ 24 | **15** | ⚠️ latência caiu para18,3 ms (pipeline mais rápido), então o teto15 quase certo é a **câmera real** — confirmar com a linha “quadros de vídeo/s” |
 | Latência média | ≤ 60 ms | 29,5 ms | ✅ |
 | Trocas agarrado↔solto (5s, mão parada) | ~2 | **0** | ✅ |
 | Perdas de rastreio (5s) | 0–2 | 0 | ✅ |
@@ -94,6 +94,12 @@ Testes manuais: celular **sem** giroscópio (fallback "arraste"); entrar em tela
   - **15 detecções/s com câmera de30 fps**: o ciclo de30 ms do `detectForVideo` batia com o rAF de33 ms e metade dos quadros era descartada → agora a detecção roda **1× por quadro de vídeo real** (`requestVideoFrameCallback`), com fallback rAF.
 - [x] Faixa aberta medida (0,84–0,88) → limiar **0,45**, histerese **0,12** (folga0,21 p/ agarrar,0,27 p/ soltar).
 - [x]15 detecções/s era o pipeline (não a câmera) → corrigido; reconfirmar no reteste (esperado ~30/s).
+- ⚠️ **Limiar fixo global é frágil entre mãos**: na mesma sessão, mão direita deu
+  fechada0,08–0,30 / aberta0,54–1,12, mas a **esquerda deu fechada0,39–0,43 e aberta0,45** —
+  ou seja, quase em cima do limiar0,45 (passaria a não agarrar). A razão varia com distância,
+  ângulo e mão. **Decisão para a Fase2:** calibração **por mão** (auto-limiar = ponto médio
+  entre a menor e a maior razão vista para aquela mão, com decaimento lento) em vez de limiar
+  fixo global. Manter slider manual como override.
 
 ### Spike 0.2 — cardboard
 - [x] WebGL2 renderizando; **fps ~60 em estéreo** no desktop (janela visível).

@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+    <title>handphys — Cardboard</title>
+  </head>
+  <body class="cardboard">
+    <canvas id="view"></canvas>
+
+    <div id="portrait" class="overlay hidden">
+      <p>Gire o celular na <strong>horizontal</strong> para entrar no modo Cardboard.</p>
+    </div>
+
+    <div id="gate" class="overlay">
+      <div class="gate-box">
+        <h1>handphys · Cardboard</h1>
+        <p>Os circuitos do editor, na bancada 3D. Toque num componente para ver V e I.</p>
+        <div id="examples" class="gate-examples"></div>
+        <button id="start" type="button">Entrar (ativa giroscópio)</button>
+        <p id="gate-msg" class="msg"></p>
+      </div>
+    </div>
+
+    <div class="hud-actions">
+      <select id="example" class="hud-select" aria-label="Circuito"></select>
+      <button id="toggle-stereo" type="button">Estéreo: ON</button>
+      <button id="fullscreen" type="button">Tela cheia</button>
+      <a href="./" class="hud-link">← início</a>
+    </div>
+
+    <div class="legend">Mire + toque = ver V/I · arrastar = girar (sem giroscópio)</div>
+
+    <script type="module" src="/src/cardboard/main.ts"></script>
+  </body>
+</html>

@@ -36,7 +36,7 @@ Publicação automática no **GitHub Pages** a cada push em `main`
 - [x] Fase 1 — **editor de circuito no desktop** ([`editor.html`](editor.html), código em [`src/editor/`](src/editor/)): quadro esquemático 2D em SVG (paleta, arrastar com snap, fios terminal→terminal, R gira, Delete apaga, Ctrl+Z desfaz, cores por tensão), modelo em [`src/core/netlist.ts`](src/core/netlist.ts) + 24 testes, leituras V/I/nós ao vivo no painel. Total: 39 testes.
 - [x] Fase 1 (extra) — **modo fio** (botão Conectar/tecla F, mira generosa, clique tolerante a tremida) + **fio com desvio automático** (sem curto fantasma ao cruzar componentes)
 - [x] Fase 2a — **vista 3D do mesmo modelo** (bancada three.js, mesma leitura V/I/cor)
-- [ ] Fase 2b — **mãos na webcam** (pinça aperta/move/solta como o mouse, esqueleto sem vídeo, calibração; em execução)
-- [ ] Fase 3 — modo Cardboard
+- [x] Fase 2b — **mãos na webcam** (pinça aperta/move/solta como o mouse, esqueleto sem vídeo, calibração)
+- [ ] Fase 3a — **Cardboard de produção** ([`cardboard.html`](cardboard.html): bancada estéreo no celular, mira+toque V/I; em execução)
 - [ ] Fase 4 — camada de sala de aula
 - [ ] Fase 5 — piloto com turma

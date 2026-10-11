@@ -24,8 +24,9 @@ export default defineConfig({
       input: {
         main: 'index.html',
         editor: 'editor.html',
+        cardboard: 'cardboard.html',
         hands: 'spikes/hands.html',
-        cardboard: 'spikes/cardboard.html',
+        spikeCardboard: 'spikes/cardboard.html',
       },
     },
   },

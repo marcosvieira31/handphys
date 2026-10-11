@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import type { CircuitDoc, Reading } from '../core/netlist';
 import { voltageColor } from '../editor/colors';
-import { layoutScene, WORLD, WIRE_Y, type CompNode } from './layout';
+import { layoutScene, WORLD, WIRE_Y, type CompNode, type SceneLayout } from './layout';
 
 /**
  * Bancada 3D do MESMO documento do esquemático (three.js puro, sem R3F:
@@ -165,7 +165,7 @@ function buildWire(points: [number, number, number][], color: string): THREE.Obj
   return new THREE.Mesh(geo, mat(color, { roughness: 0.4, metalness: 0.1 }));
 }
 
-function disposeGroup(g: THREE.Object3D) {
+export function disposeGroup(g: THREE.Object3D) {
   g.traverse((o) => {
     const mesh = o as THREE.Mesh;
     if (mesh.isMesh) {
@@ -176,6 +176,59 @@ function disposeGroup(g: THREE.Object3D) {
     }
   });
   g.clear();
+}
+
+/** Bancada: tampo + grade (mesma grade do esquemático, vista de cima). */
+export function buildBoard(): THREE.Group {
+  const g = new THREE.Group();
+  const top = new THREE.Mesh(new THREE.BoxGeometry(WORLD + 1, 0.5, WORLD + 1), mat(0x11161d));
+  top.position.y = -0.26;
+  g.add(top);
+  const grid = new THREE.GridHelper(WORLD, WORLD, 0x2d333b, 0x1c2128);
+  grid.position.y = 0.005;
+  g.add(grid);
+  return g;
+}
+
+/**
+ * Circuito como grupo three (componentes + fios), com userData.compId/wireId
+ * para seleção e leitura. Usado pela vista desktop E pelo Cardboard.
+ */
+export function buildCircuitGroup(layout: SceneLayout): THREE.Group {
+  const g = new THREE.Group();
+  for (const c of layout.comps) g.add(buildComp(c));
+  for (const w of layout.wires) {
+    const mesh = buildWire(w.points, w.color);
+    mesh.userData.wireId = w.id;
+    g.add(mesh);
+  }
+  return g;
+}
+
+/** Aplica a leitura (cor dos fios, brilho) num grupo existente, sem reconstruir. */
+export function applyLayoutReading(group: THREE.Object3D, layout: SceneLayout): void {
+  const colorById = new Map(layout.wires.map((w) => [w.id, w.color]));
+  const glowById = new Map(layout.comps.map((c) => [c.id, c.glow]));
+  group.traverse((o) => {
+    const mesh = o as THREE.Mesh;
+    if (!mesh.isMesh) return;
+    const m = mesh.material as THREE.MeshStandardMaterial;
+    if (mesh.userData.wireId && m.color) {
+      m.color.set(colorById.get(mesh.userData.wireId) ?? '#7d8590');
+    }
+    if (mesh.userData.glass) m.emissiveIntensity = (glowById.get(compIdOf(mesh)) ?? 0) * 2.2;
+    if (mesh.userData.filament) m.emissiveIntensity = (glowById.get(compIdOf(mesh)) ?? 0) * 3;
+  });
+}
+
+/** Sobe na árvore até o grupo do componente (para o raycast da seleção). */
+export function compIdOf(obj: THREE.Object3D): string {
+  let o: THREE.Object3D | null = obj;
+  while (o) {
+    if (o.userData.compId) return o.userData.compId as string;
+    o = o.parent;
+  }
+  return '';
 }
 
 export function createLabView(canvas: HTMLCanvasElement): LabView {
@@ -201,13 +254,7 @@ export function createLabView(canvas: HTMLCanvasElement): LabView {
   const lampLight = new THREE.PointLight(0xffd27a, 0, 16, 1.8);
   scene.add(lampLight);
 
-  // bancada: tampo + grade sutil (mesma grade do esquemático, vista de cima)
-  const top = new THREE.Mesh(new THREE.BoxGeometry(WORLD + 1, 0.5, WORLD + 1), mat(0x11161d));
-  top.position.y = -0.26;
-  scene.add(top);
-  const grid = new THREE.GridHelper(WORLD, WORLD, 0x2d333b, 0x1c2128);
-  grid.position.y = 0.005;
-  scene.add(grid);
+  scene.add(buildBoard());
 
   const dyn = new THREE.Group();
   scene.add(dyn);
@@ -240,26 +287,10 @@ export function createLabView(canvas: HTMLCanvasElement): LabView {
       if (doc !== lastDoc) {
         lastDoc = doc;
         disposeGroup(dyn);
-        for (const c of layout.comps) dyn.add(buildComp(c));
-        for (const w of layout.wires) {
-          const mesh = buildWire(w.points, w.color);
-          mesh.userData.wireId = w.id;
-          dyn.add(mesh);
-        }
+        dyn.add(buildCircuitGroup(layout));
       }
       // leitura: cor dos fios, brilho das lâmpadas, luz compartilhada
-      const colorById = new Map(layout.wires.map((w) => [w.id, w.color]));
-      const glowById = new Map(layout.comps.map((c) => [c.id, c.glow]));
-      dyn.traverse((o) => {
-        const mesh = o as THREE.Mesh;
-        if (!mesh.isMesh) return;
-        const m = mesh.material as THREE.MeshStandardMaterial;
-        if (mesh.userData.wireId && m.color) {
-          m.color.set(colorById.get(mesh.userData.wireId) ?? '#7d8590');
-        }
-        if (mesh.userData.glass) m.emissiveIntensity = (glowById.get(compIdOf(mesh)) ?? 0) * 2.2;
-        if (mesh.userData.filament) m.emissiveIntensity = (glowById.get(compIdOf(mesh)) ?? 0) * 3;
-      });
+      applyLayoutReading(dyn, layout);
       if (layout.lit.length) {
         const [x, y, z] = layout.lit[0];
         const topGlow = Math.max(0, ...layout.comps.filter((c) => c.kind === 'lamp').map((c) => c.glow));
@@ -279,13 +310,4 @@ export function createLabView(canvas: HTMLCanvasElement): LabView {
       renderer.dispose();
     },
   };
-}
-
-function compIdOf(mesh: THREE.Mesh): string {
-  let o: THREE.Object3D | null = mesh;
-  while (o) {
-    if (o.userData.compId) return o.userData.compId as string;
-    o = o.parent;
-  }
-  return '';
 }

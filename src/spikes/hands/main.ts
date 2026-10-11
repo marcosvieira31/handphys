@@ -44,6 +44,8 @@ let landmarker: HandLandmarker | null = null;
 let stream: MediaStream | null = null;
 let raf = 0;
 let lastVideoTime = -1;
+let videoFrameCb = 0; // handle do requestVideoFrameCallback (0 = sem suporte/desligado)
+let cancelVideoFrame: (() => void) | null = null;
 
 // Suavização exponencial por landmark, CHAVEADA POR MÃO (spike; a Fase 2 usa filtro One Euro).
 const smoothedBy = new Map<string, Landmark[]>();
@@ -56,6 +58,10 @@ const GRACE_MS = 400;
 // Soltar exige N quadros seguidos acima do limiar: quando o polegar encosta no
 // indicador, os landmarks se ocultam e a distância "pula" por1–2 quadros.
 const RELEASE_FRAMES = 3;
+
+// Histerese: agarrar abaixo de LIMIAR, soltar acima de LIMIAR + histerese.
+// Medido no PC real: pinça fechada0,20–0,24, aberta0,84–0,88 → limiar0,45 tem folga nos dois lados.
+const HYSTERESIS = 0.12;
 
 // Estado de pinça por mão (com histerese), chaveado por esquerda/direita —
 // a ordem das mãos no resultado do MediaPipe pode trocar entre quadros.
@@ -144,6 +150,7 @@ async function start() {
       : '–';
     setStatus('Mãos à vista — faça a pinça.');
     stopBtn.disabled = false;
+    scheduleVideoFrame(); // detecção no ritmo do vídeo (30/s), não no rAF
     loop();
   } catch (err) {
     setStatus(`Falha ao iniciar: ${(err as Error).message}`, true);
@@ -153,9 +160,12 @@ async function start() {
 
 function stop() {
   cancelAnimationFrame(raf);
+  cancelVideoFrame?.(); // para o ciclo de detecção por quadro de vídeo
+  cancelVideoFrame = null;
   stream?.getTracks().forEach((t) => t.stop());
   stream = null;
   video.srcObject = null;
+  lastVideoTime = -1;
   handsState = [];
   trackedBy.clear();
   smoothedBy.clear();
@@ -185,10 +195,14 @@ function pinchRatio3D(world: Landmark[]): number {
   return d(world[4], world[8]) / handSize;
 }
 
-function detectLoop() {
+/**
+ * Uma rodada de detecção. Chamada uma vez por quadro DE VÍDEO real
+ * (`requestVideoFrameCallback`) quando disponível — no rAF puro o ciclo de
+ * ~30 ms do detectForVideo batia com o de ~33 ms do vídeo e metade dos
+ * quadros era descartada (15 det/s com câmera de 30 fps).
+ */
+function detectOnce() {
   if (!landmarker || video.readyState < 2) return;
-  if (video.currentTime === lastVideoTime) return;
-  lastVideoTime = video.currentTime;
 
   const t0 = performance.now();
   const result = landmarker.detectForVideo(video, t0);
@@ -198,7 +212,7 @@ function detectLoop() {
   detectMsSum += dt;
 
   const thr = Number(thresholdInput.value);
-  const hysteresis = 0.05;
+  const hysteresis = HYSTERESIS;
   const now = performance.now();
   const seen = new Set<string>();
   const before = new Set(trackedBy.keys());
@@ -385,9 +399,39 @@ function updateStats(now: number) {
 
 function loop() {
   raf = requestAnimationFrame(loop);
-  detectLoop();
+  // Detecção roda no ritmo do VÍDEO (requestVideoFrameCallback); o fallback,
+  // para navegadores sem a API, continua no rAF com guarda de quadro repetido.
+  if (!videoFrameCb) detectFrame();
   draw();
   updateStats(performance.now());
+}
+
+/** Fallback (sem rVFC): detecta só quando o vídeo entregou um quadro novo. */
+function detectFrame() {
+  if (video.readyState < 2) return;
+  if (video.currentTime === lastVideoTime) return;
+  lastVideoTime = video.currentTime;
+  detectOnce();
+}
+
+/** Agenda a próxima detecção no próximo quadro de vídeo real (30/s na câmera de 30 fps). */
+function scheduleVideoFrame() {
+  const el = video as HTMLVideoElement & {
+    requestVideoFrameCallback?: (cb: () => void) => number;
+    cancelVideoFrameCallback?: (handle: number) => void;
+  };
+  if (typeof el.requestVideoFrameCallback !== 'function') return; // fallback: rAF + guarda
+  videoFrameCb = el.requestVideoFrameCallback(() => {
+    if (!stream) return; // parou no meio do quadro
+    detectOnce();
+    scheduleVideoFrame();
+  });
+  cancelVideoFrame = () => {
+    if (videoFrameCb && typeof el.cancelVideoFrameCallback === 'function') {
+      el.cancelVideoFrameCallback(videoFrameCb);
+    }
+    videoFrameCb = 0;
+  };
 }
 
 // Gancho de depuração: permite medir o spike por automação (não faz parte do produto).

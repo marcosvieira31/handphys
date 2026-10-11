@@ -27,6 +27,19 @@ Sensores (`DeviceOrientation`) e câmera exigem **HTTPS** em cima de IP/nuvem �
    ```
    Gera uma URL `https://…` temporária; abra no celular.
 
+   **Se o `cloudflared` falhar com `FAILED TO REFRESH DNS LOCAL RESOLVER` /
+   `I/O TIMEOUT`** (roteador devolvendo só IPv6 para `*.argotunnel.com`), use o
+   túnel SSH — não precisa instalar nem cadastrar:
+   ```bash
+   ssh -R 80:localhost:5173 nokey@localhost.run
+   ```
+   A saída traz a URL `https://….lhr.life` (e um QR no terminal). Válido enquanto
+   o SSH ficar aberto; a cada sessão o hostname muda.
+
+   > O `vite.config.ts` precisa de `server.allowedHosts: true`, senão o dev server
+   > responde **403 "Blocked request"** para hostname de túnel (proteção anti DNS
+   > rebinding). Só afeta `npm run dev`; o build estático não tem essa checagem.
+
 2. **Deploy estático (valida o item 0.3 de uma vez):**
    ```bash
    npm run build

@@ -78,6 +78,11 @@ let lastFps = 0;
 let lastFpsAt = performance.now();
 let detections = 0;
 let detectMsSum = 0;
+// Quadros que o ELEMENTO DE VÍDEO realmente entregou (via requestVideoFrameCallback).
+// É a taxa real da webcam: getSettings().frameRate é o pedido, não o entregue
+// (muitas webcams caem para 15 fps em luz fraca ou por firmware).
+let videoFrames = 0;
+let lastVideoFps = 0;
 let flickerTimes: number[] = []; // toda troca agarrado↔solto
 let tremorTimes: number[] = []; // troca com rastreio contínuo = tremor real do gesto
 let replaceTimes: number[] = []; // troca ao (re)aparecer a mão = reposição de estado
@@ -373,7 +378,9 @@ function updateStats(now: number) {
   if (now - lastFpsAt >= 1000) {
     lastFps = frames;
     lastFpsAt = now;
-    el.fps.textContent = String(frames);
+    lastVideoFps = videoFrames; // quadros/s reais entregues pela câmera
+    videoFrames = 0;
+    el.fps.textContent = `${lastFps} render / ${lastVideoFps} vídeo`;
     el.det.textContent = detections ? String(detections) : '0';
     el.lat.textContent = detections ? `${(detectMsSum / detections).toFixed(1)} ms` : '–';
     const good = detections > 15;
@@ -411,6 +418,7 @@ function detectFrame() {
   if (video.readyState < 2) return;
   if (video.currentTime === lastVideoTime) return;
   lastVideoTime = video.currentTime;
+  videoFrames += 1;
   detectOnce();
 }
 
@@ -423,6 +431,7 @@ function scheduleVideoFrame() {
   if (typeof el.requestVideoFrameCallback !== 'function') return; // fallback: rAF + guarda
   videoFrameCb = el.requestVideoFrameCallback(() => {
     if (!stream) return; // parou no meio do quadro
+    videoFrames += 1;
     detectOnce();
     scheduleVideoFrame();
   });
@@ -438,6 +447,7 @@ function scheduleVideoFrame() {
 (window as unknown as { __spike?: unknown }).__spike = {
   stats: () => ({
     renderFps: lastFps,
+    videoFps: lastVideoFps,
     hands: handsState.length,
     pinch: handsState.map((h) => ({ side: h.handedness, ratio: Number(h.ratio.toFixed(3)), pinched: h.pinched })),
     ratioRange2s: [...ratioStats].map(([s, r]) => ({ side: s, min: Number(r.min.toFixed(3)), max: Number(r.max.toFixed(3)) })),
@@ -466,7 +476,8 @@ copyBtn.addEventListener('click', async () => {
     `handphys spike0.1 — ${new Date().toLocaleString('pt-BR')}`,
     `aba visível: ${document.visibilityState === 'visible' ? 'sim' : 'NÃO (fps/latência não valem)'} · vídeo pronto: ${video.readyState}`,
     `câmera: ${cameraInfo}`,
-    `render fps: ${el.fps.textContent}`,
+    `render fps: ${lastFps}`,
+    `quadros de vídeo/s (taxa real da câmera): ${lastVideoFps}`,
     `detecções/s: ${el.det.textContent}`,
     `latência média: ${el.lat.textContent}`,
     `mãos vistas: ${el.hands.textContent}`,

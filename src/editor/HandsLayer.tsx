@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react';
+import { clientToCell } from './coords';
 import { hands } from '../hands/controller';
 
 const CONNECTIONS: Array<[number, number]> = [
@@ -27,17 +28,31 @@ export function HandsLayer() {
     if (!wrap || !canvas || !video) return;
     const getSvg = () =>
       (wrap.parentElement?.querySelector('svg.schematic') as SVGSVGElement | null) ?? null;
-    hands.bind(getSvg, video);
+    // Alvo do desenho: o esquemático 2D ou a bancada 3D, o que estiver montado.
+    const getTarget = () =>
+      (wrap.parentElement?.querySelector('svg.schematic') ??
+        wrap.parentElement?.querySelector('canvas.scene3d')) as HTMLElement | null;
+    hands.bindSlot(
+      '2d',
+      (p) => {
+        const svg = getSvg();
+        if (!svg) return null;
+        const r = svg.getBoundingClientRect();
+        if (r.width <= 0 || r.height <= 0) return null;
+        return clientToCell(svg, r.left + p.x * r.width, r.top + p.y * r.height);
+      },
+      video,
+    );
 
     let raf = 0;
     let dead = false;
     const draw = () => {
       if (dead) return;
       raf = requestAnimationFrame(draw);
-      const svg = getSvg();
+      const target = getTarget();
       const ctx = canvas.getContext('2d');
       if (!ctx) return;
-      if (!svg || !hands.active) {
+      if (!target || !hands.active) {
         if (canvas.width !== 1) {
           canvas.width = 1;
           canvas.height = 1;
@@ -45,9 +60,9 @@ export function HandsLayer() {
         ctx.clearRect(0, 0, 1, 1);
         return;
       }
-      // cola o canvas exatamente sobre o SVG (posição/tamanho a cada quadro)
+      // cola o canvas exatamente sobre a vista (posição/tamanho a cada quadro)
       const box = wrap.getBoundingClientRect();
-      const r = svg.getBoundingClientRect();
+      const r = target.getBoundingClientRect();
       const w = Math.max(1, Math.round(r.width));
       const h = Math.max(1, Math.round(r.height));
       if (canvas.width !== w || canvas.height !== h) {
@@ -109,7 +124,7 @@ export function HandsLayer() {
     return () => {
       dead = true;
       cancelAnimationFrame(raf);
-      hands.unbind();
+      hands.unbindSlot('2d');
     };
   }, []);
 

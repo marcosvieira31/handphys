@@ -11,6 +11,8 @@ import { layoutScene, WORLD, WIRE_Y, type CompNode, type SceneLayout } from './l
  */
 export interface LabView {
   update(doc: CircuitDoc, reading: Reading): void;
+  /** Cursor normalizado (0..1, já espelhado) => célula da grade sob ele. */
+  cellAt(nx: number, ny: number): { x: number; y: number } | null;
   dispose(): void;
 }
 
@@ -259,6 +261,31 @@ export function createLabView(canvas: HTMLCanvasElement): LabView {
   const dyn = new THREE.Group();
   scene.add(dyn);
   let lastDoc: CircuitDoc | null = null;
+  let layout: SceneLayout | null = null;
+
+  // Mira da pinça no 3D: raio do dedo contra a bancada (plano y=0) => célula.
+  // Se o raio acerta um componente, mira o CENTRO dele (o imã de terminal/corpo
+  // faz o resto); senão, usa a célula da bancada sob o dedo. Cursor já espelhado.
+  const ray = new THREE.Raycaster();
+  const ndc = new THREE.Vector2();
+  const plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+  const hitPoint = new THREE.Vector3();
+  const HALF = (WORLD - 1) / 2;
+  const cellAt = (nx: number, ny: number): { x: number; y: number } | null => {
+    ndc.set(nx * 2 - 1, 1 - ny * 2);
+    ray.setFromCamera(ndc, camera);
+    if (!ray.ray.intersectPlane(plane, hitPoint)) return null;
+    const hit = ray.intersectObjects(dyn.children, true)[0];
+    if (hit) {
+      const id = compIdOf(hit.object);
+      const node = id && layout ? layout.comps.find((c) => c.id === id) : undefined;
+      if (node) return { x: node.wx + HALF, y: node.wz + HALF };
+    }
+    const x = hitPoint.x + HALF;
+    const y = hitPoint.z + HALF;
+    if (x < -1 || y < -1 || x > WORLD || y > WORLD) return null;
+    return { x: Math.round(x), y: Math.round(y) };
+  };
 
   const resize = () => {
     const w = canvas.clientWidth || 1;
@@ -283,7 +310,7 @@ export function createLabView(canvas: HTMLCanvasElement): LabView {
 
   return {
     update(doc, reading) {
-      const layout = layoutScene(doc, reading, voltageColor);
+      layout = layoutScene(doc, reading, voltageColor);
       if (doc !== lastDoc) {
         lastDoc = doc;
         disposeGroup(dyn);
@@ -300,6 +327,7 @@ export function createLabView(canvas: HTMLCanvasElement): LabView {
         lampLight.intensity = 0;
       }
     },
+    cellAt,
     dispose() {
       dead = true;
       cancelAnimationFrame(raf);

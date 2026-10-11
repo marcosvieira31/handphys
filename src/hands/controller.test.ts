@@ -35,6 +35,13 @@ function resetDoc() {
   });
 }
 
+// costura de teste: mira fixa (sem DOM) na vista 2d
+function wireUp(): HandsController {
+  const ctl = new HandsController();
+  ctl.bindSlot('2d', toCell);
+  return ctl;
+}
+
 describe('HandsController sem câmera (ingest)', () => {
   beforeEach(resetDoc);
 
@@ -45,7 +52,7 @@ describe('HandsController sem câmera (ingest)', () => {
   const openAtLamp = () => hand('Right', 0.45, 0.7867, 0.35);
 
   it('pinça fecha no terminal, arrasta e solta no alvo: cria o fio no store', () => {
-    const ctl = new HandsController({ toCell });
+    const ctl = wireUp();
     let now = 0;
     const feed = (h: FrameHand, n = 8) => {
       for (let i = 0; i < n; i++) {
@@ -65,7 +72,7 @@ describe('HandsController sem câmera (ingest)', () => {
   });
 
   it('troca de etiqueta Left/Right no meio do arraste não reinicia o fio', () => {
-    const ctl = new HandsController({ toCell });
+    const ctl = wireUp();
     let now = 0;
     const feed = (h: FrameHand, n = 8) => {
       for (let i = 0; i < n; i++) {
@@ -87,7 +94,7 @@ describe('HandsController sem câmera (ingest)', () => {
   });
 
   it('mão que some agarrando solta o aperto depois da graça', () => {
-    const ctl = new HandsController({ toCell });
+    const ctl = wireUp();
     let now = 0;
     // fecha no CENTRO da lâmpada (12,10): segura o componente (grip)
     const atCenter = hand('Right', 0.5667, 0.6);
@@ -102,7 +109,7 @@ describe('HandsController sem câmera (ingest)', () => {
   });
 
   it('status acompanha mãos e pinça', () => {
-    const ctl = new HandsController({ toCell });
+    const ctl = wireUp();
     ctl.ingest([atBat()], 5, 0);
     ctl.ingest([atBat()], 5, 33);
     const s = ctl.getSnapshot();
@@ -111,7 +118,7 @@ describe('HandsController sem câmera (ingest)', () => {
   });
 
   it('calibração cola o limiar no teto da fechada (não no meio)', () => {
-    const ctl = new HandsController({ toCell });
+    const ctl = wireUp();
     ctl.startCalibration();
     let now = 0;
     // fase fechada (razão ~0,08) por 2,6 s
@@ -135,7 +142,7 @@ describe('HandsController sem câmera (ingest)', () => {
   });
 
   it('calibração sem separação MANTÉM o limiar antigo (não piora)', () => {
-    const ctl = new HandsController({ toCell });
+    const ctl = wireUp();
     ctl.startCalibration();
     let now = 0;
     for (let i = 0; i < 52; i++) {
@@ -149,7 +156,7 @@ describe('HandsController sem câmera (ingest)', () => {
   });
 
   it('ajuste manual do limiar persiste na sessão', () => {
-    const ctl = new HandsController({ toCell });
+    const ctl = wireUp();
     ctl.nudgeThreshold(0.05);
     expect(ctl.getSnapshot().threshold).toBe(0.5);
     ctl.nudgeThreshold(-0.4);
@@ -157,7 +164,7 @@ describe('HandsController sem câmera (ingest)', () => {
   });
 
   it('prévia: anexa o elemento (mesmo montado depois) e limpa ao parar', () => {
-    const ctl = new HandsController({ toCell });
+    const ctl = wireUp();
     const fake = {
       muted: false,
       srcObject: null as unknown,
@@ -168,5 +175,20 @@ describe('HandsController sem câmera (ingest)', () => {
     ctl.attachPreview(null); // desmontou
     ctl.stop(); // sem câmera: não quebra e não deixa aperto
     expect(useEditor.getState().grip).toBeNull();
+  });
+
+  it('vista 3D tem prioridade sobre a 2D na mira da pinça', () => {
+    const ctl = new HandsController();
+    ctl.bindSlot('2d', () => ({ x: 1, y: 1 }));
+    ctl.bindSlot('3d', () => ({ x: 7, y: 8 }));
+    expect(ctl.resolveCell({ x: 0.5, y: 0.5 })).toEqual({ x: 7, y: 8 });
+    ctl.unbindSlot('3d');
+    expect(ctl.resolveCell({ x: 0.5, y: 0.5 })).toEqual({ x: 1, y: 1 });
+  });
+
+  it('sem vista aplicável a pinça não age (não quebra)', () => {
+    const ctl = new HandsController();
+    ctl.bindSlot('2d', () => null);
+    expect(ctl.resolveCell({ x: 0.5, y: 0.5 })).toBeNull();
   });
 });

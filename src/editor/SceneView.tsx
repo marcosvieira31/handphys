@@ -1,12 +1,14 @@
 import { useEffect, useRef, useState } from 'react';
 import type { Reading } from '../core/netlist';
+import { hands } from '../hands/controller';
 import { useEditor } from './store';
 import type { LabView } from '../scene/buildScene';
 
 /**
  * Vista 3D do MESMO documento do esquemático: o three.js entra por import
  * dinâmico (fora do bundle inicial) e a cena espelha o store a cada mudança.
- * Nesta fatia (2a) a interação é orbitar com o mouse; editar continua no 2D.
+ * Mouse orbita/edita; a pinça da webcam mira no plano da bancada (raycast) e
+ * usa as MESMAS ações do store (aperta/move/solta) — funciona igual ao 2D.
  */
 export function SceneView({ reading }: { reading: Reading }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -24,9 +26,15 @@ export function SceneView({ reading }: { reading: Reading }) {
       setReady(true);
       const s = useEditor.getState();
       view.update(s.doc, reading);
+      // mira da pinça no 3D: cursor espelhado => célula sob o dedo
+      hands.bindSlot('3d', (p) => view.cellAt(p.x, p.y));
+      if (import.meta.env.DEV) {
+        (window as unknown as { __lab?: unknown }).__lab = view;
+      }
     })();
     return () => {
       alive = false;
+      hands.unbindSlot('3d');
       viewRef.current?.dispose();
       viewRef.current = null;
     };

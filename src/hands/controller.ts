@@ -1,5 +1,4 @@
 import { useSyncExternalStore } from 'react';
-import { clientToCell } from '../editor/coords';
 import { useEditor } from '../editor/store';
 import { OneEuroFilter } from './oneEuro';
 import { PinchTracker } from './pinch';
@@ -57,9 +56,12 @@ function loadThreshold(): number {
  * (pressAt/moveAt/releaseAt). Sem vídeo sobre a cena (privacidade): a camada
  * desenha só o esqueleto. Testável sem câmera via `ingest`.
  */
+export type LocateFn = (cursor: HandPoint) => { x: number; y: number } | null;
+
 export class HandsController {
   private tracker = new HandTracker();
-  private customCell: ((cursor: HandPoint) => { x: number; y: number } | null) | null = null;
+  /** Miras por vista ("3d" antes de "2d"): só uma vista está montada por vez. */
+  private locators = new Map<string, LocateFn>();
   private pinch = new PinchTracker({ threshold: loadThreshold() });
   /** Suavização LENTA (razão de pinça estável) e RÁPIDA (cursor sem lag), por mão. */
   private slowFilters = new Map<string, { x: OneEuroFilter[]; y: OneEuroFilter[] }>();
@@ -70,7 +72,6 @@ export class HandsController {
   private lastCell = new Map<string, { x: number; y: number }>();
   private pressed = new Set<string>();
   private driver: string | null = null;
-  private getSvg: (() => SVGSVGElement | null) | null = null;
   private hiddenVideo: HTMLVideoElement | null = null;
   private previewVideo: HTMLVideoElement | null = null;
   private listeners = new Set<() => void>();
@@ -95,10 +96,6 @@ export class HandsController {
   private lastNotify = 0;
   private calib: { phase: 'closed' | 'open'; until: number; startMark: number; samples: number[] } | null = null;
 
-  constructor(opts: { toCell?: (cursor: HandPoint) => { x: number; y: number } | null } = {}) {
-    this.customCell = opts.toCell ?? null;
-  }
-
   // ---- React ----
   subscribe = (fn: () => void): (() => void) => {
     this.listeners.add(fn);
@@ -119,16 +116,20 @@ export class HandsController {
   }
 
   // ---- ciclo de vida ----
-  bind(getSvg: () => SVGSVGElement | null, video: HTMLVideoElement) {
-    this.getSvg = getSvg;
-    this.hiddenVideo = video;
+  /** Uma vista (2d/3d) registra como transformar cursor em célula + vídeo. */
+  bindSlot(name: string, locate: LocateFn | null, video?: HTMLVideoElement) {
+    if (locate) this.locators.set(name, locate);
+    else this.locators.delete(name);
+    if (video) this.hiddenVideo = video;
   }
 
-  unbind() {
-    this.stop();
-    this.getSvg = null;
-    this.hiddenVideo = null;
-    this.previewVideo = null;
+  unbindSlot(name: string) {
+    this.locators.delete(name);
+    if (name === '2d') {
+      this.stop();
+      this.hiddenVideo = null;
+      this.previewVideo = null;
+    }
   }
 
   /** Prévia opcional (recolhida por padrão): mostra a câmera SÓ ali, nunca na cena. */
@@ -316,7 +317,7 @@ export class HandsController {
     // O cursor usa o filtro RÁPIDO (sem o lag do filtro da razão).
     const d = this.driver !== null ? seen.get(this.driver) : undefined;
     if (this.driver !== null && d?.pinched) {
-      const cell = this.cellOf(midpoint(d.fast));
+      const cell = this.resolveCell(midpoint(d.fast));
       if (cell) {
         if (!this.pressed.has(this.driver)) {
           st.pressAt(cell);
@@ -421,13 +422,18 @@ export class HandsController {
     return b.x.map((f, i) => ({ x: 1 - (f.value ?? 0), y: b.y[i].value ?? 0 }));
   }
 
-  private cellOf(cursor: HandPoint): { x: number; y: number } | null {
-    if (this.customCell) return this.customCell(cursor);
-    const svg = this.getSvg?.() ?? null;
-    if (!svg) return null; // sem esquemático (modo 3D): a pinça não age
-    const r = svg.getBoundingClientRect();
-    if (r.width <= 0 || r.height <= 0) return null;
-    return clientToCell(svg, r.left + cursor.x * r.width, r.top + cursor.y * r.height);
+  /**
+   * Cursor (já espelhado) => célula na vista ativa. A 3D tem prioridade sobre a
+   * 2D; sem vista aplicável devolve null (a pinça não age).
+   */
+  resolveCell(cursor: HandPoint): { x: number; y: number } | null {
+    for (const name of ['3d', '2d']) {
+      const locate = this.locators.get(name);
+      if (!locate) continue;
+      const cell = locate(cursor);
+      if (cell) return cell;
+    }
+    return null;
   }
 
   private collectCalib(ratio: number, now: number) {

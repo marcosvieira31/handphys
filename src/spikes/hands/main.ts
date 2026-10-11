@@ -289,6 +289,19 @@ function loop() {
   updateStats(performance.now());
 }
 
+// Gancho de depuração: permite medir o spike por automação (não faz parte do produto).
+(window as unknown as { __spike?: unknown }).__spike = {
+  stats: () => ({
+    renderFps: frames,
+    hands: handsState.length,
+    pinch: handsState.map((h) => ({ side: h.handedness, ratio: Number(h.ratio.toFixed(3)), pinched: h.pinched })),
+    flicker5s: flickerTimes.length,
+    delegate: el.delegate.textContent,
+    status: statusEl.textContent,
+    modelLoaded: landmarker !== null,
+  }),
+};
+
 thresholdInput.addEventListener('input', () => {
   thresholdOut.textContent = Number(thresholdInput.value).toFixed(2);
 });

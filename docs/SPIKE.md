@@ -69,6 +69,31 @@ Testes manuais: celular **sem** giroscópio (fallback "arraste"); entrar em tela
 - [ ] Site publicado em HTTPS responde em celular da escola
 - [ ] `/mp/hand_landmarker.task` e `/mp/wasm/*` servidos localmente (nada de CDN)
 
+## Resultados parciais (validado por automação em2026-10-10)
+
+### Spike 0.1 — webcam
+- [x] Modelo + WASM **locais** carregam (`/mp/*`, sem CDN) e o **delegate GPU funciona**
+  (log: “Graph successfully started running”, WebGL2).
+- [ ] Métricas de fps/latência/pinça: o navegador automatizado **negou a câmera**
+  (“Permission denied”). Precisa ser medido no PC com webcam real.
+
+### Spike 0.2 — cardboard
+- [x] WebGL2 renderizando; **fps ~60 em estéreo** no desktop (janela visível).
+- [x] Fallback “sem giroscópio → arrastar” funciona (o desktop negou `requestPermission`,
+  exercitando inclusive o ramo de permissão estilo iOS).
+- [x] Seleção por toque/raycast funciona (varredura de mira acertou objetos).
+- [x] **Estéreo corrigido durante o spike**: a arquitetura com `setViewOffset` deixava a mira
+  e o HUD exatamente na costura entre os olhos (invisíveis com o headset). Refeito com
+  **uma câmera por olho** + visibilidade por passagem (senão um olho renderizava os filhos
+  do outro). Marcador de teste aparece 1× em cada metade ✓.
+- [ ] FPS no celular real, giroscópio no celular real, acerto de toque no celular real.
+- [ ] iOS: `requestPermission()` em gesto do usuário.
+
+### Avisos operacionais
+- Aba oculta/janela minimizada → navegador throttla `requestAnimationFrame` (~1–20 fps).
+  **Medir sempre com a aba visível.**
+- `getUserMedia` e sensores exigem contexto seguro (HTTPS ou localhost).
+
 ## Decisões tomadas ao fim da Fase 0
 
 Registrar aqui o que os spikes decidirem (ex.: "webcam roda a30fps → mãos valem a Fase 2"; "celular sem giroscópio → Cardboard adiado").

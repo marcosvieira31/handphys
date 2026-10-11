@@ -5,10 +5,16 @@ import '../../styles/spike.css';
  * Spike 0.2 — validar render estéreo (Cardboard) + giroscópio no celular.
  * Mede: fps em estéreo, presença do giroscópio, latência percebida da mira.
  * Sensores exigem HTTPS — se não houver giroscópio, cai para "arrastar para olhar".
+ *
+ * Arquitetura de estéreo: UMA CÂMERA POR OLHO (não setViewOffset), porque
+ * elementos filhos da câmera (mira, HUD) precisam estar centrados em cada olho —
+ * com setViewOffset eles cairiam na costura entre as metades da tela.
  */
 
 const IPD = 0.064; // distância interpupilar típica (m)
+const EYE_FOV = 75; // FOV vertical por olho (Cardboard típico: 60–75°)
 const HEAD_HEIGHT = 1.6;
+
 const canvas = document.querySelector<HTMLCanvasElement>('#view')!;
 const gate = document.querySelector<HTMLElement>('#gate')!;
 const gateMsg = document.querySelector<HTMLElement>('#gate-msg')!;
@@ -21,16 +27,30 @@ const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x0b0f14);
+const BG_BASE = new THREE.Color(0x0b0f14);
+const BG_EYE = [new THREE.Color(0xff2020), new THREE.Color(0x2040ff)];
+scene.background = BG_BASE;
 scene.fog = new THREE.Fog(0x0b0f14, 8, 24);
 
-const camera = new THREE.PerspectiveCamera(72, 1, 0.05, 100);
-camera.rotation.order = 'YXZ';
-const headPos = new THREE.Vector3(0, HEAD_HEIGHT, 0);
-camera.position.copy(headPos);
-scene.add(camera);
+// ---------------------------------------------------------------- câmeras
 
-// ---------------------------------------------------------------- cena
+// "head" carrega a pose da cabeça e serve de base para o raycast ( centro da visão ).
+const head = new THREE.PerspectiveCamera(EYE_FOV, 1, 0.05, 100);
+head.rotation.order = 'YXZ';
+head.position.set(0, HEAD_HEIGHT, 0);
+
+type Eye = { cam: THREE.PerspectiveCamera; side: -1 | 1 };
+const eyes: [Eye, Eye] = [
+  { cam: new THREE.PerspectiveCamera(EYE_FOV, 1, 0.05, 100), side: -1 },
+  { cam: new THREE.PerspectiveCamera(EYE_FOV, 1, 0.05, 100), side: 1 },
+];
+for (const eye of eyes) {
+  eye.cam.rotation.order = 'YXZ';
+  eye.cam.position.copy(head.position);
+  scene.add(eye.cam); // precisa estar na cena para os filhos (mira/HUD) serem renderizados
+}
+
+// ------------------------------------------------------------------ cena
 
 scene.add(new THREE.HemisphereLight(0xbcd4ff, 0x20262e, 0.9));
 const sun = new THREE.DirectionalLight(0xffffff, 1.4);
@@ -63,7 +83,13 @@ for (const [sx, sz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]] as const) {
 type Selectable = THREE.Mesh<THREE.BufferGeometry, THREE.MeshStandardMaterial>;
 const selectables: Selectable[] = [];
 
-function addPart(name: string, geo: THREE.BufferGeometry, color: number, pos: [number, number, number], rot?: [number, number, number]) {
+function addPart(
+  name: string,
+  geo: THREE.BufferGeometry,
+  color: number,
+  pos: [number, number, number],
+  rot?: [number, number, number],
+) {
   const mesh = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ color, roughness: 0.6 }));
   mesh.name = name;
   mesh.position.set(...pos);
@@ -80,26 +106,38 @@ addPart('resistor', new THREE.BoxGeometry(0.18, 0.06, 0.06), 0xd9c39a, [0, 0.81,
 addPart('capacitor', new THREE.CylinderGeometry(0.04, 0.04, 0.13, 24), 0x2f5fbf, [0.16, 0.845, -0.14]);
 addPart('lâmpada', new THREE.SphereGeometry(0.06, 24, 16), 0xf2d34a, [0.44, 0.84, 0.06]);
 
-// Mira fixa no centro do olho.
-const reticle = new THREE.Mesh(
-  new THREE.RingGeometry(0.012, 0.017, 32),
-  new THREE.MeshBasicMaterial({ color: 0x58a6ff, transparent: true, opacity: 0.85 }),
-);
-reticle.position.set(0, 0, -1);
-camera.add(reticle);
+// ------------------------------------------------- mira e HUD (por olho)
 
-// HUD dentro da cena (visível nos dois olhos).
 const hudCanvas = document.createElement('canvas');
 hudCanvas.width = 512;
 hudCanvas.height = 256;
 const hudCtx = hudCanvas.getContext('2d')!;
 const hudTexture = new THREE.CanvasTexture(hudCanvas);
-const hud = new THREE.Mesh(
-  new THREE.PlaneGeometry(0.64, 0.32),
-  new THREE.MeshBasicMaterial({ map: hudTexture, transparent: true }),
+
+// Uma textura, duas malhas (uma por olho): HUD centrado em cada olho.
+for (const eye of eyes) {
+  const reticle = new THREE.Mesh(
+    new THREE.RingGeometry(0.012, 0.017, 32),
+    new THREE.MeshBasicMaterial({ color: 0x58a6ff, transparent: true, opacity: 0.85 }),
+  );
+  reticle.position.set(0, 0, -1);
+  eye.cam.add(reticle);
+
+  const hud = new THREE.Mesh(
+    new THREE.PlaneGeometry(0.64, 0.32),
+    new THREE.MeshBasicMaterial({ map: hudTexture, transparent: true }),
+  );
+  hud.position.set(0, -0.46, -1);
+  eye.cam.add(hud);
+}
+
+// Marcador de depuração: objeto de cena (não filho da câmera) à direita da cabeça.
+const marker = new THREE.Mesh(
+  new THREE.SphereGeometry(0.06, 16, 12),
+  new THREE.MeshBasicMaterial({ color: 0xff00ff }),
 );
-hud.position.set(0, -0.46, -1);
-camera.add(hud);
+marker.visible = false;
+scene.add(marker);
 
 // ------------------------------------------------------- giroscópio
 
@@ -170,7 +208,8 @@ let selections = 0;
 let lastSelected = '—';
 
 function selectCenter() {
-  raycaster.setFromCamera(center, camera);
+  head.updateMatrixWorld();
+  raycaster.setFromCamera(center, head);
   const hit = raycaster.intersectObjects(selectables, false)[0];
   if (!hit) return;
   selections += 1;
@@ -213,6 +252,10 @@ function drawHud() {
 // --------------------------------------------------------- interações
 
 let stereo = true;
+let eyeDebug = false;
+let markerOn = false;
+let pendingSample: { resolve: (v: Record<string, number[]>) => void; points: Array<[number, number]> } | null = null;
+let pendingMap: { resolve: (v: string) => void; cols: number; rows: number } | null = null;
 
 function setStereo(next: boolean) {
   stereo = next;
@@ -266,13 +309,12 @@ checkOrientation();
 // ------------------------------------------------------------ loop
 
 const size = new THREE.Vector2();
+const tmpRight = new THREE.Vector3();
 
 function resize() {
   const w = window.innerWidth;
   const h = window.innerHeight;
   renderer.setSize(w, h, false);
-  camera.aspect = w / h;
-  camera.updateProjectionMatrix();
 }
 window.addEventListener('resize', resize);
 resize();
@@ -288,9 +330,16 @@ function frame() {
 
   // Pose da cabeça: giroscópio quando disponível, arrastar como fallback.
   if (gyroState === 'active') {
-    applyGyro(camera.quaternion);
+    applyGyro(head.quaternion);
   } else {
-    camera.quaternion.setFromEuler(new THREE.Euler(manual.pitch, manual.yaw, 0, 'YXZ'));
+    head.quaternion.setFromEuler(new THREE.Euler(manual.pitch, manual.yaw, 0, 'YXZ'));
+  }
+  head.updateMatrixWorld();
+
+  // Marcador de depuração (objeto de cena, não filho da câmera).
+  marker.visible = markerOn;
+  if (markerOn) {
+    marker.position.set(0.28, -0.35, -1).applyQuaternion(head.quaternion).add(head.position);
   }
 
   // Piscar objeto selecionado.
@@ -308,28 +357,135 @@ function frame() {
   renderer.getSize(size);
   const w = Math.floor(size.x);
   const h = Math.floor(size.y);
-  renderer.setScissorTest(true);
-
   const halfW = stereo ? Math.floor(w / 2) : w;
-  const eyes = stereo ? 2 : 1;
-  for (let eye = 0; eye < eyes; eye++) {
-    const x = eye * halfW;
-    if (stereo) {
-      camera.setViewOffset(w, h, x, 0, halfW, h);
-      const right = new THREE.Vector3(1, 0, 0).applyQuaternion(camera.quaternion);
-      camera.position.copy(headPos).addScaledVector(right, eye === 0 ? -IPD / 2 : IPD / 2);
-    } else {
-      camera.clearViewOffset();
-      camera.position.copy(headPos);
-      camera.aspect = w / h;
+  const eyeW = stereo ? halfW : w;
+  const eyeOffset = stereo ? IPD / 2 : 0;
+
+  // Pose e projeção de cada olho.
+  tmpRight.set(1, 0, 0).applyQuaternion(head.quaternion);
+  for (const eye of eyes) {
+    eye.cam.quaternion.copy(head.quaternion);
+    eye.cam.position.copy(head.position).addScaledVector(tmpRight, eye.side * eyeOffset);
+    const aspect = eyeW / h;
+    if (eye.cam.aspect !== aspect) {
+      eye.cam.aspect = aspect;
+      eye.cam.updateProjectionMatrix();
     }
-    camera.updateProjectionMatrix();
-    renderer.setScissor(x, 0, halfW, h);
-    renderer.setViewport(x, 0, halfW, h);
-    renderer.render(scene, camera);
+  }
+
+  // Render: uma passagem por olho, cada uma com viewport/scissor próprios.
+  // Só a câmera do olho atual fica visível na cena, senão os filhos (mira/HUD)
+  // do outro olho seriam desenhados na passagem deste.
+  renderer.setScissorTest(true);
+  for (let i = 0; i < (stereo ? 2 : 1); i++) {
+    const eye = eyes[i];
+    const x = stereo ? i * halfW : 0;
+    for (let j = 0; j < eyes.length; j++) eyes[j].cam.visible = j === i;
+    scene.background = eyeDebug ? BG_EYE[i] : BG_BASE;
+    renderer.setScissor(x, 0, eyeW, h);
+    renderer.setViewport(x, 0, eyeW, h);
+    renderer.render(scene, eye.cam);
   }
   renderer.setScissorTest(false);
+
+  // Depuração: amostra o framebuffer no fim do quadro.
+  if (pendingSample) {
+    const gl = renderer.getContext();
+    const bw = gl.drawingBufferWidth;
+    const bh = gl.drawingBufferHeight;
+    const px = new Uint8Array(4);
+    const out: Record<string, number[]> = {};
+    for (const [fx, fy] of pendingSample.points) {
+      gl.readPixels(Math.floor(bw * fx), Math.floor(bh * fy), 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px);
+      out[`${fx.toFixed(3)},${fy.toFixed(3)}`] = [px[0], px[1], px[2]];
+    }
+    pendingSample.resolve(out);
+    pendingSample = null;
+  }
+
+  // Depuração: mapa de cores do framebuffer (grade), lido no fim do quadro.
+  if (pendingMap) {
+    const gl = renderer.getContext();
+    const bw = gl.drawingBufferWidth;
+    const bh = gl.drawingBufferHeight;
+    const px = new Uint8Array(4);
+    const { cols, rows } = pendingMap;
+    const lines: string[] = [];
+    for (let r = rows - 1; r >= 0; r--) {
+      let line = '';
+      for (let c = 0; c < cols; c++) {
+        gl.readPixels(
+          Math.floor(((c + 0.5) / cols) * bw),
+          Math.floor(((r + 0.5) / rows) * bh),
+          1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px,
+        );
+        const [R, G, B] = [px[0], px[1], px[2]];
+        line +=
+          R > 150 && G < 90 && B < 90 ? 'R' :
+          B > 150 && R < 90 && G < 120 ? 'B' :
+          R > 150 && B > 150 && G < 90 ? 'M' :
+          R > 190 && G > 190 && B > 190 ? 'W' :
+          R > 120 && G > 120 && B < 90 ? 'Y' :
+          R + G + B < 60 ? '.' : ',';
+      }
+      lines.push(line);
+    }
+    pendingMap.resolve(lines.join('\n'));
+    pendingMap = null;
+  }
 }
+
+// Gancho de depuração: permite medir o spike por automação (não faz parte do produto).
+(window as unknown as { __spike?: unknown }).__spike = {
+  stats: () => ({
+    fps: Number(fps.toFixed(1)),
+    gyroState,
+    stereo,
+    selections,
+    lastSelected,
+    webgl: renderer.getContext().getParameter(renderer.getContext().VERSION),
+  }),
+  gl: () => {
+    const vp = new THREE.Vector4();
+    const sc = new THREE.Vector4();
+    renderer.getViewport(vp);
+    renderer.getScissor(sc);
+    return {
+      viewport: vp.toArray(),
+      scissor: sc.toArray(),
+      size: renderer.getSize(new THREE.Vector2()).toArray(),
+      pixelRatio: renderer.getPixelRatio(),
+      canvasBuffer: [canvas.width, canvas.height],
+      eyeAspect: eyes.map((e) => Number(e.cam.aspect.toFixed(3))),
+    };
+  },
+  // Permite apontar a câmera programaticamente nos testes.
+  look: (yaw: number, pitch: number) => {
+    manual.yaw = yaw;
+    manual.pitch = pitch;
+  },
+  setMarker: (on: boolean) => {
+    markerOn = on;
+  },
+  setEyeDebug: (on: boolean) => {
+    eyeDebug = on;
+  },
+  // Força o modo manual (ignora giroscópio) nos testes.
+  forceManual: () => {
+    gyroState = 'absent';
+  },
+  // Amostra pixels do framebuffer no final de um quadro (depuração).
+  // `points` é uma lista de pares normalizados [fx, fy] (y em coordenadas WebGL, 0 = base).
+  sample: (points: Array<[number, number]>) =>
+    new Promise<Record<string, number[]>>((resolve) => {
+      pendingSample = { resolve, points };
+    }),
+  // Mapa de cores do framebuffer (grade), lido dentro do loop de render.
+  map: (cols = 24, rows = 14) =>
+    new Promise<string>((resolve) => {
+      pendingMap = { resolve, cols, rows };
+    }),
+};
 
 drawHud();
 frame();

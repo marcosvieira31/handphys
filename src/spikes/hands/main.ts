@@ -107,10 +107,14 @@ function setStatus(msg: string, isError = false) {
   statusEl.classList.toggle('error', isError);
 }
 
+// BASE_URL espelha o `base` do Vite: '/' em dev, '/handphys/' no GitHub Pages.
+// Caminho absoluto fixo ('/mp/…') quebraria no subdiretório do Pages.
+const PUB = import.meta.env.BASE_URL;
+
 async function createLandmarker(): Promise<HandLandmarker> {
-  const fileset = await FilesetResolver.forVisionTasks('/mp/wasm');
+  const fileset = await FilesetResolver.forVisionTasks(`${PUB}mp/wasm`);
   const common = {
-    baseOptions: { modelAssetPath: '/mp/hand_landmarker.task' },
+    baseOptions: { modelAssetPath: `${PUB}mp/hand_landmarker.task` },
     runningMode: 'VIDEO' as const,
     numHands: 2,
     minHandDetectionConfidence: 0.5,

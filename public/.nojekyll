@@ -1,0 +1,3 @@
+# GitHub Pages (branch-based) roda Jekyll por padrão, que ignora arquivos/pastas
+# iniciados por "_" e pode omitir assets. Ação de Pages serve o artefato direto,
+# mas este arquivo deixa qualquer modo de publicação seguro.

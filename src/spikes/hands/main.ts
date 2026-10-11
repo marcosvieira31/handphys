@@ -53,11 +53,17 @@ const SMOOTH_ALPHA = 0.4;
 // Sem isso, um frame perdido vira "soltou + agarrou de novo" = troca falsa.
 const GRACE_MS = 400;
 
+// Soltar exige N quadros seguidos acima do limiar: quando o polegar encosta no
+// indicador, os landmarks se ocultam e a distância "pula" por1–2 quadros.
+const RELEASE_FRAMES = 3;
+
 // Estado de pinça por mão (com histerese), chaveado por esquerda/direita —
 // a ordem das mãos no resultado do MediaPipe pode trocar entre quadros.
 type HandState = { ratio: number; pinched: boolean; handedness: string; raw: Landmark[] };
 type Tracked = { pinched: boolean; lastSeen: number };
 const trackedBy = new Map<string, Tracked>();
+const pendingRelease = new Map<string, number>();
+const ratioStats = new Map<string, { min: number; max: number; at: number }>();
 let handsState: HandState[] = [];
 
 // Métricas.
@@ -146,6 +152,8 @@ function stop() {
   handsState = [];
   trackedBy.clear();
   smoothedBy.clear();
+  pendingRelease.clear();
+  ratioStats.clear();
   flickerTimes = [];
   dropoutTimes = [];
   cursor = null;
@@ -155,11 +163,19 @@ function stop() {
   setStatus('Parado.');
 }
 
-function pinchRatio(hand: Landmark[]): number {
+function pinchRatio2D(hand: Landmark[]): number {
   // Distância polegar×indicador normalizada pelo tamanho aparente da mão.
   const d = (a: Landmark, b: Landmark) => Math.hypot(a.x - b.x, a.y - b.y);
   const handSize = d(hand[0], hand[9]) || 1e-6;
   return d(hand[4], hand[8]) / handSize;
+}
+
+function pinchRatio3D(world: Landmark[]): number {
+  // Mesma razão, mas em coordenadas de mundo (metros). Mais estável quando as
+  // pontas dos dedos se tocam: em imagem o landmark de um dedo some atrás do outro.
+  const d = (a: Landmark, b: Landmark) => Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z);
+  const handSize = d(world[0], world[9]) || 1e-6;
+  return d(world[4], world[8]) / handSize;
 }
 
 function detectLoop() {
@@ -198,10 +214,31 @@ function detectLoop() {
     });
     smoothedBy.set(side, raw);
 
-    const ratio = pinchRatio(raw);
+    const world = result.worldLandmarks[i];
+    const ratio = world ? pinchRatio3D(world) : pinchRatio2D(raw);
+
+    // Faixa da razão nos últimos2 s: mostra se ela pula o limiar (oclusão) ou se está calibrada.
+    const rs = ratioStats.get(side);
+    if (!rs || now - rs.at > 2000) ratioStats.set(side, { min: ratio, max: ratio, at: now });
+    else {
+      rs.min = Math.min(rs.min, ratio);
+      rs.max = Math.max(rs.max, ratio);
+    }
+
     const prevTracked = trackedBy.get(side);
     const wasPinched = prevTracked?.pinched ?? false;
-    const pinched = wasPinched ? ratio > thr + hysteresis : ratio < thr;
+
+    // Agarrar é imediato (precisa estar responsivo); soltar passa por debounce.
+    let pinched = wasPinched;
+    if (!wasPinched) {
+      if (ratio < thr) pinched = true;
+    } else {
+      const above = ratio > thr + hysteresis;
+      const count = above ? (pendingRelease.get(side) ?? 0) + 1 : 0;
+      pendingRelease.set(side, count);
+      if (count >= RELEASE_FRAMES) pinched = false;
+    }
+
     if (pinched !== wasPinched) {
       flickerTimes.push(now);
       // Motivo: rastreio contínuo = tremor real; estado novo = reposição (mão/etiqueta surgiu).
@@ -223,6 +260,8 @@ function detectLoop() {
     if (!seen.has(side) && now - tracked.lastSeen > GRACE_MS) {
       trackedBy.delete(side);
       smoothedBy.delete(side);
+      pendingRelease.delete(side);
+      ratioStats.delete(side);
       dropoutTimes.push(now);
     }
   }
@@ -310,6 +349,7 @@ function updateStats(now: number) {
   frames += 1;
   if (now - lastFpsAt >= 1000) {
     lastFps = frames;
+    lastFpsAt = now;
     el.fps.textContent = String(frames);
     el.det.textContent = detections ? String(detections) : '0';
     el.lat.textContent = detections ? `${(detectMsSum / detections).toFixed(1)} ms` : '–';
@@ -347,6 +387,7 @@ function loop() {
     renderFps: lastFps,
     hands: handsState.length,
     pinch: handsState.map((h) => ({ side: h.handedness, ratio: Number(h.ratio.toFixed(3)), pinched: h.pinched })),
+    ratioRange2s: [...ratioStats].map(([s, r]) => ({ side: s, min: Number(r.min.toFixed(3)), max: Number(r.max.toFixed(3)) })),
     flicker5s: flickerTimes.length,
     tremor5s: tremorTimes.length,
     replace5s: replaceTimes.length,
@@ -375,6 +416,7 @@ copyBtn.addEventListener('click', async () => {
     `latência média: ${el.lat.textContent}`,
     `mãos vistas: ${el.hands.textContent}`,
     `pinça: ${el.pinch.textContent}`,
+    `razão de pinça (2s): ${[...ratioStats].map(([s, r]) => `${s} ${r.min.toFixed(2)}–${r.max.toFixed(2)}`).join(' · ') || '–'}`,
     `trocas agarrado↔solto (5s): ${el.flicker.textContent}`,
     `causa (5s): ${el.cause.textContent}`,
     `perdas de rastreio (5s): ${el.dropouts.textContent}`,

@@ -161,7 +161,40 @@ function loadCircuit(index: number) {
   ring.visible = false;
   exampleSel.value = String(index);
   [...examplesEl.querySelectorAll('button')].forEach((x, j) => x.classList.toggle('active-example', j === index));
+  frameCircuit();
   drawHud();
+}
+
+/**
+ * Enquadra o circuito (não o quadro vazio de 30): cabeça perto, olhando de
+ * cima (~48°) para o centro da bounding box. Sem isso os componentes ficam
+ * minúsculos no fundo. Vale para o fallback arrastar; no giroscópio a posição
+ * aproxima do mesmo jeito (a orientação continua absoluta).
+ */
+function frameCircuit() {
+  const xs: number[] = [];
+  const zs: number[] = [];
+  for (const c of layout.comps) {
+    xs.push(c.wx);
+    zs.push(c.wz);
+  }
+  for (const w of layout.wires) {
+    for (const [x, , z] of w.points) {
+      xs.push(x);
+      zs.push(z);
+    }
+  }
+  if (!xs.length) return;
+  const cx = (Math.min(...xs) + Math.max(...xs)) / 2;
+  const cz = (Math.min(...zs) + Math.max(...zs)) / 2;
+  const r = Math.max((Math.max(...xs) - Math.min(...xs)) / 2, (Math.max(...zs) - Math.min(...zs)) / 2, 2.5) + 1.5;
+  const dist = (r / Math.tan(THREE.MathUtils.degToRad(EYE_FOV / 2))) * 1.15;
+  const el = THREE.MathUtils.degToRad(48);
+  head.position.set(cx, Math.sin(el) * dist, cz + Math.cos(el) * dist);
+  const dx = cx - head.position.x;
+  const dz = cz - head.position.z;
+  manual.yaw = Math.atan2(-dx, -dz);
+  manual.pitch = Math.atan2(-head.position.y, Math.hypot(dx, dz));
 }
 
 function fmtVolts(v: number): string {

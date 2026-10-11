@@ -417,6 +417,7 @@ function renderFrame() {
 
 loadCircuit(0);
 bootLog(`WebGL ok · bancada pronta (${EXAMPLES.length} circuitos)`);
+(window as unknown as { __cbBoot?: boolean }).__cbBoot = true;
 frame();
 
 // Gancho mínimo de suporte (estado legível por automação/remoto).

@@ -32,6 +32,21 @@
 
     <div class="legend">Mire + toque = ver V/I · arrastar = girar (sem giroscópio)</div>
 
+    <script>
+      // Alarme de carga: se o módulo não rodar (rede falhou, navegador velho,
+      // bloqueador), o portão ficaria morto sem explicação. Este script
+      // clássico roda mesmo que o módulo falhe.
+      window.__cbBoot = false;
+      setTimeout(function () {
+        if (!window.__cbBoot) {
+          var m = document.querySelector('#gate-msg');
+          if (m) {
+            m.textContent = 'O programa não carregou aqui (rede ou navegador). Recarregue a página ou tente outro navegador.';
+            m.style.color = '#ff7b72';
+          }
+        }
+      }, 4000);
+    </script>
     <script type="module" src="/src/cardboard/main.ts"></script>
   </body>
 </html>

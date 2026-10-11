@@ -6,7 +6,7 @@ Objetivo: derrubar as3 incertezas técnicas **antes** de escrever código de pro
 |---|---|---|---|
 | 0.1 | Hand tracking na webcam | O PC da escola roda MediaPipe a ~30 fps e o gesto de pinça é estável? | `spikes/hands.html` — **APROVADO** |
 | 0.2 | Cardboard estéreo | O celular tem giroscópio, o navegador entrega sensores e o fps estéreo aguenta? | `spikes/cardboard.html` — **APROVADO** |
-| 0.3 | Deploy HTTPS | Conseguimos servir tudo por HTTPS estático (exigência de sensores e WebXR)? | este documento |
+| 0.3 | Deploy HTTPS | Conseguimos servir tudo por HTTPS estático (exigência de sensores e WebXR)? | **APROVADO** — `https://marcosvieira31.github.io/handphys/` |
 
 ## Como rodar
 
@@ -217,6 +217,46 @@ Registrar aqui o que os spikes decidirem (ex.: "webcam roda a30fps → mãos val
 - **iOS segue não medido**: o ramo `DeviceOrientationEvent.requestPermission()` já está no
   código e foi exercitado pelo desktop (que nega), mas falta um aparelhe Apple real.
 
-### Pendente
+### Spike 0.3 (decidido em11/10/2026)
 
-- Deploy HTTPS estático funcional (spike 0.3).
+**Deploy: GitHub Pages público via Actions** — `https://marcosvieira31.github.io/handphys/`
+(repo público `marcosvieira31/handphys`, deploy automático a cada push em `main`).
+
+Medido/verificado em produção:
+
+| Verificação | Resultado |
+|---|---|
+| Landing `/` | 200 |
+| `/spikes/hands.html` | 200 · carrega · **0 erros de console** |
+| `/spikes/cardboard.html` | 200 · WebGL2 + estéreo · **0 erros de console** |
+| `/mp/hand_landmarker.task` | 200 |
+| `/mp/wasm/vision_wasm_internal.wasm` | 200 |
+| Bundle JS referenciado | 200 (159 KB) |
+| `BASE_URL` embutido no bundle | `/handphys/` ✓ |
+
+Decisões:
+
+- **GitHub Pages, repo público.** Páginas em repo privado exige **GitHub Pro** (pago); no
+  plano Free só dá site público. Site do Pages é público de qualquer forma — o que muda com
+  o repo é a visibilidade do **código**. Se um dia precisar de código fechado: Cloudflare
+  Pages (aceita repo privado de graça) ou Netlify Drop (sobe só o `dist/`).
+- **`base` configurável por `BASE_PATH`** (vite.config). Pages de projeto publica em
+  subdiretório `/handphys/` — caminho absoluto fixo quebraria tudo. Dev e `preview` seguem
+  na raiz; o CI define `BASE_PATH=/handphys/`.
+- **Caminhos de runtime precisam de `import.meta.env.BASE_URL`** (os assets `/mp/`), nunca
+  `'/mp/…'` literal: este é exatamente o tipo de bug que só aparece em produção, no
+  subdiretório, com o console limpo — o wasm daria 404 e o spike "não iniciava".
+- **Links internos relativos** (`spikes/…`, `../`) em vez de `/spikes/…`: funcionam em
+  dev, no Pages e num futuro domínio raiz sem mexer em nada.
+- **Push de `.github/workflows/*.yml` exige escopo `workflow` no token** do `gh` — sem ele
+  o GitHub recusa o push (proteção contra injeção de pipeline). `gh auth refresh -s workflow`.
+- **CI roda os testes antes do deploy** (`npm test` no job `build`) — deploy quebrado por
+  regressão do solver não chega ao ar.
+- Avisos do Actions (não bloqueiam): actions ainda alvo Node 20 (forçadas a rodar em 24) e
+  `ubuntu-latest` migra para Ubuntu 26 em19/10/2026.
+
+### Pendente da Fase 0
+
+- **iOS**: medir `DeviceOrientationEvent.requestPermission()` num aparelhe Apple real
+  (código pronto, caminho exercitado só pelo desktop que nega). Único item em aberto —
+  não bloqueia a Fase 1.

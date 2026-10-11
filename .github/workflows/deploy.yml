@@ -4,7 +4,7 @@ name: Deploy GitHub Pages
 # HTTPS estático é exigência de sensores (DeviceOrientation, getUserMedia) e WebXR.
 on:
   push:
-    branches: [master]
+    branches: [main]
   workflow_dispatch:
 
 permissions:

@@ -44,14 +44,14 @@ describe('fio com imã (store.endDraft)', () => {
     expect(after.draft).toBeNull();
   });
 
-  it('soltar de volta na origem cancela (sem fio de um ponto a ele mesmo)', () => {
+  it('soltar de volta na origem SEGURA o fio (tremida no clique não cancela)', () => {
     const s = useEditor.getState();
     s.startDraft({ x: 5, y: 10 });
-    s.moveDraft({ x: 6, y: 10 });
+    s.moveDraft({ x: 6, y: 10 }); // tremida: saiu e voltou
     s.endDraft({ x: 5, y: 10 });
     const after = useEditor.getState();
     expect(after.doc.wires).toHaveLength(0);
-    expect(after.draft).toBeNull();
+    expect(after.draft).not.toBeNull(); // continua na mão em vez de sumir
   });
 
   it('clique simples segura o fio na mão; segundo clique termina (clique-clique)', () => {
@@ -64,5 +64,28 @@ describe('fio com imã (store.endDraft)', () => {
     const after = useEditor.getState();
     expect(after.doc.wires).toHaveLength(1);
     expect(after.doc.wires[0]).toMatchObject({ from: { x: 5, y: 10 }, to: { x: 11, y: 10 } });
+  });
+
+  it('modo fio: soltar no vazio mantém o fio na mão (errar não perde o progresso)', () => {
+    const s = useEditor.getState();
+    s.armWire(true);
+    s.startDraft({ x: 5, y: 10 });
+    s.moveDraft({ x: 8, y: 10 });
+    s.endDraft({ x: 20, y: 20 });
+    const after = useEditor.getState();
+    expect(after.doc.wires).toHaveLength(0);
+    expect(after.draft).not.toBeNull();
+    // e o segundo clique no alvo termina o fio
+    after.endDraft({ x: 11, y: 10 });
+    expect(useEditor.getState().doc.wires).toHaveLength(1);
+  });
+
+  it('armar componente (ou exemplo) sai do modo fio', () => {
+    const s = useEditor.getState();
+    s.armWire(true);
+    expect(useEditor.getState().wiring).toBe(true);
+    s.arm('resistor');
+    expect(useEditor.getState().wiring).toBe(false);
+    expect(useEditor.getState().placing).toBe('resistor');
   });
 });

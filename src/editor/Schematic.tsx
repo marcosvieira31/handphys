@@ -17,6 +17,8 @@ const CELL = 16;
 const GRID = 30; // células 0..29, como no store
 /** Raio do imã ao AGARRAR o fio: clicar perto do pontinho já vale. */
 const GRAB_DIST = 0.75;
+/** Mira do MODO FIO: generosa, pois nele nada se arrasta (sem conflito). */
+const WIRE_GRAB = 1.5;
 /** Raio do imã ao SOLTAR (igual ao do store: o preview é o resultado). */
 const SNAP_DIST = 1.5;
 
@@ -49,6 +51,7 @@ export function Schematic({ reading }: { reading: Reading }) {
   const placing = useEditor((s) => s.placing);
   const selection = useEditor((s) => s.selection);
   const draft = useEditor((s) => s.draft);
+  const wiring = useEditor((s) => s.wiring);
   const colorByVoltage = useEditor((s) => s.colorByVoltage);
   const [hoverCell, setHoverCell] = useState<Pt | null>(null);
   const dragOrigin = useRef<{ id: string; dx: number; dy: number } | null>(null);
@@ -65,6 +68,15 @@ export function Schematic({ reading }: { reading: Reading }) {
     // 0) fio "na mão" (clique-clique)? => este clique TERMINA o fio, com imã
     if (st.draft?.moved) {
       st.endDraft(cell);
+      return;
+    }
+    // W) modo fio: só conecta — mira generosa, vazio não faz nada (nem perde o fio)
+    if (st.wiring) {
+      const grab = nearestTerminal(st.doc, cell, WIRE_GRAB);
+      if (grab) {
+        st.startDraft(grab.pos);
+        (e.target as Element).setPointerCapture?.(e.pointerId);
+      }
       return;
     }
     // 1) perto de um terminal? => começa um fio (imã: não precisa acertar o pixel)
@@ -190,16 +202,22 @@ export function Schematic({ reading }: { reading: Reading }) {
     );
   }
 
-  // enquanto o fio está "na mão", todos os terminais acendem: é onde pode soltar
+  // enquanto o fio está "na mão", todos os terminais acendem: é onde pode soltar.
+  // No MODO FIO os anéis ficam acesos o tempo todo (dá para mirar antes de clicar).
+  const showTargets = draft !== null || wiring;
   let targets: React.ReactNode = null;
-  if (draft) {
+  if (showTargets) {
+    const hoverGrab =
+      wiring && !draft && hoverCell ? nearestTerminal(doc, hoverCell, WIRE_GRAB) : null;
     const rings: React.ReactNode[] = [];
     for (const c of doc.comps) {
       const n = terminalCount(c.kind);
       for (let i = 0; i < n; i++) {
         const pos = terminalPos(c, i as 0 | 1);
-        if (samePt(pos, draft.from)) continue;
-        const isSnap = snap !== null && samePt(pos, snap);
+        if (draft && samePt(pos, draft.from)) continue;
+        const isSnap =
+          (snap !== null && samePt(pos, snap)) ||
+          (hoverGrab !== null && samePt(pos, hoverGrab.pos));
         rings.push(
           <circle
             key={`${c.id}t${i}`}
@@ -224,15 +242,16 @@ export function Schematic({ reading }: { reading: Reading }) {
     </g>
   ) : null;
 
-  // mira sobre terminal: o cursor avisa que dali sai fio
-  const hoverTerm = !placing && hoverCell ? nearestTerminal(doc, hoverCell, GRAB_DIST) : null;
+  // mira sobre terminal: o cursor avisa que dali sai fio (no modo fio, sempre mira)
+  const hoverTerm =
+    !placing && hoverCell ? nearestTerminal(doc, hoverCell, wiring ? WIRE_GRAB : GRAB_DIST) : null;
 
   return (
     <svg
       ref={svgRef}
       className={`schematic${placing ? ' placing' : ''}`}
       viewBox={`0 0 ${GRID * CELL} ${GRID * CELL}`}
-      style={hoverTerm || draft ? { cursor: 'crosshair' } : undefined}
+      style={hoverTerm || draft || wiring ? { cursor: 'crosshair' } : undefined}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}

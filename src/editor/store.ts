@@ -33,12 +33,15 @@ interface Draft {
 export interface EditorState {
   doc: CircuitDoc;
   placing: CompKind | null;
+  /** Modo fio: só conecta (sem arrastar componente), com mira generosa e alvos acesos. */
+  wiring: boolean;
   selection: Selection | null;
   draft: Draft | null;
   colorByVoltage: boolean;
   seq: number;
   past: CircuitDoc[];
   arm: (kind: CompKind | null) => void;
+  armWire: (on: boolean) => void;
   place: (kind: CompKind, at: Pt) => void;
   select: (sel: Selection | null) => void;
   startDraft: (p: Pt) => void;
@@ -85,13 +88,16 @@ const PREFIX: Record<CompKind, string> = {
 export const useEditor = create<EditorState>((set, get) => ({
   doc: EMPTY_DOC,
   placing: null,
+  wiring: false,
   selection: null,
   draft: null,
   colorByVoltage: true,
   seq: 0,
   past: [],
 
-  arm: (kind) => set({ placing: kind, selection: null, draft: null }),
+  arm: (kind) => set({ placing: kind, wiring: false, selection: null, draft: null }),
+
+  armWire: (on) => set({ wiring: on, placing: null, selection: null, draft: null }),
 
   place: (kind, at) => {
     const s = get();
@@ -129,21 +135,21 @@ export const useEditor = create<EditorState>((set, get) => ({
     const d = s.draft;
     if (!d) return;
     const same = p.x === d.from.x && p.y === d.from.y;
-    if (same && !d.moved) {
-      // clique simples sobre o próprio terminal: mantém o fio "na mão"
+    if (same) {
+      // soltar onde pegou SEGURA o fio na mão — mesmo com tremida no meio do
+      // clique (sair e voltar à origem não cancela mais: para soltar, Esc ou
+      // um clique no vazio fora do modo fio).
       set({ draft: { ...d, moved: true, cursor: p } });
       return;
     }
-    if (same) {
-      set({ draft: null });
-      return;
-    }
-    // imã: soltar PERTO de um terminal conecta nele; no vazio, cancela
-    // (nada de fio pendurado). A origem nunca é alvo dela mesma.
+    // imã: soltar PERTO de um terminal conecta nele; a origem nunca é alvo dela mesma.
     const hit = nearestTerminal(s.doc, p, SNAP_DIST);
     const to = hit && !samePt(hit.pos, d.from) ? hit.pos : null;
     if (!to) {
-      set({ draft: null });
+      // no modo fio, errar o alvo mantém o fio na mão (clique o alvo em seguida);
+      // fora dele, cancela sem deixar fio pendurado.
+      if (s.wiring) set({ draft: { ...d, moved: true, cursor: p } });
+      else set({ draft: null });
       return;
     }
     const wire: Wire = { id: `w${s.seq + 1}`, from: d.from, to };
@@ -235,9 +241,9 @@ export const useEditor = create<EditorState>((set, get) => ({
   },
 
   load: (doc) =>
-    set((s) => ({ doc, past: [...s.past, s.doc].slice(-30), selection: null, draft: null, placing: null })),
+    set((s) => ({ doc, past: [...s.past, s.doc].slice(-30), selection: null, draft: null, placing: null, wiring: false })),
 
-  clear: () => set((s) => ({ doc: EMPTY_DOC, past: [...s.past, s.doc].slice(-30), selection: null, draft: null })),
+  clear: () => set((s) => ({ doc: EMPTY_DOC, past: [...s.past, s.doc].slice(-30), selection: null, draft: null, wiring: false })),
 
   undo: () =>
     set((s) => {

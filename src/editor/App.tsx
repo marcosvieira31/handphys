@@ -74,17 +74,19 @@ const EXAMPLES: { name: string; doc: CircuitDoc }[] = [
 export function App() {
   const doc = useEditor((s) => s.doc);
   const colorByVoltage = useEditor((s) => s.colorByVoltage);
-  const { clear, load, setColorByVoltage, arm, undo, rotate, removeSelected } = useEditor();
+  const { clear, load, setColorByVoltage, undo, rotate, removeSelected } = useEditor();
   const reading = readCircuit(doc);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement | null;
       if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA')) return;
-      const sel = useEditor.getState().selection;
-      if (e.key === 'Escape') useEditor.getState().arm(null);
+      const st = useEditor.getState();
+      const sel = st.selection;
+      if (e.key === 'Escape') st.arm(null);
       else if (e.key === 'Delete' || e.key === 'Backspace') removeSelected();
       else if (e.key.toLowerCase() === 'r' && sel?.kind === 'comp') rotate(sel.id);
+      else if (e.key.toLowerCase() === 'f') st.armWire(!st.wiring);
       else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
         e.preventDefault();
         undo();
@@ -92,7 +94,7 @@ export function App() {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [arm, rotate, removeSelected, undo]);
+  }, [rotate, removeSelected, undo]);
 
   return (
     <div className="editor">

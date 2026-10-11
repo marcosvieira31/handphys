@@ -17,7 +17,9 @@ const ITEMS: { kind: CompKind; label: string; hint: string; value?: number }[] =
  */
 export function Palette() {
   const placing = useEditor((s) => s.placing);
+  const wiring = useEditor((s) => s.wiring);
   const arm = useEditor((s) => s.arm);
+  const armWire = useEditor((s) => s.armWire);
 
   return (
     <aside className="palette">
@@ -52,9 +54,29 @@ export function Palette() {
         ))}
       </ul>
       <h2>Fio</h2>
+      <ul>
+        <li>
+          <button
+            type="button"
+            className={wiring ? 'palette-item active' : 'palette-item'}
+            onClick={() => armWire(!wiring)}
+          >
+            <svg viewBox="-24 -24 48 48" width={34} height={34} aria-hidden>
+              <line x1={-13} y1={11} x2={13} y2={-11} stroke="#c9d1d9" strokeWidth={2.5} strokeLinecap="round" />
+              <circle cx={-13} cy={11} r={5} fill="#8b949e" />
+              <circle cx={13} cy={-11} r={5} fill="#8b949e" />
+            </svg>
+            <span className="meta">
+              <strong>Conectar</strong>
+              <em>modo fio · tecla F</em>
+            </span>
+          </button>
+        </li>
+      </ul>
       <p className="hint">
-        Clique num pontinho e depois noutro — ou arraste de um até o outro. Soltar perto já
-        conecta (imã); soltar no vazio cancela. <kbd>Esc</kbd> solta o fio da mão.
+        No modo fio os terminais ficam acesos: clique num pontinho e depois noutro (a mira é
+        generosa, errar não perde o fio). <kbd>Esc</kbd> sai do modo. Fora dele, também dá para
+        arrastar de um terminal até outro — e componentes voltam a arrastar.
       </p>
     </aside>
   );

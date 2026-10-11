@@ -127,6 +127,33 @@ export function terminalsAt(doc: CircuitDoc, p: Pt): { comp: Placed; terminal: 0
   return out;
 }
 
+export interface NearTerminal {
+  comp: Placed;
+  terminal: 0 | 1;
+  pos: Pt;
+  dist: number;
+}
+
+/**
+ * Terminal mais próximo de uma célula, até `maxDist` (em células).
+ * É o "imã" do editor: dispensa acertar o pontinho no pixel — clicar ou
+ * soltar PERTO basta. Em empate, vale o primeiro componente do documento.
+ */
+export function nearestTerminal(doc: CircuitDoc, p: Pt, maxDist: number): NearTerminal | null {
+  let best: NearTerminal | null = null;
+  for (const c of doc.comps) {
+    const n = terminalCount(c.kind);
+    for (let i = 0; i < n; i++) {
+      const pos = terminalPos(c, i as 0 | 1);
+      const dist = Math.hypot(pos.x - p.x, pos.y - p.y);
+      if (dist <= maxDist && (!best || dist < best.dist)) {
+        best = { comp: c, terminal: i as 0 | 1, pos, dist };
+      }
+    }
+  }
+  return best;
+}
+
 /**
  * Direção de saída de um fio numa ponta: a do terminal mais alinhado com o
  * destino (se a célula tiver vários terminais) ou `null` para ponta livre.
@@ -178,6 +205,10 @@ function simplify(pts: Pt[]): Pt[] {
  * Traçado ortogonal de um fio: sai pela direção do terminal, chega pela direção
  * do terminal de destino e faz uma única dobra. Se o destino estiver "atrás" do
  * terminal, contorna pelo lado de fora para não atravessar o próprio corpo.
+ * Se o caminho cruzaria terminais ou corpos de OUTROS componentes, desvia por
+ * uma faixa paralela livre (até 3 dobras): fio que passa por cima de terminal
+ * alheio vira junção fantasma ("curto" sem sentido) — o desvio evita isso.
+ * Sem obstáculo, o resultado é bit-idêntico ao traçado de uma dobra só.
  */
 export function wireRoute(doc: CircuitDoc, w: Wire): Pt[] {
   const a = w.from;
@@ -197,7 +228,62 @@ export function wireRoute(doc: CircuitDoc, w: Wire): Pt[] {
   } else {
     elbow = { x: b.x, y: a.y };
   }
-  return simplify([a, pa, elbow, pb, b]);
+
+  // obstáculos: terminais e corpos alheios (nunca as pontas do próprio fio)
+  const blocked = new Set<string>();
+  for (const c of doc.comps) {
+    blocked.add(ptKey({ x: c.x, y: c.y }));
+    const n = terminalCount(c.kind);
+    for (let i = 0; i < n; i++) blocked.add(ptKey(terminalPos(c, i as 0 | 1)));
+  }
+  blocked.delete(ptKey(a));
+  blocked.delete(ptKey(b));
+
+  /** O miolo (pa..pb) atravessa célula bloqueada? (só o miolo conta) */
+  const crosses = (mid: Pt[]): boolean => {
+    for (let i = 0; i + 1 < mid.length; i++) {
+      const p = mid[i];
+      const q = mid[i + 1];
+      if (p.x === q.x) {
+        for (let y = Math.min(p.y, q.y) + 1; y < Math.max(p.y, q.y); y++) {
+          if (blocked.has(ptKey({ x: p.x, y }))) return true;
+        }
+      } else if (p.y === q.y) {
+        for (let x = Math.min(p.x, q.x) + 1; x < Math.max(p.x, q.x); x++) {
+          if (blocked.has(ptKey({ x, y: p.y }))) return true;
+        }
+      }
+    }
+    return false;
+  };
+
+  // candidatos: o traçado legado primeiro (livre => idêntico a antes),
+  // depois o outro cotovelo, depois faixas paralelas (por baixo antes:
+  // o retorno clássico passa embaixo dos componentes).
+  const lane = (v: number) => Math.max(0, Math.min(29, v));
+  const seen = new Set<string>();
+  const cands: Pt[][] = [];
+  const push = (mid: Pt[]) => {
+    const k = mid.map((p) => ptKey(p)).join(';');
+    if (!seen.has(k)) {
+      seen.add(k);
+      cands.push(mid);
+    }
+  };
+  push([pa, elbow, pb]);
+  push([pa, { x: pb.x, y: pa.y }, pb]);
+  push([pa, { x: pa.x, y: pb.y }, pb]);
+  // desvio em U: faixa única L (horizontal ou vertical) + pernas até pa/pb
+  const hLanes: number[] = [];
+  const vLanes: number[] = [];
+  for (let k = 1; k <= 6; k++) {
+    hLanes.push(lane(pa.y + k), lane(pb.y + k), lane(pa.y - k), lane(pb.y - k));
+    vLanes.push(lane(pa.x + k), lane(pb.x + k), lane(pa.x - k), lane(pb.x - k));
+  }
+  for (const L of hLanes) push([pa, { x: pa.x, y: L }, { x: pb.x, y: L }, pb]);
+  for (const L of vLanes) push([pa, { x: L, y: pa.y }, { x: L, y: pb.y }, pb]);
+  const mid = cands.find((m) => !crosses(m)) ?? [pa, elbow, pb];
+  return simplify([a, ...mid, b]);
 }
 
 /** Traçado provisório durante o arraste: da origem até o cursor (ou alvo). */

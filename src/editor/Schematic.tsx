@@ -1,11 +1,24 @@
 import { useCallback, useRef, useState } from 'react';
 import type { Reading } from '../core/netlist';
-import { compAt, terminalsAt, wireRoute, type Pt, type Wire } from '../core/netlist';
+import {
+  compAt,
+  nearestTerminal,
+  samePt,
+  terminalCount,
+  terminalPos,
+  wireRoute,
+  type Pt,
+  type Wire,
+} from '../core/netlist';
 import { formatValue, labelPos, Symbol } from './symbol';
 import { useEditor } from './store';
 
 const CELL = 16;
 const GRID = 30; // células 0..29, como no store
+/** Raio do imã ao AGARRAR o fio: clicar perto do pontinho já vale. */
+const GRAB_DIST = 0.75;
+/** Raio do imã ao SOLTAR (igual ao do store: o preview é o resultado). */
+const SNAP_DIST = 1.5;
 
 const NEUTRAL = [125, 133, 144]; // cinza do fio sem tensão
 const mix = (a: number, b: number, k: number) => Math.round(a + (b - a) * k);
@@ -37,75 +50,86 @@ export function Schematic({ reading }: { reading: Reading }) {
   const selection = useEditor((s) => s.selection);
   const draft = useEditor((s) => s.draft);
   const colorByVoltage = useEditor((s) => s.colorByVoltage);
-  const { place, select, startDraft, moveDraft, endDraft, moveComp } = useEditor();
   const [hoverCell, setHoverCell] = useState<Pt | null>(null);
   const dragOrigin = useRef<{ id: string; dx: number; dy: number } | null>(null);
 
-  /** Cliente => célula da grade (clamp na borda, sem sair do quadro). */
-  const toCell = useCallback((e: { clientX: number; clientY: number }): Pt => {
-    const svg = svgRef.current;
-    if (!svg) return { x: 0, y: 0 };
-    const r = svg.getBoundingClientRect();
-    const x = ((e.clientX - r.left) / r.width) * GRID;
-    const y = ((e.clientY - r.top) / r.height) * GRID;
-    return {
-      x: Math.max(0, Math.min(GRID - 1, Math.round(x))),
-      y: Math.max(0, Math.min(GRID - 1, Math.round(y))),
-    };
-  }, []);
-
   const onPointerDown = (e: React.PointerEvent) => {
     const cell = toCell(e);
-    if (placing) {
-      place(placing, cell);
+    // Estado FRESCO do store (getState), não o da closure: dois eventos no mesmo
+    // tick (toque rápido, pinça da Fase 2) veriam um draft obsoleto e o fio falhava.
+    const st = useEditor.getState();
+    if (st.placing) {
+      st.place(st.placing, cell);
       return;
     }
-    // 1) terminal? => começa um fio (mesma semântica que a pinça usará)
-    const term = terminalsAt(doc, cell)[0];
-    if (term) {
-      startDraft(cell);
+    // 0) fio "na mão" (clique-clique)? => este clique TERMINA o fio, com imã
+    if (st.draft?.moved) {
+      st.endDraft(cell);
+      return;
+    }
+    // 1) perto de um terminal? => começa um fio (imã: não precisa acertar o pixel)
+    const grab = nearestTerminal(st.doc, cell, GRAB_DIST);
+    if (grab) {
+      st.startDraft(grab.pos);
       (e.target as Element).setPointerCapture?.(e.pointerId);
       return;
     }
     // 2) componente? => seleciona e prepara arraste
-    const comp = compAt(doc, cell);
+    const comp = compAt(st.doc, cell);
     if (comp) {
-      select({ kind: 'comp', id: comp.id });
+      st.select({ kind: 'comp', id: comp.id });
       dragOrigin.current = { id: comp.id, dx: comp.x - cell.x, dy: comp.y - cell.y };
       (e.target as Element).setPointerCapture?.(e.pointerId);
       return;
     }
     // 3) fio? => seleciona (o fio tem traçado com dobras: testa cada trecho)
-    const wire = doc.wires.find((w) => {
-      const pts = wireRoute(doc, w);
+    const wire = st.doc.wires.find((w) => {
+      const pts = wireRoute(st.doc, w);
       for (let i = 1; i < pts.length; i++) if (distToSegment(cell, pts[i - 1], pts[i]) < 0.35) return true;
       return false;
     });
-    select(wire ? { kind: 'wire', id: wire.id } : null);
+    st.select(wire ? { kind: 'wire', id: wire.id } : null);
   };
 
   const onPointerMove = (e: React.PointerEvent) => {
     const cell = toCell(e);
     setHoverCell(cell);
-    if (draft) {
-      moveDraft(cell);
+    const st = useEditor.getState();
+    if (st.draft) {
+      st.moveDraft(cell);
       return;
     }
     if (dragOrigin.current) {
       const { id, dx, dy } = dragOrigin.current;
-      moveComp(id, cell.x + dx, cell.y + dy);
+      st.moveComp(id, cell.x + dx, cell.y + dy);
     }
   };
 
   const onPointerUp = (e: React.PointerEvent) => {
     const cell = toCell(e);
-    if (draft) endDraft(cell);
+    const st = useEditor.getState();
+    if (st.draft) st.endDraft(cell);
     dragOrigin.current = null;
   };
 
+  /** Cliente => célula da grade (pela matriz do SVG: exato mesmo com sobra de layout). */
+  const toCell = useCallback((e: { clientX: number; clientY: number }): Pt => {
+    const svg = svgRef.current;
+    if (!svg) return { x: 0, y: 0 };
+    const ctm = svg.getScreenCTM();
+    if (!ctm) return { x: 0, y: 0 };
+    // floor, não round: o clique cai DENTRO da célula (round erra no centro exato,
+    // onde 7,5 arredonda para 8 por poeira de ponto flutuante).
+    const pt = new DOMPoint(e.clientX, e.clientY).matrixTransform(ctm.inverse());
+    return {
+      x: Math.max(0, Math.min(GRID - 1, Math.floor(pt.x / CELL))),
+      y: Math.max(0, Math.min(GRID - 1, Math.floor(pt.y / CELL))),
+    };
+  }, []);
+
   const onPointerLeave = () => {
     setHoverCell(null);
-    if (!draft) dragOrigin.current = null;
+    if (!useEditor.getState().draft) dragOrigin.current = null;
   };
 
   const wires = doc.wires.map((w) => {
@@ -142,9 +166,16 @@ export function Schematic({ reading }: { reading: Reading }) {
 
   // fio em arraste: origem -> destino, com o destino "encaixado" no terminal.
   // Rota pelo mesmo algoritmo do fio definitivo (uma dobra só) => o preview é o resultado.
+  // Alvo do imã (igual ao do store): o anel dele acende para mostrar onde vai grudar.
+  const snap = draft
+    ? (() => {
+        const hit = nearestTerminal(doc, draft.cursor, SNAP_DIST);
+        return hit && !samePt(hit.pos, draft.from) ? hit.pos : null;
+      })()
+    : null;
   let draftLine: React.ReactNode = null;
   if (draft) {
-    const preview: Wire = { id: '__draft', from: draft.from, to: draft.cursor };
+    const preview: Wire = { id: '__draft', from: draft.from, to: snap ?? draft.cursor };
     const pts = wireRoute({ comps: doc.comps, wires: [...doc.wires, preview] }, preview);
     draftLine = (
       <polyline
@@ -159,17 +190,49 @@ export function Schematic({ reading }: { reading: Reading }) {
     );
   }
 
+  // enquanto o fio está "na mão", todos os terminais acendem: é onde pode soltar
+  let targets: React.ReactNode = null;
+  if (draft) {
+    const rings: React.ReactNode[] = [];
+    for (const c of doc.comps) {
+      const n = terminalCount(c.kind);
+      for (let i = 0; i < n; i++) {
+        const pos = terminalPos(c, i as 0 | 1);
+        if (samePt(pos, draft.from)) continue;
+        const isSnap = snap !== null && samePt(pos, snap);
+        rings.push(
+          <circle
+            key={`${c.id}t${i}`}
+            cx={pos.x * CELL}
+            cy={pos.y * CELL}
+            r={isSnap ? 9 : 6.5}
+            fill="none"
+            stroke={isSnap ? '#58a6ff' : '#8b949e'}
+            strokeWidth={isSnap ? 2.5 : 1.5}
+            strokeDasharray={isSnap ? undefined : '3 2'}
+            opacity={isSnap ? 1 : 0.75}
+          />,
+        );
+      }
+    }
+    targets = <g pointerEvents="none">{rings}</g>;
+  }
+
   const ghost = placing && hoverCell ? (
     <g transform={`translate(${hoverCell.x * CELL} ${hoverCell.y * CELL})`} className="ghost">
       <Symbol comp={{ id: 'ghost', kind: placing, x: 0, y: 0, rot: 0, value: 0 }} />
     </g>
   ) : null;
 
+  // mira sobre terminal: o cursor avisa que dali sai fio
+  const hoverTerm = !placing && hoverCell ? nearestTerminal(doc, hoverCell, GRAB_DIST) : null;
+
   return (
     <svg
       ref={svgRef}
       className={`schematic${placing ? ' placing' : ''}`}
       viewBox={`0 0 ${GRID * CELL} ${GRID * CELL}`}
+      style={hoverTerm || draft ? { cursor: 'crosshair' } : undefined}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
@@ -183,6 +246,7 @@ export function Schematic({ reading }: { reading: Reading }) {
       </defs>
       <rect width="100%" height="100%" fill="url(#grid)" />
       {wires}
+      {targets}
       {draftLine}
       {comps}
       {ghost}

@@ -193,8 +193,9 @@ body.editor-page {
 }
 
 .schematic {
-  width: 100%;
+  aspect-ratio: 1 / 1;
   height: 100%;
+  max-width: 100%;
   background: #0a0d12;
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -221,7 +222,7 @@ body.editor-page {
   user-select: none;
 }
 
-.wire.selected line:last-child {
+.wire.selected polyline:last-child {
   stroke: var(--accent);
 }
 

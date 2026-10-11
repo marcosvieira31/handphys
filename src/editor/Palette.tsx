@@ -52,7 +52,10 @@ export function Palette() {
         ))}
       </ul>
       <h2>Fio</h2>
-      <p className="hint">Arraste de um terminal (o pontinho) até outro.</p>
+      <p className="hint">
+        Clique num pontinho e depois noutro — ou arraste de um até o outro. Soltar perto já
+        conecta (imã); soltar no vazio cancela. <kbd>Esc</kbd> solta o fio da mão.
+      </p>
     </aside>
   );
 }

@@ -1,7 +1,9 @@
 import { create } from 'zustand';
 import {
   EMPTY_DOC,
+  nearestTerminal,
   reattachWires,
+  samePt,
   terminalPos,
   wiresAttachedTo,
   type CircuitDoc,
@@ -12,6 +14,9 @@ import {
 } from '../core/netlist';
 
 const LIMIT = 30; // células de 0..29 — o quadro tem borda, nada sai da grade
+
+/** Raio do imã ao soltar o fio (em células): perto basta, no vazio cancela. */
+const SNAP_DIST = 1.5;
 
 export interface Selection {
   kind: 'comp' | 'wire';
@@ -133,7 +138,15 @@ export const useEditor = create<EditorState>((set, get) => ({
       set({ draft: null });
       return;
     }
-    const wire: Wire = { id: `w${s.seq + 1}`, from: d.from, to: p };
+    // imã: soltar PERTO de um terminal conecta nele; no vazio, cancela
+    // (nada de fio pendurado). A origem nunca é alvo dela mesma.
+    const hit = nearestTerminal(s.doc, p, SNAP_DIST);
+    const to = hit && !samePt(hit.pos, d.from) ? hit.pos : null;
+    if (!to) {
+      set({ draft: null });
+      return;
+    }
+    const wire: Wire = { id: `w${s.seq + 1}`, from: d.from, to };
     set({
       seq: s.seq + 1,
       past: [...s.past, s.doc].slice(-30),

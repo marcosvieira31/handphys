@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   buildNetlist,
+  nearestTerminal,
   readCircuit,
   reattachWires,
   terminalPos,
@@ -78,13 +79,23 @@ describe('traçado de fio', () => {
     // fonte em (4,3): terminal + em (5,3) olhando para a direita
     const d = doc([place('vsource', 4, 3, 9), place('resistor', 2, 9, 100)]);
     const pts = wireRoute(d, { id: 'w', from: { x: 5, y: 3 }, to: { x: 1, y: 9 } });
-    // sai para a direita (fora do corpo), desce e só então vai para o destino
-    expect(pts).toEqual([
-      { x: 5, y: 3 },
-      { x: 6, y: 3 },
-      { x: 6, y: 9 },
-      { x: 1, y: 9 },
-    ]);
+    // sai para a direita (fora do corpo da fonte) e chega ao destino...
+    expect(pts[0]).toEqual({ x: 5, y: 3 });
+    expect(pts[1]).toEqual({ x: 6, y: 3 });
+    expect(pts[pts.length - 1]).toEqual({ x: 1, y: 9 });
+    // ...sem atravessar o corpo do resistor (2,9): o traçado antigo passava
+    // por cima dele, o novo desvia pela faixa livre
+    const inside = new Set<string>();
+    for (let i = 0; i + 1 < pts.length; i++) {
+      const p = pts[i];
+      const q = pts[i + 1];
+      if (p.x === q.x) {
+        for (let y = Math.min(p.y, q.y) + 1; y < Math.max(p.y, q.y); y++) inside.add(`${p.x},${y}`);
+      } else {
+        for (let x = Math.min(p.x, q.x) + 1; x < Math.max(p.x, q.x); x++) inside.add(`${x},${p.y}`);
+      }
+    }
+    expect(inside.has('2,9')).toBe(false);
   });
 });
 
@@ -379,5 +390,70 @@ describe('movimento e rotação mantêm os fios', () => {
     const moved: Placed = { ...r1, x: 5, y: 9 };
     const after = reattachWires(d, moved, before);
     expect(after.wires[0].from).toEqual({ x: 6, y: 5 });
+  });
+});
+
+describe('imã de conexão (nearestTerminal)', () => {
+  it('acha o terminal mais próximo dentro do raio', () => {
+    const bat = place('vsource', 4, 6, 9); // terminais (3,6) e (5,6)
+    const d = doc([bat]);
+    const hit = nearestTerminal(d, { x: 5, y: 7 }, 1.5);
+    expect(hit?.comp.id).toBe(bat.id);
+    expect(hit?.terminal).toBe(1);
+    expect(hit?.pos).toEqual({ x: 5, y: 6 });
+  });
+
+  it('fora do raio não acha nada (soltar no vazio cancela)', () => {
+    const bat = place('vsource', 4, 6, 9);
+    expect(nearestTerminal(doc([bat]), { x: 20, y: 20 }, 1.5)).toBeNull();
+  });
+
+  it('em empate de distância vale o primeiro componente', () => {
+    const r1 = place('resistor', 5, 5, 100); // b em (6,5)
+    const r2 = place('resistor', 7, 5, 100); // a em (6,5)
+    const hit = nearestTerminal(doc([r1, r2]), { x: 6, y: 6 }, 1.5);
+    expect(hit?.comp.id).toBe(r1.id);
+  });
+});
+
+describe('fio desvia de componentes no caminho', () => {
+  it('sem obstáculo o traçado é o legado (uma dobra, sem rodeio)', () => {
+    const d = doc([]);
+    expect(wireRoute(d, wire({ x: 5, y: 6 }, { x: 9, y: 6 }))).toEqual([
+      { x: 5, y: 6 },
+      { x: 9, y: 6 },
+    ]);
+  });
+
+  it('retorno por cima dos componentes desce para faixa livre', () => {
+    const bat = place('vsource', 6, 14, 9); // terminais (5,14) e (7,14)
+    const lamp = place('lamp', 14, 14, 20); // terminais (13,14) e (15,14)
+    const d = doc([bat, lamp]);
+    const pts = wireRoute(d, wire({ x: 15, y: 14 }, { x: 5, y: 14 }));
+    expect(pts[0]).toEqual({ x: 15, y: 14 });
+    expect(pts[pts.length - 1]).toEqual({ x: 5, y: 14 });
+    // nenhum terminal alheio no meio do caminho (só as pontas)
+    const midi = pts.flatMap((p, i) => (i > 0 && i < pts.length - 1 ? [p] : []));
+    for (const t of [
+      { x: 13, y: 14 },
+      { x: 7, y: 14 },
+    ]) {
+      expect(midi.some((p) => p.x === t.x && p.y === t.y)).toBe(false);
+    }
+    // e de fato desviou (mais de uma dobra)
+    expect(pts.length).toBeGreaterThan(2);
+  });
+
+  it('laço fonte→lâmpada→fonte em linha reta não dá curto e acende', () => {
+    const bat = place('vsource', 6, 14, 9);
+    const lamp = place('lamp', 14, 14, 20);
+    const d = doc(
+      [bat, lamp],
+      [wire({ x: 7, y: 14 }, { x: 13, y: 14 }), wire({ x: 15, y: 14 }, { x: 5, y: 14 })],
+    );
+    const out = readCircuit(d);
+    expect(out.error).toBeNull();
+    expect(out.diagnostics.join(' ')).not.toMatch(/curto/i);
+    expect(reading(d, 1).amps).toBeCloseTo(0.45, 6);
   });
 });

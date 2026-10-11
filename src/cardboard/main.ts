@@ -36,6 +36,13 @@ const stereoBtn = document.querySelector<HTMLButtonElement>('#toggle-stereo')!;
 const fullscreenBtn = document.querySelector<HTMLButtonElement>('#fullscreen')!;
 const examplesEl = document.querySelector<HTMLElement>('#examples')!;
 const exampleSel = document.querySelector<HTMLSelectElement>('#example')!;
+const gateLog = document.querySelector<HTMLElement>('#gate-log')!;
+
+// Diário de bordo: cada etapa da inicialização deixa uma linha. Se o celular
+// falhar, a última linha diz onde parou (sem isso, "nada acontece" é indebugável).
+function bootLog(line: string) {
+  gateLog.textContent += (gateLog.textContent ? '\n' : '') + line;
+}
 
 // Falha de WebGL/JS não pode virar "tela preta sem explicação" (lição do spike).
 function fatal(msg: string) {
@@ -313,24 +320,37 @@ EXAMPLES.forEach((ex, i) => {
 exampleSel.addEventListener('change', () => loadCircuit(Number(exampleSel.value)));
 
 startBtn.addEventListener('click', async () => {
-  const DOE = DeviceOrientationEvent as unknown as { requestPermission?: () => Promise<string> } | undefined;
-  if (typeof DOE?.requestPermission === 'function') {
-    try {
-      const res = await DOE.requestPermission();
-      if (res !== 'granted') gateMsg.textContent = 'Permissão de sensor negada — modo arrastar ativo.';
-    } catch {
-      gateMsg.textContent = 'Permissão de sensor falhou — modo arrastar ativo.';
+  try {
+    const DOE = DeviceOrientationEvent as unknown as { requestPermission?: () => Promise<string> } | undefined;
+    if (typeof DOE?.requestPermission === 'function') {
+      bootLog('pedindo permissão do sensor…');
+      try {
+        const res = await DOE.requestPermission();
+        bootLog(`sensor: ${res}`);
+        if (res !== 'granted') gateMsg.textContent = 'Permissão de sensor negada — modo arrastar ativo.';
+      } catch {
+        bootLog('sensor: falha no pedido');
+        gateMsg.textContent = 'Permissão de sensor falhou — modo arrastar ativo.';
+      }
+    } else {
+      bootLog('sensor: sem pedido (Android/navegador livre)');
     }
+    window.addEventListener('deviceorientation', onOrientation);
+    gate.classList.add('hidden');
+    bootLog('cena ativa: mire e toque');
+    setTimeout(() => {
+      if (gyroState !== 'active') {
+        gyroState = 'absent';
+        bootLog('giroscópio ausente: arraste para olhar');
+        drawHud();
+      } else {
+        bootLog('giroscópio ativo');
+      }
+    }, 2500);
+    drawHud();
+  } catch (err) {
+    fatal(`Falha ao entrar: ${(err as Error).message}`);
   }
-  window.addEventListener('deviceorientation', onOrientation);
-  gate.classList.add('hidden');
-  setTimeout(() => {
-    if (gyroState !== 'active') {
-      gyroState = 'absent';
-      drawHud();
-    }
-  }, 2500);
-  drawHud();
 });
 
 function checkOrientation() {
@@ -353,6 +373,10 @@ resize();
 
 function frame() {
   requestAnimationFrame(frame);
+  renderFrame();
+}
+
+function renderFrame() {
 
   if (gyroState === 'active') {
     applyGyro(head.quaternion);
@@ -392,6 +416,7 @@ function frame() {
 }
 
 loadCircuit(0);
+bootLog(`WebGL ok · bancada pronta (${EXAMPLES.length} circuitos)`);
 frame();
 
 // Gancho mínimo de suporte (estado legível por automação/remoto).
@@ -403,5 +428,20 @@ frame();
     manual.yaw = yaw;
     manual.pitch = pitch;
     drawHud();
+  },
+  // Lê pixels do quadro atual (coordenadas 0..1 a partir do canto superior
+  // esquerdo): prova que a cena desenha de verdade, não só que não há erros.
+  sample: (points: Array<[number, number]>) => {
+    renderFrame();
+    const gl = renderer.getContext();
+    const bw = gl.drawingBufferWidth;
+    const bh = gl.drawingBufferHeight;
+    const px = new Uint8Array(4);
+    const out: Record<string, number[]> = {};
+    for (const [fx, fy] of points) {
+      gl.readPixels(Math.floor(fx * bw), Math.floor((1 - fy) * bh), 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px);
+      out[`${fx},${fy}`] = [px[0], px[1], px[2]];
+    }
+    return out;
   },
 };

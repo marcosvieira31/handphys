@@ -13,7 +13,11 @@ import '../../styles/spike.css';
 
 const IPD = 0.064; // distância interpupilar típica (m)
 const EYE_FOV = 75; // FOV vertical por olho (Cardboard típico: 60–75°)
-const HEAD_HEIGHT = 1.6;
+const HEAD_HEIGHT = 1.5;
+// Cabeça atrás da bancada, não em cima dela: com a cabeça em z=0 (centro da mesa)
+// quem veste o cardboard olhava para o vazio — a mesa fica abaixo do campo de visão.
+const HEAD_Z = 1.0;
+const HEAD_PITCH = -0.34; // olhar levemente baixo, para a bancada
 
 const canvas = document.querySelector<HTMLCanvasElement>('#view')!;
 const gate = document.querySelector<HTMLElement>('#gate')!;
@@ -68,7 +72,7 @@ scene.fog = new THREE.Fog(0x0b0f14, 8, 24);
 // "head" carrega a pose da cabeça e serve de base para o raycast ( centro da visão ).
 const head = new THREE.PerspectiveCamera(EYE_FOV, 1, 0.05, 100);
 head.rotation.order = 'YXZ';
-head.position.set(0, HEAD_HEIGHT, 0);
+head.position.set(0, HEAD_HEIGHT, HEAD_Z);
 
 type Eye = { cam: THREE.PerspectiveCamera; side: -1 | 1 };
 const eyes: [Eye, Eye] = [
@@ -207,7 +211,7 @@ function applyGyro(quat: THREE.Quaternion) {
 
 // ------------------------------------------------- fallback: arrastar
 
-const manual = { yaw: 0, pitch: 0 };
+const manual = { yaw: 0, pitch: HEAD_PITCH };
 let dragging = false;
 let moved = 0;
 let lastPointer = { x: 0, y: 0 };

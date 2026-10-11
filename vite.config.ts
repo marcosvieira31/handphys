@@ -28,6 +28,20 @@ export default defineConfig({
         hands: 'spikes/hands.html',
         spikeCardboard: 'spikes/cardboard.html',
       },
+      output: {
+        // O Cardboard importava EXAMPLES e arrastava o app React inteiro (254 kB)
+        // no preload — pesado demais para o celular. Grupos explícitos: three,
+        // compartilhado leve (core/cena/exemplos) e o resto por página.
+        codeSplitting: {
+          groups: [
+            { name: 'three', test: /node_modules\/three\// },
+            {
+              name: 'shared',
+              test: /src\/(core|scene)\/|src\/editor\/(examples|colors)\.ts/,
+            },
+          ],
+        },
+      },
     },
   },
 });

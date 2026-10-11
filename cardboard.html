@@ -51,6 +51,15 @@
           }
         }
       }, true);
+      function cbProgress() {
+        // ainda baixando: informa sem alarmar (rede lenta de escola leva tempo)
+        if (!window.__cbBoot) {
+          var l = document.querySelector('#gate-log');
+          if (l && !/aixando/.test(l.textContent || '')) {
+            l.textContent += ((l.textContent ? '\n' : '') + 'Baixando o programa… aguarde.');
+          }
+        }
+      }
       function cbAlarm() {
         if (window.__cbReady) return;
         var m = document.querySelector('#gate-msg');
@@ -63,8 +72,8 @@
           m.style.color = '#d29922';
         }
       }
-      setTimeout(cbAlarm, 6000);
-      setTimeout(cbAlarm, 20000);
+      setTimeout(cbProgress, 3000);
+      setTimeout(cbAlarm, 25000);
     </script>
     <script type="module" src="/src/cardboard/main.ts"></script>
   </body>

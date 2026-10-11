@@ -25,10 +25,9 @@ export function HandsPanel() {
             </button>
           </div>
           <p className="hint">
-            A pinça aperta, move e solta como o mouse — no quadro 2D e na bancada 3D. E a mira
-            também seleciona: <strong>fixe 3 s</strong> num componente, num terminal ou numa
-            função (paleta, Conectar, 2D/3D) e ela ativa sozinha. A cena mostra só o esqueleto
-            da mão, nunca o vídeo.
+            Gesto de <strong>pinça</strong>: feche para apertar/arrastar e abrir para soltar — no
+            quadro 2D, na bancada 3D e nos botões da tela (a pinça clica neles). A cena mostra só
+            o esqueleto da mão, nunca o vídeo.
           </p>
         </>
       )}

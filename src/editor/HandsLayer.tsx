@@ -1,10 +1,6 @@
 import { useEffect, useRef } from 'react';
-import { EXAMPLES } from './examples';
 import { clientToCell } from './coords';
-import { boardHitAt, domHitAt, DwellActivator, labelOf, type DwellHit } from './dwellAct';
-import { DwellController } from '../hands/dwell';
 import { hands } from '../hands/controller';
-import { useEditor } from './store';
 
 const CONNECTIONS: Array<[number, number]> = [
   [0, 1], [1, 2], [2, 3], [3, 4],
@@ -19,10 +15,10 @@ const CONNECTIONS: Array<[number, number]> = [
 const HAND_RADIUS_PX = 70;
 
 /**
- * Ponteiro virtual das mãos (Fase 2b/2c): a mira acompanha a mão por TODA a
- * janela — dá para fixar num componente, num terminal, ou numa FUNÇÃO (paleta,
- * Conectar, exemplos, 2D/3D). Fixar 3 s ativa (anel cresce); a pinça continua
- * sendo o atalho direto. Sem vídeo na cena, só esqueleto + mira.
+ * Camada das mãos (Fase 2b): desenha só o esqueleto + mira (nunca o vídeo).
+ * A interação é por GESTO: a pinça aperta/move/solta — no quadro 2D, na bancada
+ * 3D e também nos botões marcados com [data-hand] (a pinça "clica" neles).
+ * A seleção por FIXAÇÃO (3 s) é exclusiva do Cardboard (olhar), onde não há mão.
  */
 export function HandsLayer() {
   const wrapRef = useRef<HTMLDivElement>(null);
@@ -57,52 +53,20 @@ export function HandsLayer() {
       video,
     );
 
-    const dwell = new DwellController(3000);
-    const activator = new DwellActivator({
-      arm: (k) => useEditor.getState().arm(k as never),
-      armWire: (on) => useEditor.getState().armWire(on),
-      loadExample: (i) => useEditor.getState().load(EXAMPLES[i].doc),
-      clear: () => useEditor.getState().clear(),
-      setView: (v) => useEditor.getState().setView(v),
-      select: (kind, id) => useEditor.getState().select({ kind, id }),
-      startDraft: (cell) => useEditor.getState().startDraft(cell),
-      moveDraft: (cell) => useEditor.getState().moveDraft(cell),
-      endDraft: (cell) => useEditor.getState().endDraft(cell),
-    });
-
-    /** O que está sob a mira agora: função (DOM) ou objeto do quadro. */
-    const resolveHit = (c: { x: number; y: number }, cursor: { x: number; y: number }): DwellHit | null => {
-      // 1) função: elemento marcado com [data-dwell] (paleta, Conectar, etc.)
-      const el = document.elementFromPoint(c.x, c.y) as HTMLElement | null;
-      const host = el?.closest('[data-dwell]') as HTMLElement | null;
-      const dom = host?.dataset.dwell ? domHitAt(host.dataset.dwell) : null;
-      if (dom) return dom;
-
-      // 2) objeto do quadro (mesma célula que a pinça usaria)
-      const cell = hands.resolveCell(cursor);
-      if (!cell) return null;
-      return boardHitAt(useEditor.getState().doc, cell);
-    };
-
     let raf = 0;
     let dead = false;
+    let wasPinched = false;
     const draw = () => {
       if (dead) return;
       raf = requestAnimationFrame(draw);
-      if (import.meta.env.DEV) {
-        const w = window as unknown as { __handsTick?: number; __dwellProgress?: number };
-        w.__handsTick = (w.__handsTick ?? 0) + 1;
-      }
       const ctx = canvas.getContext('2d');
       if (!ctx) return;
       if (!hands.active) {
-        // sem mãos: encolhe o canvas (não gasta banda de desenho à toa)
         if (canvas.width !== 1) {
           canvas.width = 1;
           canvas.height = 1;
         }
-        dwell.reset();
-        activator.reset();
+        wasPinched = false;
         return;
       }
       const W = window.innerWidth;
@@ -115,23 +79,15 @@ export function HandsLayer() {
 
       const frame = hands.drawFrame();
       const c = frame.cursor;
-      const now = performance.now();
 
-      // alvo sob a mira + fixação (só com a mão aberta: pinça é atalho direto)
-      let hit: DwellHit | null = null;
-      if (c && !c.active) {
-        hit = resolveHit(toClient(c.x, c.y), c);
-        // fio em construção pela mira: a prévia acompanha o cursor
-        if (activator.pendingFrom) {
-          const cell = hands.resolveCell(c);
-          if (cell) useEditor.getState().moveDraft(cell);
-        }
+      // GESTO nas funções: no instante em que a pinça FECHA sobre um botão
+      // marcado com [data-hand], ele é acionado — como um clique.
+      if (c?.active && !wasPinched) {
+        const el = document.elementFromPoint(c.x * W, c.y * H) as HTMLElement | null;
+        const host = el?.closest('[data-hand]') as HTMLElement | null;
+        host?.click();
       }
-      const res = dwell.update(hit ? hit.id : null, now);
-      if (import.meta.env.DEV) {
-        (window as unknown as { __dwellProgress?: number }).__dwellProgress = res.progress;
-      }
-      if (res.fired && hit) activator.fire(hit);
+      wasPinched = c?.active ?? false;
 
       // esqueleto a uma escala fixa em volta do cursor (janela inteira)
       ctx.lineCap = 'round';
@@ -160,12 +116,11 @@ export function HandsLayer() {
         ctx.stroke();
       }
 
-      // mira + anel de fixação crescendo
+      // mira: verde preenchida quando a pinça está fechada (agarrando)
       if (c) {
         const p = toClient(c.x, c.y);
-        const base = 7;
         ctx.beginPath();
-        ctx.arc(p.x, p.y, base, 0, Math.PI * 2);
+        ctx.arc(p.x, p.y, 7, 0, Math.PI * 2);
         if (c.active) {
           ctx.fillStyle = '#3fb950';
           ctx.fill();
@@ -173,27 +128,6 @@ export function HandsLayer() {
           ctx.strokeStyle = '#58a6ff';
           ctx.lineWidth = 2.5;
           ctx.stroke();
-        }
-        if (res.progress > 0 && !res.fired) {
-          ctx.beginPath();
-          ctx.arc(p.x, p.y, 14 + res.progress * 16, -Math.PI / 2, -Math.PI / 2 + res.progress * Math.PI * 2);
-          ctx.strokeStyle = '#e3b341';
-          ctx.lineWidth = 3;
-          ctx.stroke();
-        } else if (res.fired) {
-          ctx.beginPath();
-          ctx.arc(p.x, p.y, 30, 0, Math.PI * 2);
-          ctx.strokeStyle = '#3fb950';
-          ctx.lineWidth = 3;
-          ctx.stroke();
-        }
-        // rótulo do alvo fixando
-        if (hit && res.progress > 0 && !res.fired) {
-          ctx.font = '12px system-ui';
-          ctx.fillStyle = '#e3b341';
-          ctx.textAlign = 'center';
-          ctx.fillText(labelOf(hit), p.x, p.y + 46);
-          ctx.textAlign = 'start';
         }
       }
     };

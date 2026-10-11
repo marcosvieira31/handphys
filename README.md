@@ -36,8 +36,8 @@ Publicação automática no **GitHub Pages** a cada push em `main`
 - [x] Fase 1 — **editor de circuito no desktop** ([`editor.html`](editor.html), código em [`src/editor/`](src/editor/)): quadro esquemático 2D em SVG (paleta, arrastar com snap, fios terminal→terminal, R gira, Delete apaga, Ctrl+Z desfaz, cores por tensão), modelo em [`src/core/netlist.ts`](src/core/netlist.ts) + 24 testes, leituras V/I/nós ao vivo no painel. Total: 39 testes.
 - [x] Fase 1 (extra) — **modo fio** (botão Conectar/tecla F, mira generosa, clique tolerante a tremida) + **fio com desvio automático** (sem curto fantasma ao cruzar componentes)
 - [x] Fase 2a — **vista 3D do mesmo modelo** (bancada three.js, mesma leitura V/I/cor)
-- [x] Fase 2b — **mãos na webcam** (pinça aperta/move/solta como o mouse, esqueleto sem vídeo, calibração) — **também no 3D** (raycast na bancada)
-- [x] Fase 2c — **mira por fixação (3 s)**: fixar a mira num item ou numa função (paleta, Conectar, 2D/3D) ativa, com anel de progresso; vale no editor (mão) e no Cardboard (olhar)
-- [ ] Fase 3a — **Cardboard de produção** ([`cardboard.html`](cardboard.html): bancada estéreo, mira+toque fixação/ação; em execução)
+- [x] Fase 2b — **mãos na webcam** (gesto de pinça: aperta/move/solta como o mouse, também no 3D por raycast; a pinça também clica nos botões da tela; esqueleto sem vídeo; calibração)
+- [x] Fase 2c — **mira por fixação (3 s) no Cardboard** (olhar fixa 3 s num componente e ele é selecionado, com anel de progresso) — exclusivo do giroscópio, pois com as mãos o gesto é a pinça
+- [ ] Fase 3a — **Cardboard de produção** ([`cardboard.html`](cardboard.html): bancada estéreo, mira+toque V/I, fixação por olhar; em execução)
 - [ ] Fase 4 — camada de sala de aula
 - [ ] Fase 5 — piloto com turma

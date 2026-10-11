@@ -47,7 +47,7 @@ export function App() {
               className={view === '2d' ? 'ghost active' : 'ghost'}
               onClick={() => setView('2d')}
               title="Esquemático 2D (tecla V)"
-              data-dwell="view:2d"
+              data-hand="view:2d"
             >
               2D
             </button>
@@ -56,7 +56,7 @@ export function App() {
               className={view === '3d' ? 'ghost active' : 'ghost'}
               onClick={() => setView('3d')}
               title="Bancada 3D (tecla V)"
-              data-dwell="view:3d"
+              data-hand="view:3d"
             >
               3D
             </button>
@@ -76,12 +76,12 @@ export function App() {
               type="button"
               className="ghost"
               onClick={() => load(ex.doc)}
-              data-dwell={`example:${i}`}
+              data-hand={`example:${i}`}
             >
               {ex.name}
             </button>
           ))}
-          <button type="button" className="ghost" onClick={clear} data-dwell="clear">
+          <button type="button" className="ghost" onClick={clear} data-hand="clear">
             Limpar
           </button>
         </nav>

@@ -150,19 +150,26 @@ const hudCtx = hudCanvas.getContext('2d')!;
 const hudTexture = new THREE.CanvasTexture(hudCanvas);
 
 // Uma textura, duas malhas (uma por olho): HUD centrado em cada olho.
+//
+// depthTest:false é obrigatório aqui: a mesa (borda a 0,55 m) fica MAIS PERTO da
+// cabeça que o HUD (1 m), então sem isso a mesa desenhava na frente do cartão e
+// o deixava ilegível justamente quando se olhava para a bancada. É overlay, não
+// objeto da cena — deve sempre ficar por cima, como qualquer HUD.
 for (const eye of eyes) {
   const reticle = new THREE.Mesh(
     new THREE.RingGeometry(0.012, 0.017, 32),
-    new THREE.MeshBasicMaterial({ color: 0x58a6ff, transparent: true, opacity: 0.85 }),
+    new THREE.MeshBasicMaterial({ color: 0x58a6ff, transparent: true, opacity: 0.85, depthTest: false }),
   );
   reticle.position.set(0, 0, -1);
+  reticle.renderOrder = 1000;
   eye.cam.add(reticle);
 
   const hud = new THREE.Mesh(
     new THREE.PlaneGeometry(0.64, 0.32),
-    new THREE.MeshBasicMaterial({ map: hudTexture, transparent: true }),
+    new THREE.MeshBasicMaterial({ map: hudTexture, transparent: true, depthTest: false }),
   );
   hud.position.set(0, -0.46, -1);
+  hud.renderOrder = 999; // por trás da mira, mas ainda por cima da cena
   eye.cam.add(hud);
 }
 

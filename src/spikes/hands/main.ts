@@ -23,6 +23,7 @@ const overlay = document.querySelector<HTMLCanvasElement>('#overlay')!;
 const statusEl = document.querySelector<HTMLElement>('#status')!;
 const startBtn = document.querySelector<HTMLButtonElement>('#start')!;
 const stopBtn = document.querySelector<HTMLButtonElement>('#stop')!;
+const copyBtn = document.querySelector<HTMLButtonElement>('#copy')!;
 const thresholdInput = document.querySelector<HTMLInputElement>('#threshold')!;
 const thresholdOut = document.querySelector<HTMLOutputElement>('#thr')!;
 const ctx = overlay.getContext('2d')!;
@@ -34,6 +35,7 @@ const el = {
   hands: document.querySelector<HTMLElement>('#hands')!,
   pinch: document.querySelector<HTMLElement>('#pinch')!,
   flicker: document.querySelector<HTMLElement>('#flicker')!,
+  dropouts: document.querySelector<HTMLElement>('#dropouts')!,
   delegate: document.querySelector<HTMLElement>('#delegate')!,
 };
 
@@ -42,25 +44,29 @@ let stream: MediaStream | null = null;
 let raf = 0;
 let lastVideoTime = -1;
 
-// Suavização exponencial por landmark (spike; a Fase 2 usa filtro One Euro).
-const smoothed: Landmark[][] = [];
+// Suavização exponencial por landmark, CHAVEADA POR MÃO (spike; a Fase 2 usa filtro One Euro).
+const smoothedBy = new Map<string, Landmark[]>();
 const SMOOTH_ALPHA = 0.4;
 
-// Estado de pinça por mão (com histerese).
-type HandState = {
-  ratio: number;
-  pinched: boolean;
-  handedness: string;
-  raw: Landmark[];
-};
+// Quanto tempo uma mão pode sumir do quadro sem perder a "pinça".
+// Sem isso, um frame perdido vira "soltou + agarrou de novo" = troca falsa.
+const GRACE_MS = 400;
+
+// Estado de pinça por mão (com histerese), chaveado por esquerda/direita —
+// a ordem das mãos no resultado do MediaPipe pode trocar entre quadros.
+type HandState = { ratio: number; pinched: boolean; handedness: string; raw: Landmark[] };
+type Tracked = { pinched: boolean; lastSeen: number };
+const trackedBy = new Map<string, Tracked>();
 let handsState: HandState[] = [];
 
 // Métricas.
 let frames = 0;
+let lastFps = 0;
 let lastFpsAt = performance.now();
 let detections = 0;
 let detectMsSum = 0;
 let flickerTimes: number[] = [];
+let dropoutTimes: number[] = [];
 
 // Cursor "agarrado".
 let cursor: { x: number; y: number } | null = null;
@@ -126,6 +132,10 @@ function stop() {
   stream = null;
   video.srcObject = null;
   handsState = [];
+  trackedBy.clear();
+  smoothedBy.clear();
+  flickerTimes = [];
+  dropoutTimes = [];
   cursor = null;
   trail.length = 0;
   stopBtn.disabled = true;
@@ -155,34 +165,47 @@ function detectLoop() {
   const thr = Number(thresholdInput.value);
   const hysteresis = 0.05;
   const now = performance.now();
-  const next: HandState[] = result.landmarks.map((lm, i) => {
-    const prev = smoothed[i];
+  const seen = new Set<string>();
+
+  handsState = result.landmarks.map((lm, i) => {
+    // Chavear por mão (esquerda/direita), nunca por posição no array:
+    // a ordem das mãos pode trocar entre quadros e gerava trocas falsas.
+    const side = result.handedness[i]?.[0]?.categoryName ?? `mão${i}`;
+    seen.add(side);
+
+    const prev = smoothedBy.get(side);
     const raw = lm.map((p, j) => {
-      if (!prev || !prev[j]) return { x: p.x, y: p.y, z: p.z };
+      const s = prev?.[j];
+      if (!s) return { x: p.x, y: p.y, z: p.z };
       return {
-        x: prev[j].x + (p.x - prev[j].x) * SMOOTH_ALPHA,
-        y: prev[j].y + (p.y - prev[j].y) * SMOOTH_ALPHA,
-        z: prev[j].z + (p.z - prev[j].z) * SMOOTH_ALPHA,
+        x: s.x + (p.x - s.x) * SMOOTH_ALPHA,
+        y: s.y + (p.y - s.y) * SMOOTH_ALPHA,
+        z: s.z + (p.z - s.z) * SMOOTH_ALPHA,
       };
     });
-    smoothed[i] = raw;
+    smoothedBy.set(side, raw);
 
     const ratio = pinchRatio(raw);
-    const old = handsState[i];
-    const wasPinched = old?.pinched ?? false;
+    const prevTracked = trackedBy.get(side);
+    const wasPinched = prevTracked?.pinched ?? false;
     const pinched = wasPinched ? ratio > thr + hysteresis : ratio < thr;
     if (pinched !== wasPinched) flickerTimes.push(now);
+    trackedBy.set(side, { pinched, lastSeen: now });
 
-    return {
-      ratio,
-      pinched,
-      raw,
-      handedness: result.handedness[i]?.[0]?.categoryName ?? '?',
-    };
+    return { ratio, pinched, raw, handedness: side };
   });
-  handsState = next;
-  smoothed.length = next.length;
+
+  // Mão sumiu: só perde o estado (e conta "perda de rastreio") depois da graça.
+  for (const [side, tracked] of [...trackedBy]) {
+    if (!seen.has(side) && now - tracked.lastSeen > GRACE_MS) {
+      trackedBy.delete(side);
+      smoothedBy.delete(side);
+      dropoutTimes.push(now);
+    }
+  }
+
   flickerTimes = flickerTimes.filter((t) => now - t < 5000);
+  dropoutTimes = dropoutTimes.filter((t) => now - t < 5000);
 }
 
 function draw() {
@@ -263,6 +286,7 @@ function draw() {
 function updateStats(now: number) {
   frames += 1;
   if (now - lastFpsAt >= 1000) {
+    lastFps = frames;
     el.fps.textContent = String(frames);
     el.det.textContent = detections ? String(detections) : '0';
     el.lat.textContent = detections ? `${(detectMsSum / detections).toFixed(1)} ms` : '–';
@@ -280,6 +304,8 @@ function updateStats(now: number) {
     .join('  ') || '–';
   el.flicker.textContent = String(flickerTimes.length);
   el.flicker.className = flickerTimes.length > 6 ? 'warn' : 'good';
+  el.dropouts.textContent = String(dropoutTimes.length);
+  el.dropouts.className = dropoutTimes.length > 2 ? 'warn' : 'good';
 }
 
 function loop() {
@@ -292,10 +318,11 @@ function loop() {
 // Gancho de depuração: permite medir o spike por automação (não faz parte do produto).
 (window as unknown as { __spike?: unknown }).__spike = {
   stats: () => ({
-    renderFps: frames,
+    renderFps: lastFps,
     hands: handsState.length,
     pinch: handsState.map((h) => ({ side: h.handedness, ratio: Number(h.ratio.toFixed(3)), pinched: h.pinched })),
     flicker5s: flickerTimes.length,
+    dropouts5s: dropoutTimes.length,
     delegate: el.delegate.textContent,
     status: statusEl.textContent,
     modelLoaded: landmarker !== null,
@@ -307,3 +334,25 @@ thresholdInput.addEventListener('input', () => {
 });
 startBtn.addEventListener('click', start);
 stopBtn.addEventListener('click', stop);
+
+// Copia um resumo das métricas (para o relatório do spike / suporte em aula).
+copyBtn.addEventListener('click', async () => {
+  const text = [
+    `handphys spike0.1 — ${new Date().toLocaleString('pt-BR')}`,
+    `render fps: ${el.fps.textContent}`,
+    `detecções/s: ${el.det.textContent}`,
+    `latência média: ${el.lat.textContent}`,
+    `mãos vistas: ${el.hands.textContent}`,
+    `pinça: ${el.pinch.textContent}`,
+    `trocas agarrado↔solto (5s): ${el.flicker.textContent}`,
+    `perdas de rastreio (5s): ${el.dropouts.textContent}`,
+    `delegate: ${el.delegate.textContent}`,
+    `limiar: ${thresholdInput.value}`,
+  ].join('\n');
+  try {
+    await navigator.clipboard.writeText(text);
+    setStatus('Resultados copiados — cole onde quiser.');
+  } catch {
+    window.prompt('Copie o texto abaixo:', text);
+  }
+});

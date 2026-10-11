@@ -37,13 +37,19 @@
         <dt>Mãos vistas</dt><dd id="hands">–</dd>
         <dt>Pinça E / D</dt><dd id="pinch">–</dd>
         <dt>Trocas agarrado↔solto (5s)</dt><dd id="flicker">–</dd>
+        <dt>Perdas de rastreio (5s)</dt><dd id="dropouts">–</dd>
         <dt>Delegate</dt><dd id="delegate">–</dd>
       </dl>
 
+      <div class="actions">
+        <button id="copy" type="button" class="secondary">Copiar resultados</button>
+      </div>
+
       <p class="hint">
         Teste: <strong>segure a pinça por 10 s</strong> com o cursor quadrado visível.
-        “Trocas” altas = gesto instável → ajustar suavização/limiar na Fase 2.
-        O quadradinho segue o ponto de pinça quando você agarra; solte para largá-lo.
+        O esperado é <strong>~2 trocas</strong> (1 ao agarrar, 1 ao soltar) e
+        <strong>0–2 perdas</strong>. Muitas trocas com a mão parada = gesto instável.
+        “Perdas” altas = a câmera/ambiente perde a mão (luz, movimento, corte do quadro).
       </p>
     </aside>
 

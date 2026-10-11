@@ -36,6 +36,7 @@ const el = {
   pinch: document.querySelector<HTMLElement>('#pinch')!,
   flicker: document.querySelector<HTMLElement>('#flicker')!,
   dropouts: document.querySelector<HTMLElement>('#dropouts')!,
+  cause: document.querySelector<HTMLElement>('#cause')!,
   delegate: document.querySelector<HTMLElement>('#delegate')!,
 };
 
@@ -65,8 +66,19 @@ let lastFps = 0;
 let lastFpsAt = performance.now();
 let detections = 0;
 let detectMsSum = 0;
-let flickerTimes: number[] = [];
+let flickerTimes: number[] = []; // toda troca agarrado↔solto
+let tremorTimes: number[] = []; // troca com rastreio contínuo = tremor real do gesto
+let replaceTimes: number[] = []; // troca ao (re)aparecer a mão = reposição de estado
+let labelTimes: number[] = []; // etiqueta esquerda/direita trocou com o nº de mãos constante
 let dropoutTimes: number[] = [];
+
+function prune5s(now: number) {
+  flickerTimes = flickerTimes.filter((t) => now - t < 5000);
+  tremorTimes = tremorTimes.filter((t) => now - t < 5000);
+  replaceTimes = replaceTimes.filter((t) => now - t < 5000);
+  labelTimes = labelTimes.filter((t) => now - t < 5000);
+  dropoutTimes = dropoutTimes.filter((t) => now - t < 5000);
+}
 
 // Cursor "agarrado".
 let cursor: { x: number; y: number } | null = null;
@@ -166,6 +178,7 @@ function detectLoop() {
   const hysteresis = 0.05;
   const now = performance.now();
   const seen = new Set<string>();
+  const before = new Set(trackedBy.keys());
 
   handsState = result.landmarks.map((lm, i) => {
     // Chavear por mão (esquerda/direita), nunca por posição no array:
@@ -189,11 +202,21 @@ function detectLoop() {
     const prevTracked = trackedBy.get(side);
     const wasPinched = prevTracked?.pinched ?? false;
     const pinched = wasPinched ? ratio > thr + hysteresis : ratio < thr;
-    if (pinched !== wasPinched) flickerTimes.push(now);
+    if (pinched !== wasPinched) {
+      flickerTimes.push(now);
+      // Motivo: rastreio contínuo = tremor real; estado novo = reposição (mão/etiqueta surgiu).
+      if (prevTracked) tremorTimes.push(now);
+      else replaceTimes.push(now);
+    }
     trackedBy.set(side, { pinched, lastSeen: now });
 
     return { ratio, pinched, raw, handedness: side };
   });
+
+  // Etiqueta esquerda/direita trocou com o mesmo nº de mãos em campo = classificador oscilando.
+  const appeared = [...seen].filter((s) => !before.has(s)).length;
+  const pending = [...before].filter((s) => !seen.has(s)).length;
+  if (appeared > 0 && pending > 0 && seen.size === before.size) labelTimes.push(now);
 
   // Mão sumiu: só perde o estado (e conta "perda de rastreio") depois da graça.
   for (const [side, tracked] of [...trackedBy]) {
@@ -204,8 +227,7 @@ function detectLoop() {
     }
   }
 
-  flickerTimes = flickerTimes.filter((t) => now - t < 5000);
-  dropoutTimes = dropoutTimes.filter((t) => now - t < 5000);
+  prune5s(now);
 }
 
 function draw() {
@@ -284,6 +306,7 @@ function draw() {
 }
 
 function updateStats(now: number) {
+  prune5s(now); // janela honesta mesmo quando a detecção para (aba oculta congela o vídeo)
   frames += 1;
   if (now - lastFpsAt >= 1000) {
     lastFps = frames;
@@ -306,6 +329,9 @@ function updateStats(now: number) {
   el.flicker.className = flickerTimes.length > 6 ? 'warn' : 'good';
   el.dropouts.textContent = String(dropoutTimes.length);
   el.dropouts.className = dropoutTimes.length > 2 ? 'warn' : 'good';
+  el.cause.textContent =
+    `tremor ${tremorTimes.length} · reposição ${replaceTimes.length} · etiqueta ${labelTimes.length}`;
+  el.cause.className = tremorTimes.length > 6 ? 'warn' : 'good';
 }
 
 function loop() {
@@ -322,7 +348,11 @@ function loop() {
     hands: handsState.length,
     pinch: handsState.map((h) => ({ side: h.handedness, ratio: Number(h.ratio.toFixed(3)), pinched: h.pinched })),
     flicker5s: flickerTimes.length,
+    tremor5s: tremorTimes.length,
+    replace5s: replaceTimes.length,
+    label5s: labelTimes.length,
     dropouts5s: dropoutTimes.length,
+    visible: document.visibilityState === 'visible',
     delegate: el.delegate.textContent,
     status: statusEl.textContent,
     modelLoaded: landmarker !== null,
@@ -339,12 +369,14 @@ stopBtn.addEventListener('click', stop);
 copyBtn.addEventListener('click', async () => {
   const text = [
     `handphys spike0.1 — ${new Date().toLocaleString('pt-BR')}`,
+    `aba visível: ${document.visibilityState === 'visible' ? 'sim' : 'NÃO (fps/latência não valem)'} · vídeo pronto: ${video.readyState}`,
     `render fps: ${el.fps.textContent}`,
     `detecções/s: ${el.det.textContent}`,
     `latência média: ${el.lat.textContent}`,
     `mãos vistas: ${el.hands.textContent}`,
     `pinça: ${el.pinch.textContent}`,
     `trocas agarrado↔solto (5s): ${el.flicker.textContent}`,
+    `causa (5s): ${el.cause.textContent}`,
     `perdas de rastreio (5s): ${el.dropouts.textContent}`,
     `delegate: ${el.delegate.textContent}`,
     `limiar: ${thresholdInput.value}`,

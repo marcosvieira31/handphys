@@ -258,7 +258,7 @@ body.editor-page {
   cursor: crosshair;
 }
 
-.ghost {
+.schematic .ghost {
   opacity: 0.5;
   pointer-events: none;
 }

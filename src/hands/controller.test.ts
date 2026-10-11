@@ -155,4 +155,18 @@ describe('HandsController sem câmera (ingest)', () => {
     ctl.nudgeThreshold(-0.4);
     expect(ctl.getSnapshot().threshold).toBe(0.2); // trava no mínimo
   });
+
+  it('prévia: anexa o elemento (mesmo montado depois) e limpa ao parar', () => {
+    const ctl = new HandsController({ toCell });
+    const fake = {
+      muted: false,
+      srcObject: null as unknown,
+      play: () => Promise.resolve(),
+    };
+    ctl.attachPreview(fake as unknown as HTMLVideoElement);
+    expect(fake.muted).toBe(true);
+    ctl.attachPreview(null); // desmontou
+    ctl.stop(); // sem câmera: não quebra e não deixa aperto
+    expect(useEditor.getState().grip).toBeNull();
+  });
 });

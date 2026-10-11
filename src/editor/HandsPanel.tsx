@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useCallback } from 'react';
 import { hands, useHandsStatus } from '../hands/controller';
 
 /**
@@ -8,11 +8,10 @@ import { hands, useHandsStatus } from '../hands/controller';
  */
 export function HandsPanel() {
   const st = useHandsStatus(hands);
-  const previewRef = useRef<HTMLVideoElement>(null);
-
-  useEffect(() => {
-    hands.attachPreview(previewRef.current);
-    return () => hands.attachPreview(null);
+  // callback ref estável: liga/desliga a prévia quando o <video> monta/desmonta
+  // (ele só existe com a câmera ativa — o efeito único da montagem o perdia)
+  const setPreview = useCallback((el: HTMLVideoElement | null) => {
+    hands.attachPreview(el);
   }, []);
 
   return (
@@ -91,7 +90,7 @@ export function HandsPanel() {
           )}
           <details className="camera-preview">
             <summary>Prévia da câmera (só aqui)</summary>
-            <video ref={previewRef} className="camera-video" muted playsInline />
+            <video ref={setPreview} className="camera-video" muted playsInline />
             <p className="hint">A imagem não sai desta máquina e nunca aparece na cena.</p>
           </details>
         </>

@@ -5,7 +5,7 @@ Objetivo: derrubar as3 incertezas técnicas **antes** de escrever código de pro
 | # | Spike | Pergunta que responde | Arquivo |
 |---|---|---|---|
 | 0.1 | Hand tracking na webcam | O PC da escola roda MediaPipe a ~30 fps e o gesto de pinça é estável? | `spikes/hands.html` — **APROVADO** |
-| 0.2 | Cardboard estéreo | O celular tem giroscópio, o navegador entrega sensores e o fps estéreo aguenta? | `spikes/cardboard.html` |
+| 0.2 | Cardboard estéreo | O celular tem giroscópio, o navegador entrega sensores e o fps estéreo aguenta? | `spikes/cardboard.html` — **APROVADO** |
 | 0.3 | Deploy HTTPS | Conseguimos servir tudo por HTTPS estático (exigência de sensores e WebXR)? | este documento |
 
 ## Como rodar
@@ -137,13 +137,43 @@ Testes manuais: celular **sem** giroscópio (fallback "arraste"); entrar em tela
   e o HUD exatamente na costura entre os olhos (invisíveis com o headset). Refeito com
   **uma câmera por olho** + visibilidade por passagem (senão um olho renderizava os filhos
   do outro). Marcador de teste aparece 1× em cada metade ✓.
-- [ ] FPS no celular real, giroscópio no celular real, acerto de toque no celular real.
-- [ ] iOS: `requestPermission()` em gesto do usuário.
+- [x] FPS no celular real, giroscópio no celular real, acerto de toque no celular real.
+  Medido no celular real (11/10/2026, Android + Chrome, via túnel HTTPS):
+
+  | Métrica | Alvo | Medido | |
+  |---|---|---|---|
+  | FPS em estéreo, headset posto | ≥ 25 | **60** | ✅ |
+  | Giroscópio | funciona | `GIROSCÓPIO: OK` | ✅ |
+  | Seleção por toque | acerta | **1 (resistor)** | ✅ |
+  | Estéreo: uma câmera por olho | – | metades corretas, mira+HUD por olho | ✅ |
+  | WebGL2 no aparelho | – | sim | ✅ |
+
+- [ ] iOS: `requestPermission()` em gesto do usuário (código já trata; falta aparelhe Apple).
+
+**Veredito Spike 0.2: APROVADO.** Cardboard estéreo + giroscópio + toque é viável para a Fase 3.
+- Bugs encontrados e corrigidos durante o spike (o spike pagou o próprio custo):
+  - mira/HUD na costura entre os olhos (arquitetura `setViewOffset` → refazer com câmera por olho);
+  - um olho renderizando os filhos do outro (visibilidade por passagem);
+  - **JS "vivo mas morto" no celular**: o `<script type="module">` não terminava de carregar pelo
+    túnel lento (modo dev = centenas de módulos) e os listeners nunca eram ligados → página
+    mostrando só texto e botão. Agora: servir o **build** (bundle único) e expor erro de
+    WebGL/JS **na tela** (`fatal()`), com retry sem `antialias` e `webglcontextlost` tratado;
+  - **cabeça em `z=0` = mesmo plano da mesa** → quem vestia o cardboard olhava para o vazio;
+    reposicionada a1,0 m da bancada com olhar baixo;
+  - **HUD cortado pela mesa**: o cartão (1 m) ficava atrás da borda da mesa (0,55 m) e o
+    `depthTest` padrão deixava a geometria desenhar por cima → `depthTest: false` + `renderOrder`.
 
 ### Avisos operacionais
 - Aba oculta/janela minimizada → navegador throttla `requestAnimationFrame` (~1–20 fps).
   **Medir sempre com a aba visível.**
 - `getUserMedia` e sensores exigem contexto seguro (HTTPS ou localhost).
+- **Em aparelho real, servir o `dist/` (`npm run build` + `npx vite preview`), nunca o dev
+  server.** O modo dev entrega o three.js como centenas de módulos separados; pelo túnel
+  lento o `<script type="module">` não termina de carregar e a página fica "viva mas morta"
+  (texto e botão sem resposta) — parece bug de WebRTC/sensor, mas é só carga incompleta.
+- O túnel `localhost.run` **cai e reconecta com hostname novo**; se der `502 / no tunnel`,
+  releia a URL no terminal do SSH. `cloudflared`/`ngrok` não funcionam neste ambiente
+  (DNS local só IPv6 para `*.argotunnel.com`).
 
 ## Decisões tomadas ao fim da Fase 0
 
@@ -164,7 +194,29 @@ Registrar aqui o que os spikes decidirem (ex.: "webcam roda a30fps → mãos val
 - **Hand tracking e Cardboard continuam mutuamente exclusivos** no mesmo momento (matriz de
   modos no `docs/PLANO.md`), porque a webcam é fixa no PC e o modo Cardboard usa o celular.
 
-### Pendente (spikes 0.2 e 0.3)
+### Spike 0.2 (decidido em11/10/2026)
 
-- FPS estéreo e giroscópio no celular real (spike 0.2).
+- **Cardboard estéreo + giroscópio entra na Fase 3 como caminho de visualização do celular.**
+  Motivo: **60 fps em estéreo no celular real** (alvo ≥25), giroscópio `OK`, seleção por toque
+  acertou na bancada. Sobrou folga de performance para a cena real da Fase 1/3.
+- **Uma câmera por olho, nunca `setViewOffset`.** `setViewOffset` parte a cena, mas os filhos
+  da câmera (mira, HUD) caem exatamente na costura entre os olhos — invisíveis com o headset.
+  Uma câmera por olho mantém cada filho centrado no seu olho; a passagem de render garante que
+  um olho não desenhe os filhos do outro.
+- **HUD/mira da cena = `depthTest: false`.** O cartão ficava a1 m e a mesa a0,55 m: a borda da
+  mesa desenhava na frente do HUD e o deixava ilegível só quando se olhava para a bancada.
+  Overlay de interface não disputa profundidade com a cena.
+- **Posição da cabeça relativa à cena importa**: cabeça em `z=0` (mesmo plano da mesa) = vazio
+  escuro no headset. Pose inicial sempre com a cabeça atrás e acima da bancada, olhar baixo.
+- **Servir o build, não o dev, em aparelho real.** O modo dev entrega o three.js como centenas
+  de módulos; pelo túnel lento o `<script type="module">` não terminava e a página ficava com
+  "texto e botão morto". Erro de WebGL/JS precisa aparecer **na tela** (`fatal()`), não só no
+  console — senão dá para confundir com cena preta normal.
+- **`antialias: true` não é garantia em GPU móvel** → retry automático sem MSAA antes de
+  desistir. `webglcontextlost` precisa de aviso (celular recupera a GPU ao trocar de app).
+- **iOS segue não medido**: o ramo `DeviceOrientationEvent.requestPermission()` já está no
+  código e foi exercitado pelo desktop (que nega), mas falta um aparelhe Apple real.
+
+### Pendente
+
 - Deploy HTTPS estático funcional (spike 0.3).

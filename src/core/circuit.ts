@@ -18,6 +18,13 @@
 /** Nó de referência (terra). Toda tensão é medida em relação a ele. */
 export const GND = 'GND';
 
+/**
+ * Nós de referência. Cada um vale 0 V e sai das incógnitas do sistema.
+ * Um circuito com duas partes isoladas usa duas referências (uma por parte):
+ * a tensão absoluta de uma parte solta não é física, só as diferenças são.
+ */
+export type Grounds = readonly string[];
+
 export interface Resistor {
   kind: 'resistor';
   id: string;
@@ -135,17 +142,18 @@ function gauss(a: number[][], z: number[]): number[] {
  * Monta e resolve o sistema MNA.
  * `caps` é vazio em regime permanente (capacitor = circuito aberto) e traz o
  * modelo equivalente de cada capacitor no transitório.
+ * `grounds` são os nós de referência: cada um vale 0 V e sai das incógnitas.
  */
-function solveMna(components: Components, caps: Map<string, CapModel>) {
+function solveMna(components: Components, caps: Map<string, CapModel>, grounds: ReadonlySet<string>) {
   const nodeSet = new Set<string>();
   for (const c of components) {
-    if (c.a !== GND) nodeSet.add(c.a);
-    if (c.b !== GND) nodeSet.add(c.b);
+    if (!grounds.has(c.a)) nodeSet.add(c.a);
+    if (!grounds.has(c.b)) nodeSet.add(c.b);
   }
   const nodes = [...nodeSet].sort();
   const idx = new Map(nodes.map((n, i) => [n, i]));
   const n = nodes.length;
-  const at = (node: string) => (node === GND ? -1 : idx.get(node)!);
+  const at = (node: string) => (grounds.has(node) ? -1 : idx.get(node)!);
 
   // Ramos com incógnita de corrente: fontes de tensão + capacitores travados.
   const branches: { a: string; b: string; volts: number; id: string }[] = [];
@@ -210,9 +218,9 @@ function solveMna(components: Components, caps: Map<string, CapModel>) {
   return { nodeV, branchI, nodes };
 }
 
-function makeVoltageGetter(nodeV: Map<string, number>) {
+function makeVoltageGetter(nodeV: Map<string, number>, grounds: ReadonlySet<string>) {
   return (node: string): number => {
-    if (node === GND) return 0;
+    if (grounds.has(node)) return 0;
     const v = nodeV.get(node);
     if (v === undefined) throw new Error(`nó desconhecido: "${node}"`);
     return v;
@@ -223,9 +231,10 @@ function makeCurrentGetter(
   components: Components,
   nodeV: Map<string, number>,
   branchI: Map<string, number>,
+  grounds: ReadonlySet<string>,
 ) {
   const byId = new Map(components.map((c) => [c.id, c]));
-  const v = makeVoltageGetter(nodeV);
+  const v = makeVoltageGetter(nodeV, grounds);
   return (id: string): number => {
     const c = byId.get(id);
     if (!c) throw new Error(`componente desconhecido: "${id}"`);
@@ -236,13 +245,20 @@ function makeCurrentGetter(
   };
 }
 
-/** Resolve o regime permanente (DC): capacitores abertos, indutores curtos (não há). */
-export function solveDC(components: Components): Solution {
+/**
+ * Resolve o regime permanente (DC): capacitores abertos, indutores curtos (não há).
+ * `grounds` permite mais de um nó de referência — cada parte isolada do circuito
+ * tem tensão absoluta indefinida e ganha a sua própria (isso evita matriz singular
+ * numa montagem ainda pela metade, sem introduzir resistências fictícias).
+ */
+export function solveDC(components: Components, grounds: Grounds = [GND]): Solution {
   validate(components);
-  const { nodeV, branchI } = solveMna(components, new Map());
+  const set = new Set<string>(grounds);
+  set.add(GND);
+  const { nodeV, branchI } = solveMna(components, new Map(), set);
   return {
-    voltage: makeVoltageGetter(nodeV),
-    current: makeCurrentGetter(components, nodeV, branchI),
+    voltage: makeVoltageGetter(nodeV, set),
+    current: makeCurrentGetter(components, nodeV, branchI, set),
   };
 }
 
@@ -251,19 +267,25 @@ export function solveDC(components: Components): Solution {
  * Incondicionalmente estável: não "explode" com dt grande (só fica impreciso).
  * Em t = 0 cada capacitor é travado na condição inicial (tensão é contínua).
  */
-export function simulate(components: Components, opts: TransientOptions): TransientResult {
+export function simulate(
+  components: Components,
+  opts: TransientOptions,
+  grounds: Grounds = [GND],
+): TransientResult {
   validate(components);
   const { seconds, dt, initialV = {} } = opts;
   if (!(dt > 0)) throw new Error('dt deve ser > 0');
   if (!(seconds > 0)) throw new Error('seconds deve ser > 0');
 
-  const caps = components.filter((c): c is Capacitor => c.kind === 'capacitor');
+    const gnds = new Set<string>(grounds);
+    gnds.add(GND);
+    const caps = components.filter((c): c is Capacitor => c.kind === 'capacitor');
   // v anterior de cada capacitor (sentido a → b)
   const prev = new Map(caps.map((c) => [c.id, initialV[c.id] ?? 0]));
   const nodeSet = new Set<string>();
   for (const c of components) {
-    if (c.a !== GND) nodeSet.add(c.a);
-    if (c.b !== GND) nodeSet.add(c.b);
+    if (!gnds.has(c.a)) nodeSet.add(c.a);
+    if (!gnds.has(c.b)) nodeSet.add(c.b);
   }
   const nodes = [...nodeSet].sort();
 
@@ -282,8 +304,8 @@ export function simulate(components: Components, opts: TransientOptions): Transi
           : [c.id, { kind: 'companion', g: c.farads / dt, i: (c.farads / dt) * vab }];
       }),
     );
-    const { nodeV, branchI } = solveMna(components, eq);
-    const v = makeVoltageGetter(nodeV);
+    const { nodeV, branchI } = solveMna(components, eq, gnds);
+    const v = makeVoltageGetter(nodeV, gnds);
 
     t.push(s * dt);
     for (const c of components) {
@@ -307,7 +329,7 @@ export function simulate(components: Components, opts: TransientOptions): Transi
   return {
     t,
     voltage: (node) => {
-      if (node === GND) return new Array<number>(t.length).fill(0);
+      if (gnds.has(node)) return new Array<number>(t.length).fill(0);
       const h = histV.get(node);
       if (!h) throw new Error(`nó desconhecido: "${node}"`);
       return h;

@@ -1,0 +1,390 @@
+:root {
+  --bg: #0d1117;
+  --panel: #161b22;
+  --line: #2d333b;
+  --ink: #e6edf3;
+  --dim: #8b949e;
+  --accent: #58a6ff;
+  --hot: #e3b341;
+  --err: #f85149;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body.editor-page {
+  margin: 0;
+  height: 100vh;
+  overflow: hidden;
+  background: var(--bg);
+  color: var(--ink);
+  font: 14px/1.5 system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+}
+
+.editor {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+}
+
+/* ---------- barra superior ---------- */
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 8px 14px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--line);
+  flex-wrap: wrap;
+}
+
+.topbar h1 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--dim);
+}
+
+.topbar nav {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.topbar a {
+  color: var(--accent);
+  text-decoration: none;
+  font-size: 13px;
+}
+
+.topbar .sep {
+  width: 1px;
+  height: 18px;
+  background: var(--line);
+}
+
+.toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--dim);
+}
+
+/* ---------- corpo ---------- */
+.body {
+  display: grid;
+  grid-template-columns: 216px 1fr 320px;
+  flex: 1;
+  min-height: 0;
+}
+
+.palette,
+.inspector {
+  background: var(--panel);
+  padding: 12px;
+  overflow-y: auto;
+}
+
+.palette {
+  border-right: 1px solid var(--line);
+}
+
+.inspector {
+  border-left: 1px solid var(--line);
+}
+
+.palette h2,
+.inspector h2,
+.inspector h3 {
+  margin: 0 0 6px;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--dim);
+}
+
+.inspector h3 {
+  margin-top: 16px;
+  text-transform: none;
+  letter-spacing: 0;
+  font-size: 13px;
+  color: var(--ink);
+}
+
+.inspector header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.hint {
+  margin: 0 0 12px;
+  font-size: 12px;
+  color: var(--dim);
+}
+
+/* ---------- paleta ---------- */
+.palette ul {
+  list-style: none;
+  margin: 0 0 18px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.palette-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 5px 7px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  color: var(--ink);
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+}
+
+.palette-item:hover {
+  background: #1c2128;
+  border-color: var(--line);
+}
+
+.palette-item.active {
+  background: rgba(88, 166, 255, 0.12);
+  border-color: var(--accent);
+}
+
+.palette-item .meta {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.25;
+}
+
+.palette-item strong {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.palette-item em {
+  font-style: normal;
+  font-size: 11px;
+  color: var(--dim);
+}
+
+/* ---------- quadro ---------- */
+.canvas {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 14px;
+  min-width: 0;
+  overflow: auto;
+}
+
+.schematic {
+  width: 100%;
+  height: 100%;
+  background: #0a0d12;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  touch-action: none;
+}
+
+.schematic.placing {
+  cursor: crosshair;
+}
+
+.terminal {
+  cursor: crosshair;
+}
+
+.ghost {
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+.label {
+  font-size: 9px;
+  fill: var(--dim);
+  pointer-events: none;
+  user-select: none;
+}
+
+.wire.selected line:last-child {
+  stroke: var(--accent);
+}
+
+/* ---------- painel de medições ---------- */
+.readings {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+  margin-bottom: 4px;
+}
+
+.readings th {
+  text-align: left;
+  font-weight: 600;
+  color: var(--dim);
+  padding: 3px 4px;
+  border-bottom: 1px solid var(--line);
+}
+
+.readings td {
+  padding: 4px;
+  border-bottom: 1px solid #1c2128;
+}
+
+.readings tbody tr {
+  cursor: pointer;
+}
+
+.readings tbody tr:hover {
+  background: #1c2128;
+}
+
+.readings tbody tr.selected {
+  background: rgba(88, 166, 255, 0.12);
+}
+
+.num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.nets {
+  color: var(--dim);
+  font-size: 11px;
+}
+
+.nodes {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 12px;
+}
+
+.nodes li {
+  display: flex;
+  justify-content: space-between;
+}
+
+code,
+kbd {
+  font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  font-size: 11px;
+  background: #1c2128;
+  padding: 1px 4px;
+  border-radius: 3px;
+}
+
+kbd {
+  border: 1px solid var(--line);
+  padding: 0 3px;
+}
+
+.notice {
+  margin: 0 0 10px;
+  padding: 7px 9px;
+  border-radius: 6px;
+  font-size: 12px;
+  border: 1px solid var(--line);
+  background: #1c2128;
+}
+
+.notice.error {
+  border-color: var(--err);
+  color: var(--err);
+}
+
+.notice.warn {
+  border-color: var(--hot);
+  color: var(--hot);
+  list-style: none;
+  margin: 0 0 10px;
+  padding: 7px 9px;
+}
+
+.editor-box {
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 10px;
+  font-size: 12px;
+  color: var(--dim);
+}
+
+.field.row {
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+}
+
+.field input[type='number'] {
+  padding: 5px 7px;
+  background: #0a0d12;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  color: var(--ink);
+  font: inherit;
+}
+
+.field input[type='number']:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.actions {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+
+button {
+  padding: 5px 11px;
+  background: var(--accent);
+  border: 1px solid transparent;
+  border-radius: 6px;
+  color: #0a0d12;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+button.ghost {
+  background: transparent;
+  border-color: var(--line);
+  color: var(--ink);
+  font-weight: 500;
+}
+
+button.ghost:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}

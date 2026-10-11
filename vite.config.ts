@@ -23,6 +23,7 @@ export default defineConfig({
     rollupOptions: {
       input: {
         main: 'index.html',
+        editor: 'editor.html',
         hands: 'spikes/hands.html',
         cardboard: 'spikes/cardboard.html',
       },

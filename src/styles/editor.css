@@ -202,6 +202,54 @@ body.editor-page {
   touch-action: none;
 }
 
+.scene-wrap {
+  position: relative;
+  aspect-ratio: 1 / 1;
+  height: 100%;
+  max-width: 100%;
+}
+
+.scene3d {
+  width: 100%;
+  height: 100%;
+  display: block;
+  background: #0a0d12;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  touch-action: none;
+}
+
+.scene-loading {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0;
+  color: var(--dim);
+  font-size: 13px;
+  pointer-events: none;
+}
+
+/* ---------- grupo 2D/3D ---------- */
+.seg {
+  display: inline-flex;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.seg button.ghost {
+  border: 0;
+  border-radius: 0;
+  padding: 5px 12px;
+}
+
+.seg button.ghost.active {
+  background: rgba(88, 166, 255, 0.16);
+  color: var(--accent);
+}
+
 .schematic.placing {
   cursor: crosshair;
 }

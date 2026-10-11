@@ -11,6 +11,7 @@ import {
   type Wire,
 } from '../core/netlist';
 import { formatValue, labelPos, Symbol } from './symbol';
+import { voltageColor } from './colors';
 import { useEditor } from './store';
 
 const CELL = 16;
@@ -21,18 +22,6 @@ const GRAB_DIST = 0.75;
 const WIRE_GRAB = 1.5;
 /** Raio do imã ao SOLTAR (igual ao do store: o preview é o resultado). */
 const SNAP_DIST = 1.5;
-
-const NEUTRAL = [125, 133, 144]; // cinza do fio sem tensão
-const mix = (a: number, b: number, k: number) => Math.round(a + (b - a) * k);
-
-/** Tensão de um nó => cor do fio (0 V = cinza, positivo esquenta p/ vermelho, negativo azul). */
-function voltageColor(volts: number, maxVolts: number): string {
-  if (maxVolts <= 0) return '#7d8590';
-  const t = Math.max(-1, Math.min(1, volts / maxVolts));
-  if (t >= 0) return `rgb(${mix(NEUTRAL[0], 227, t)}, ${mix(NEUTRAL[1], 69, t)}, ${mix(NEUTRAL[2], 25, t)})`;
-  const k = -t;
-  return `rgb(${mix(NEUTRAL[0], 60, k)}, ${mix(NEUTRAL[1], 130, k)}, ${mix(NEUTRAL[2], 235, k)})`;
-}
 
 /** Menor distância do ponto a um segmento, em células. */
 function distToSegment(p: Pt, a: Pt, b: Pt): number {

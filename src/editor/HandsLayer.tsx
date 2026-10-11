@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { clientToCell } from './coords';
+import { handFrame } from './handDraw';
 import { hands } from '../hands/controller';
 
 const CONNECTIONS: Array<[number, number]> = [
@@ -89,27 +90,22 @@ export function HandsLayer() {
       }
       wasPinched = c?.active ?? false;
 
-      // esqueleto a uma escala fixa em volta do cursor (janela inteira)
+      // Esqueleto a uma escala fixa, ancorado no PONTO DA PINÇA (ponta do
+      // polegar 4 + ponta do indicador 8) — que é exatamente onde a mira fica.
+      // Ancorar no centroide, como antes, fazia o ponto nascer sempre no meio
+      // da mão desenhada, longe dos dedos (ver handDraw.test.ts).
       ctx.lineCap = 'round';
       for (const hand of frame.hands) {
         const pts = hand.pts;
         if (!pts.length) continue;
-        const cx = pts.reduce((s, p) => s + p.x, 0) / pts.length;
-        const cy = pts.reduce((s, p) => s + p.y, 0) / pts.length;
-        let maxR = 1;
-        for (const p of pts) maxR = Math.max(maxR, Math.hypot((p.x - cx) * W, (p.y - cy) * H));
-        const k = HAND_RADIUS_PX / maxR;
-        const anchor = c ? toClient(c.x, c.y) : { x: cx * W, y: cy * H };
-        const px = (p: { x: number; y: number }) => ({
-          x: anchor.x + (p.x - cx) * W * k,
-          y: anchor.y + (p.y - cy) * H * k,
-        });
+        const f = handFrame(pts, c, W, H, HAND_RADIUS_PX);
+        if (!f) continue;
         ctx.strokeStyle = hand.pinched ? '#3fb950' : 'rgba(88,166,255,0.85)';
         ctx.lineWidth = 2;
         ctx.beginPath();
         for (const [a, b] of CONNECTIONS) {
-          const pa = px(pts[a]);
-          const pb = px(pts[b]);
+          const pa = f.project(pts[a]);
+          const pb = f.project(pts[b]);
           ctx.moveTo(pa.x, pa.y);
           ctx.lineTo(pb.x, pb.y);
         }
@@ -119,6 +115,12 @@ export function HandsLayer() {
       // mira: verde preenchida quando a pinça está fechada (agarrando)
       if (c) {
         const p = toClient(c.x, c.y);
+        // halo escuro para a mira não sumir por cima das linhas do esqueleto
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, 9, 0, Math.PI * 2);
+        ctx.strokeStyle = 'rgba(8,10,14,0.75)';
+        ctx.lineWidth = 3;
+        ctx.stroke();
         ctx.beginPath();
         ctx.arc(p.x, p.y, 7, 0, Math.PI * 2);
         if (c.active) {

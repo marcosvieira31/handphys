@@ -23,7 +23,38 @@ const portraitEl = document.querySelector<HTMLElement>('#portrait')!;
 const stereoBtn = document.querySelector<HTMLButtonElement>('#toggle-stereo')!;
 const fullscreenBtn = document.querySelector<HTMLButtonElement>('#fullscreen')!;
 
-const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+// Falha de WebGL/JS não pode virar "tela preta sem explicação": sem isto, uma
+// exceção no construtor do renderer matava o módulo inteiro e os botões
+// ficavam vivos na aparência, mas mortos (exatamente o sintoma relatado no celular).
+function fatal(msg: string) {
+  gate.classList.remove('hidden');
+  gateMsg.textContent = msg;
+  gateMsg.style.color = '#ff7b72';
+  gateMsg.style.fontWeight = '600';
+  startBtn.disabled = true;
+}
+window.addEventListener('error', (e) => fatal(`Erro: ${e.message}`));
+window.addEventListener('unhandledrejection', (e) => fatal(`Erro: ${String(e.reason)}`));
+
+// Celular recupera a GPU agressivamente (trocar de app, tela dormindo): sem este
+// aviso a tela ficava preta para sempre sem explicação.
+canvas.addEventListener('webglcontextlost', (e) => {
+  e.preventDefault();
+  fatal('A GPU liberou o contexto 3D (comum no celular). Recarregue a página.');
+});
+
+let renderer: THREE.WebGLRenderer;
+try {
+  renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+} catch (err) {
+  // Segunda tentativa sem antialias: alguns GPUs móveis recusam o contexto com MSAA.
+  try {
+    renderer = new THREE.WebGLRenderer({ canvas, antialias: false });
+  } catch {
+    fatal('Este navegador não conseguiu criar o contexto WebGL2. Tente atualizar o navegador ou liberar memória.');
+    throw err;
+  }
+}
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 
 const scene = new THREE.Scene();
@@ -444,6 +475,9 @@ function frame() {
     selections,
     lastSelected,
     webgl: renderer.getContext().getParameter(renderer.getContext().VERSION),
+    drawingBuffer: [renderer.getContext().drawingBufferWidth, renderer.getContext().drawingBufferHeight],
+    cssSize: [canvas.clientWidth, canvas.clientHeight],
+    lost: renderer.getContext().isContextLost(),
   }),
   gl: () => {
     const vp = new THREE.Vector4();

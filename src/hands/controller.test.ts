@@ -64,6 +64,28 @@ describe('HandsController sem câmera (ingest)', () => {
     expect(after.draft).toBeNull();
   });
 
+  it('troca de etiqueta Left/Right no meio do arraste não reinicia o fio', () => {
+    const ctl = new HandsController({ toCell });
+    let now = 0;
+    const feed = (h: FrameHand, n = 8) => {
+      for (let i = 0; i < n; i++) {
+        now += 33;
+        ctl.ingest([h], 5, now);
+      }
+    };
+    feed(hand('Left', 0.8, 0.8334)); // fecha em (5,10) como "Left": press
+    expect(useEditor.getState().draft).not.toBeNull();
+    feed(hand('Left', 0.72, 0.7534)); // move até (8,10)
+    // o classificador troca a etiqueta com a mão parada: mesma posição, outro nome
+    feed(hand('Right', 0.72, 0.7534));
+    feed(hand('Right', 0.6, 0.6334)); // continua até (11,10) sem re-press
+    feed(hand('Right', 0.45, 0.7867), 12); // abre: solta
+    const after = useEditor.getState();
+    expect(after.doc.wires).toHaveLength(1);
+    // origem preservada da primeira pinçada (sem estabilidade, recomeçaria em (8,10))
+    expect(after.doc.wires[0]).toMatchObject({ from: { x: 5, y: 10 }, to: { x: 11, y: 10 } });
+  });
+
   it('mão que some agarrando solta o aperto depois da graça', () => {
     const ctl = new HandsController({ toCell });
     let now = 0;
@@ -88,7 +110,7 @@ describe('HandsController sem câmera (ingest)', () => {
     expect(s.pinched).toEqual(['Right']);
   });
 
-  it('calibração mede fechada+aberta e ajusta o limiar', () => {
+  it('calibração cola o limiar no teto da fechada (não no meio)', () => {
     const ctl = new HandsController({ toCell });
     ctl.startCalibration();
     let now = 0;
@@ -103,7 +125,34 @@ describe('HandsController sem câmera (ingest)', () => {
       now += 100;
       ctl.ingest([hand('Right', 0.33, 0.6668)], 5, now);
     }
-    expect(ctl.getSnapshot().calibrating).toBeNull();
-    expect(ctl.getSnapshot().threshold).toBeCloseTo((0.08 + 0.84) / 2, 1);
+    const s = ctl.getSnapshot();
+    expect(s.calibrating).toBeNull();
+    expect(s.error).toBeNull();
+    // teto da fechada + 0,08 (bem abaixo do meio 0,46: responde sem exigir esmagar)
+    expect(s.threshold).toBeGreaterThan(0.1);
+    expect(s.threshold).toBeLessThan(0.3);
+    expect(s.lastCalib).toMatch(/→/);
+  });
+
+  it('calibração sem separação MANTÉM o limiar antigo (não piora)', () => {
+    const ctl = new HandsController({ toCell });
+    ctl.startCalibration();
+    let now = 0;
+    for (let i = 0; i < 52; i++) {
+      now += 100;
+      ctl.ingest([hand('Right', 0.5, 0.5334)], 5, now); // sempre igual
+    }
+    const s = ctl.getSnapshot();
+    expect(s.calibrating).toBeNull();
+    expect(s.threshold).toBe(0.45);
+    expect(s.error).toMatch(/separação|confusa|Nenhuma/i);
+  });
+
+  it('ajuste manual do limiar persiste na sessão', () => {
+    const ctl = new HandsController({ toCell });
+    ctl.nudgeThreshold(0.05);
+    expect(ctl.getSnapshot().threshold).toBe(0.5);
+    ctl.nudgeThreshold(-0.4);
+    expect(ctl.getSnapshot().threshold).toBe(0.2); // trava no mínimo
   });
 });

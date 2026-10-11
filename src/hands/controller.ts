@@ -33,6 +33,7 @@ export interface HandsStatus {
   latencyMs: number;
   delegate: string;
   threshold: number;
+  lastCalib: string | null;
   error: string | null;
   calibrating: { phase: 'closed' | 'open'; leftMs: number } | null;
 }
@@ -58,8 +59,14 @@ function loadThreshold(): number {
  */
 export class HandsController {
   private tracker = new HandTracker();
-  private customCell: ((cursor: HandPoint) => { x: number; y: number } | null) | null = null;  private pinch = new PinchTracker({ threshold: loadThreshold() });
-  private filters = new Map<string, { x: OneEuroFilter[]; y: OneEuroFilter[] }>();
+  private customCell: ((cursor: HandPoint) => { x: number; y: number } | null) | null = null;
+  private pinch = new PinchTracker({ threshold: loadThreshold() });
+  /** Suavização LENTA (razão de pinça estável) e RÁPIDA (cursor sem lag), por mão. */
+  private slowFilters = new Map<string, { x: OneEuroFilter[]; y: OneEuroFilter[] }>();
+  private fastFilters = new Map<string, { x: OneEuroFilter[]; y: OneEuroFilter[] }>();
+  /** Identidade estável: o classificador troca Left/Right; o centroide, não. */
+  private slots = new Map<string, { x: number; y: number; lastSeen: number }>();
+  private slotSeq = 0;
   private lastCell = new Map<string, { x: number; y: number }>();
   private pressed = new Set<string>();
   private driver: string | null = null;
@@ -77,6 +84,7 @@ export class HandsController {
     latencyMs: 0,
     delegate: '–',
     threshold: loadThreshold(),
+    lastCalib: null,
     error: null,
     calibrating: null,
   };
@@ -85,7 +93,7 @@ export class HandsController {
   private latSum = 0;
   private latN = 0;
   private lastNotify = 0;
-  private calib: { phase: 'closed' | 'open'; until: number; samples: number[] } | null = null;
+  private calib: { phase: 'closed' | 'open'; until: number; startMark: number; samples: number[] } | null = null;
 
   constructor(opts: { toCell?: (cursor: HandPoint) => { x: number; y: number } | null } = {}) {
     this.customCell = opts.toCell ?? null;
@@ -183,7 +191,9 @@ export class HandsController {
     this.tracker.stop();
     if (this.previewVideo) this.previewVideo.srcObject = null;
     this.pinch.reset();
-    this.filters.clear();
+    this.slowFilters.clear();
+    this.fastFilters.clear();
+    this.slots.clear();
     this.lastCell.clear();
     this.pressed.clear();
     this.driver = null;
@@ -199,6 +209,32 @@ export class HandsController {
     return this.status.active;
   }
 
+  /** Ajuste fino manual do limiar (±, persiste): para quando a auto-calibração erra. */
+  nudgeThreshold(delta: number) {
+    const thr = Math.min(0.8, Math.max(0.2, Math.round((this.status.threshold + delta) * 100) / 100));
+    if (thr === this.status.threshold) return;
+    this.releaseAllPressed();
+    this.pinch = new PinchTracker({ threshold: thr });
+    try {
+      localStorage.setItem(LS_KEY, String(thr));
+    } catch {
+      /* sem storage */
+    }
+    this.setStatus({ threshold: thr, lastCalib: `ajuste manual: ${thr.toFixed(2)}` }, true);
+  }
+
+  /** Solta no store todo aperto vindo da mão (troca de limiar, calibração, sumiço). */
+  private releaseAllPressed() {
+    const st = useEditor.getState();
+    for (const side of [...this.pressed]) {
+      const last = this.lastCell.get(side);
+      if (last) st.releaseAt(last);
+    }
+    this.pressed.clear();
+    this.lastCell.clear();
+    this.driver = null;
+  }
+
   // ---- calibração: 2,5 s fechada + 2,5 s aberta; limiar = meio do caminho ----
   startCalibration() {
     if (this.calib) return;
@@ -209,7 +245,7 @@ export class HandsController {
     this.pressed.clear();
     this.driver = null;
     // `until` arma no primeiro quadro (usa o mesmo relógio do ingest)
-    this.calib = { phase: 'closed', until: 0, samples: [] };
+    this.calib = { phase: 'closed', until: 0, startMark: 0, samples: [] };
     this.setStatus({ calibrating: { phase: 'closed', leftMs: CALIB_MS }, error: null }, true);
   }
 
@@ -228,16 +264,22 @@ export class HandsController {
       this.latN = 0;
     }
 
-    // 1) suaviza, mede a razão, atualiza a pinça de cada mão presente
+    // 1) identidade estável por centroide (a etiqueta Left/Right oscila e
+    // teleportava o cursor) + suavização dupla: lenta p/ a razão, rápida p/ o cursor
     const t = now / 1000;
-    const seen = new Map<string, { sm: HandPoint[]; pinched: boolean; edge: 'down' | 'up' | null }>();
+    const seen = new Map<string, { sm: HandPoint[]; fast: HandPoint[]; pinched: boolean; edge: 'down' | 'up' | null; label: string }>();
+    let firstRatio: number | null = null;
     for (const h of hands) {
-      const sm = this.smooth(h, t);
+      const id = this.stableId(h, now);
+      const sm = this.smooth(this.slowFilters, id, h.pts, t, {});
+      const fast = this.smooth(this.fastFilters, id, h.pts, t, { minCutoff: 2.5, beta: 0.07 });
       const ratio = h.world ? pinchRatio3D(h.world) : pinchRatio2D(sm);
-      if (this.calib) this.collectCalib(ratio, now);
-      const { pinched, edge } = this.pinch.update(h.side, ratio, now);
-      seen.set(h.side, { sm, pinched, edge });
+      if (firstRatio === null) firstRatio = ratio;
+      const { pinched, edge } = this.pinch.update(id, ratio, now);
+      seen.set(id, { sm, fast, pinched, edge, label: h.side });
     }
+    // calibração: UMA mão (a primeira) — duas mãos misturam as amostras
+    if (firstRatio !== null && this.calib) this.collectCalib(firstRatio, now);
 
     // 2) mãos sumidas além da graça: solta o aperto das que estavam agarrando
     for (const side of this.pinch.prune(now)) {
@@ -245,7 +287,8 @@ export class HandsController {
       if (cell) useEditor.getState().releaseAt(cell);
       this.lastCell.delete(side);
       this.pressed.delete(side);
-      this.filters.delete(side);
+      this.slowFilters.delete(side);
+      this.fastFilters.delete(side);
       if (this.driver === side) this.driver = null;
     }
 
@@ -269,10 +312,11 @@ export class HandsController {
     }
 
     // 5) aperto/movimento do piloto ( contention: quem nunca apertou, aperta;
-    // quem já apertou, move — a soltura foi tratada no passo 3)
+    // quem já apertou, move — a soltura foi tratada no passo 3).
+    // O cursor usa o filtro RÁPIDO (sem o lag do filtro da razão).
     const d = this.driver !== null ? seen.get(this.driver) : undefined;
     if (this.driver !== null && d?.pinched) {
-      const cell = this.cellOf(midpoint(d.sm));
+      const cell = this.cellOf(midpoint(d.fast));
       if (cell) {
         if (!this.pressed.has(this.driver)) {
           st.pressAt(cell);
@@ -284,23 +328,23 @@ export class HandsController {
       }
     }
 
-    // 5) quadro para desenho + status (sem re-render a cada quadro: throttle interno)
-    const drawHands: DrawHand[] = hands.map((h) => ({
-      side: h.side,
-      pts: this.mirrored(this.lastSmooth(h.side)),
-      pinched: seen.get(h.side)?.pinched ?? false,
+    // 6) quadro para desenho (esqueleto rápido) + status com etiquetas legíveis
+    const drawHands: DrawHand[] = [...seen].map(([id, s]) => ({
+      side: s.label,
+      pts: this.mirroredFast(id),
+      pinched: s.pinched,
     }));
     const cursorHand = this.driver !== null ? seen.get(this.driver) : undefined;
-    const hoverHand = cursorHand ?? (hands.length ? seen.get(hands[0].side) : undefined);
+    const hoverSeen = cursorHand ?? [...seen.values()][0];
     this.draw = {
       hands: drawHands,
-      cursor: hoverHand
-        ? { ...midpoint(hoverHand.sm), active: this.driver !== null && hoverHand.pinched }
+      cursor: hoverSeen
+        ? { ...midpoint(hoverSeen.fast), active: this.driver !== null && hoverSeen.pinched }
         : null,
     };
     this.setStatus({
       hands: hands.length,
-      pinched: pinchedNow,
+      pinched: pinchedNow.map((id) => seen.get(id)?.label ?? id),
       calibrating: this.calib
         ? { phase: this.calib.phase, leftMs: Math.max(0, this.calib.until - now) }
         : null,
@@ -312,31 +356,69 @@ export class HandsController {
     return this.draw;
   }
 
-  private bank(side: string, n: number): { x: OneEuroFilter[]; y: OneEuroFilter[] } {
-    let b = this.filters.get(side);
+  /**
+   * Identidade estável: casa cada mão detectada com o centroide mais próximo
+   * (até 0,25 em coords normalizadas); nova mão ganha id novo. Assim a troca
+   * de etiqueta Left/Right do classificador não teleporta o cursor nem
+   * reinicia a pinça.
+   */
+  private stableId(h: FrameHand, now: number): string {
+    const cx = h.pts.reduce((s, p) => s + p.x, 0) / h.pts.length;
+    const cy = h.pts.reduce((s, p) => s + p.y, 0) / h.pts.length;
+    let best: string | null = null;
+    let bestD = 0.25;
+    for (const [id, s] of this.slots) {
+      const d = Math.hypot(s.x - cx, s.y - cy);
+      if (d < bestD) {
+        bestD = d;
+        best = id;
+      }
+    }
+    // slots velhos somem (mão que saiu e voltou é mão nova)
+    for (const [id, s] of [...this.slots]) {
+      if (now - s.lastSeen > 1500) this.slots.delete(id);
+    }
+    if (best === null) {
+      best = `H${++this.slotSeq}`;
+      this.slots.set(best, { x: cx, y: cy, lastSeen: now });
+    } else {
+      this.slots.set(best, { x: cx, y: cy, lastSeen: now });
+    }
+    return best;
+  }
+
+  private bank(
+    store: Map<string, { x: OneEuroFilter[]; y: OneEuroFilter[] }>,
+    side: string,
+    n: number,
+    opts: { minCutoff?: number; beta?: number } = {},
+  ): { x: OneEuroFilter[]; y: OneEuroFilter[] } {
+    let b = store.get(side);
     if (!b || b.x.length !== n) {
       b = {
-        x: Array.from({ length: n }, () => new OneEuroFilter()),
-        y: Array.from({ length: n }, () => new OneEuroFilter()),
+        x: Array.from({ length: n }, () => new OneEuroFilter(opts)),
+        y: Array.from({ length: n }, () => new OneEuroFilter(opts)),
       };
-      this.filters.set(side, b);
+      store.set(side, b);
     }
     return b;
   }
 
-  private smooth(h: FrameHand, t: number): HandPoint[] {
-    const b = this.bank(h.side, h.pts.length);
-    return h.pts.map((p, i) => ({ x: b.x[i].filter(p.x, t), y: b.y[i].filter(p.y, t) }));
+  private smooth(
+    store: Map<string, { x: OneEuroFilter[]; y: OneEuroFilter[] }>,
+    side: string,
+    pts: { x: number; y: number }[],
+    t: number,
+    opts: { minCutoff?: number; beta?: number },
+  ): HandPoint[] {
+    const b = this.bank(store, side, pts.length, opts);
+    return pts.map((p, i) => ({ x: b.x[i].filter(p.x, t), y: b.y[i].filter(p.y, t) }));
   }
 
-  private lastSmooth(side: string): HandPoint[] {
-    const b = this.filters.get(side);
+  private mirroredFast(id: string): HandPoint[] {
+    const b = this.fastFilters.get(id);
     if (!b) return [];
-    return b.x.map((f, i) => ({ x: f.value ?? 0, y: b.y[i].value ?? 0 }));
-  }
-
-  private mirrored(pts: HandPoint[]): HandPoint[] {
-    return pts.map((p) => ({ x: 1 - p.x, y: p.y }));
+    return b.x.map((f, i) => ({ x: 1 - (f.value ?? 0), y: b.y[i].value ?? 0 }));
   }
 
   private cellOf(cursor: HandPoint): { x: number; y: number } | null {
@@ -351,36 +433,54 @@ export class HandsController {
   private collectCalib(ratio: number, now: number) {
     const c = this.calib;
     if (!c) return;
-    if (c.until === 0) c.until = now + CALIB_MS;
+    if (c.until === 0) {
+      c.until = now + CALIB_MS;
+      c.startMark = now;
+    }
+    // descarta os primeiros 600 ms da fase (transição de abrir/fechar contamina)
+    if (now - c.startMark < 600) return;
     c.samples.push(ratio);
     if (now < c.until) return;
     if (c.phase === 'closed') {
-      this.closedMed = median(c.samples);
-      this.calib = { phase: 'open', until: now + CALIB_MS, samples: [] };
+      this.closedRef = percentile(c.samples, 0.9);
+      this.calib = { phase: 'open', until: 0, startMark: 0, samples: [] };
       this.setStatus({ calibrating: { phase: 'open', leftMs: CALIB_MS } }, true);
     } else {
-      // medianas (robustas a tropeços no início/fim da fase)
-      const openMed = median(c.samples);
-      const closedMed = this.closedMed;
-      if (closedMed < openMed) {
-        const thr = Math.min(0.7, Math.max(0.25, (closedMed + openMed) / 2));
-        this.pinch = new PinchTracker({ threshold: thr });
-        try {
-          localStorage.setItem(LS_KEY, String(thr));
-        } catch {
-          /* sem storage */
-        }
-        this.setStatus({ threshold: thr, error: null }, true);
+      const openRef = percentile(c.samples, 0.1);
+      const closedRef = this.closedRef;
+      // limiar COLADO no teto da fechada (+0,08 de folga): pinça responde sem
+      // exigir mão esmagada — mas só instala se há separação real (senão MANTÉM
+      // o limiar antigo em vez de piorar, que era o defeito relatado)
+      const thr = Math.min(0.7, Math.max(0.25, closedRef + 0.08));
+      if (!c.samples.length) {
+        this.setStatus({ error: 'Nenhuma mão vista: mostre UMA mão para a câmera.' }, true);
+      } else if (closedRef + 0.08 + 0.12 + 0.05 < openRef) {
+        this.installThreshold(thr);
+        const txt = `fechada ~${closedRef.toFixed(2)} · aberta ~${openRef.toFixed(2)} → ${thr.toFixed(2)}`;
+        this.setStatus({ threshold: thr, lastCalib: txt, error: null }, true);
       } else {
-        this.setStatus({ error: 'Calibração confusa: feche bem a pinça e depois abra bem.' }, true);
+        this.setStatus(
+          { error: `Sem separação (fechada ~${closedRef.toFixed(2)}, aberta ~${openRef.toFixed(2)}): feche mais a pinça e abra mais a mão. Limiar mantido.` },
+          true,
+        );
       }
       this.calib = null;
-      this.closedMed = 0;
+      this.closedRef = 0;
       this.setStatus({ calibrating: null }, true);
     }
   }
 
-  private closedMed = 0;
+  private installThreshold(thr: number) {
+    this.releaseAllPressed();
+    this.pinch = new PinchTracker({ threshold: thr });
+    try {
+      localStorage.setItem(LS_KEY, String(thr));
+    } catch {
+      /* sem storage */
+    }
+  }
+
+  private closedRef = 0;
 }
 
 function midpoint(pts: HandPoint[]): HandPoint {
@@ -389,12 +489,11 @@ function midpoint(pts: HandPoint[]): HandPoint {
   return { x: 1 - (a.x + b.x) / 2, y: (a.y + b.y) / 2 }; // já sai espelhado
 }
 
-/** Mediana (0 se vazio): ignora tropeços nas bordas da amostragem. */
-function median(v: number[]): number {
+/** Percentil (0 se vazio): p90 do teto, p10 do piso — robustos a tropeços. */
+function percentile(v: number[], q: number): number {
   if (!v.length) return 0;
   const s = [...v].sort((a, b) => a - b);
-  const m = Math.floor(s.length / 2);
-  return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
+  return s[Math.min(s.length - 1, Math.floor(q * s.length))];
 }
 
 export function useHandsStatus(controller: HandsController): HandsStatus {

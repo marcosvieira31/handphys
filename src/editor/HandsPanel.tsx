@@ -48,9 +48,11 @@ export function HandsPanel() {
               {st.fps} det/s · {st.latencyMs} ms · {st.delegate}
             </li>
             <li>Limiar da pinça: {st.threshold.toFixed(2)}</li>
+            {st.lastCalib && <li>Última calibração: {st.lastCalib}</li>}
           </ul>
           {st.calibrating ? (
             <p className="hint">
+              Mostre UMA mão para a câmera.{' '}
               {st.calibrating.phase === 'closed' ? (
                 <>
                   Feche a pinça e <strong>segure</strong>… {Math.ceil(st.calibrating.leftMs / 1000)} s
@@ -65,6 +67,22 @@ export function HandsPanel() {
             <div className="actions">
               <button type="button" className="ghost" onClick={() => hands.startCalibration()}>
                 Calibrar pinça
+              </button>
+              <button
+                type="button"
+                className="ghost"
+                title="Pinça sensível demais? Sobe o limiar."
+                onClick={() => hands.nudgeThreshold(0.05)}
+              >
+                +
+              </button>
+              <button
+                type="button"
+                className="ghost"
+                title="Pinça não agarra? Desce o limiar."
+                onClick={() => hands.nudgeThreshold(-0.05)}
+              >
+                −
               </button>
               <button type="button" className="ghost" onClick={() => hands.toggle()}>
                 Parar

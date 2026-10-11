@@ -16,7 +16,10 @@ npm test         # testes do solver (Vitest)
 
 ## Status
 
-- [x] Fase 0 — setup + spikes de validação (hand tracking na webcam, Cardboard estéreo)
+- [x] Fase 0 — setup + spikes de validação
+  - [x] **Spike 0.1 — hand tracking: APROVADO** (15 Hz real da câmera, latência17,7 ms, pinça estável, GPU, offline)
+  - [ ] Spike 0.2 — Cardboard no celular (pendente: fps estéreo + giroscópio no aparelho real)
+  - [ ] Spike 0.3 — deploy HTTPS
 - [x] Fase 1 (parcial) — **solver MNA** em [`src/core/circuit.ts`](src/core/circuit.ts), 15 testes passando (divisor, série/paralelo, Kirchhoff, RC)
 - [ ] Fase 1 — editor de circuito no desktop
 - [ ] Fase 2 — cena3D + interação por mãos

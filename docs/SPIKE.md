@@ -4,7 +4,7 @@ Objetivo: derrubar as3 incertezas técnicas **antes** de escrever código de pro
 
 | # | Spike | Pergunta que responde | Arquivo |
 |---|---|---|---|
-| 0.1 | Hand tracking na webcam | O PC da escola roda MediaPipe a ~30 fps e o gesto de pinça é estável? | `spikes/hands.html` |
+| 0.1 | Hand tracking na webcam | O PC da escola roda MediaPipe a ~30 fps e o gesto de pinça é estável? | `spikes/hands.html` — **APROVADO** |
 | 0.2 | Cardboard estéreo | O celular tem giroscópio, o navegador entrega sensores e o fps estéreo aguenta? | `spikes/cardboard.html` |
 | 0.3 | Deploy HTTPS | Conseguimos servir tudo por HTTPS estático (exigência de sensores e WebXR)? | este documento |
 
@@ -78,22 +78,36 @@ Testes manuais: celular **sem** giroscópio (fallback "arraste"); entrar em tela
 | Métrica | Alvo | Medido | |
 |---|---|---|---|
 | Render fps | – | 61 | ✅ |
-| Detecções/s | ≥ 24 | **15** | ⚠️ latência caiu para18,3 ms (pipeline mais rápido), então o teto15 quase certo é a **câmera real** — confirmar com a linha “quadros de vídeo/s” |
-| Latência média | ≤ 60 ms | 29,5 ms | ✅ |
+| Quadros de vídeo/s (taxa real da câmera) | – | **15** (pedido era30) | ℹ️ webcam reduziu sozinha (luz fraca) |
+| Detecções/s | ≥ 24 | **15** (= todos os quadros) | ✅ **eficiência100 %** — limite é a câmera |
+| Latência média | ≤ 60 ms | **17,7 ms** | ✅ |
 | Trocas agarrado↔solto (5s, mão parada) | ~2 | **0** | ✅ |
-| Perdas de rastreio (5s) | 0–2 | 0 | ✅ |
+| Perdas de rastreio (5s) | 0–2 | 0–1 | ✅ |
 | Duas mãos simultâneas | – | detecta2 | ✅ |
 | Razão de pinça fechada | – | 0,20–0,24 | ✅ |
 | Razão de pinça aberta | – | 0,84–0,88 | ✅ → **limiar calibrado: 0,45 ± 0,12** |
 | Delegate | GPU | GPU | ✅ |
+| Offline (sem CDN) | – | `/mp/*` local | ✅ |
+
+**Veredito Spike 0.1: APROVADO.** Hand tracking é viável para a Fase 2 com:
+-15 Hz (câmera real) é suficiente — suavização + interpolação do cursor no quadro de
+  render dão a fluidez; se a sala tiver mais luz, a webcam volta a30 fps sozinha;
+- latência17,7 ms é6× melhor que o alvo de60 ms (folga para o One Euro filter da Fase2);
+- pinça estável (0 trocas em 5 s) com as correções de3D + debounce.
 
 - Bugs encontrados e corrigidos durante o spike (o spike já pagou o próprio custo):
   - contador de trocas acumulava quando a aba ficava oculta (vídeo congela);
   - fps/latência sempre mostravam1 e0 (`lastFpsAt` nunca atualizado);
   - oclusão dos dedos na pinça gerava ~15 trocas/s → resolvido com **razão3D** (`world landmarks`) + **debounce de soltura de3 quadros**;
-  - **15 detecções/s com câmera de30 fps**: o ciclo de30 ms do `detectForVideo` batia com o rAF de33 ms e metade dos quadros era descartada → agora a detecção roda **1× por quadro de vídeo real** (`requestVideoFrameCallback`), com fallback rAF.
+  - **15 detecções/s**: a hipótese "colisão rAF×vídeo" foi **parcialmente errada** — a correção
+    para `requestVideoFrameCallback` cortou a latência (29,5 →17,7 ms) mas o teto continuou15;
+    o contador de quadros reais revelou que **a própria webcam entrega15 fps**. Lição: medir a
+    fonte antes de otimizar o consumidor;
+  - relatório de faixa de razão contamina transição (a razão atravessa todo o intervalo ao
+    trocar de estado) e mantinha entradas de mãos que sumiram (chave `<lado> <estado>` vs
+    `delete(<lado>)`) → agora só mede em estado estável há300 ms e expira entradas em4 s.
 - [x] Faixa aberta medida (0,84–0,88) → limiar **0,45**, histerese **0,12** (folga0,21 p/ agarrar,0,27 p/ soltar).
-- [x]15 detecções/s era o pipeline (não a câmera) → corrigido; reconfirmar no reteste (esperado ~30/s).
+- [x]15 detecções/s = taxa real da câmera (contador via `requestVideoFrameCallback`); pipeline a100 %.
 - ⚠️ **Limiar fixo global é frágil entre mãos**: na mesma sessão, mão direita deu
   fechada0,08–0,30 / aberta0,54–1,12, mas a **esquerda deu fechada0,39–0,43 e aberta0,45** —
   ou seja, quase em cima do limiar0,45 (passaria a não agarrar). A razão varia com distância,
@@ -122,4 +136,22 @@ Testes manuais: celular **sem** giroscópio (fallback "arraste"); entrar em tela
 
 Registrar aqui o que os spikes decidirem (ex.: "webcam roda a30fps → mãos valem a Fase 2"; "celular sem giroscópio → Cardboard adiado").
 
--
+### Spike 0.1 (decidido em10/10/2026)
+
+- **Hand tracking entra na Fase 2 como interação de verdade** (não como "modo bônus").
+  Motivo: latência17,7 ms (alvo era ≤60), pinça com0 trocas em5 s, delegate GPU, offline.
+- **15 Hz é o ritmo de detecção aceito.** A webcam do PC de teste entregou15 quadros/s reais
+  (o pedido de30 é só uma preferência). Suavização + interpolação do cursor no quadro de
+  render dão a fluidez. Em aula, **mais luz na sala = webcam volta a30 fps sozinha**, sem código.
+- **Pinça = razão3D normalizada** (`world landmarks`, polegar×indicador ÷ punho×mão médio),
+  com **debounce de soltura** (3 quadros acima do limiar) e **grace de400 ms** para sumiço
+  momentâneo. Sem esses três, a oclusão dos dedos gerava ~15 trocas falsas por segundo.
+- **Limiar fixo global NÃO escala para a turma** (uma mão operou a0,02 do limiar).
+  Fase 2 usará **calibração por mão** (auto-limiar adaptativo) + slider manual como override.
+- **Hand tracking e Cardboard continuam mutuamente exclusivos** no mesmo momento (matriz de
+  modos no `docs/PLANO.md`), porque a webcam é fixa no PC e o modo Cardboard usa o celular.
+
+### Pendente (spikes 0.2 e 0.3)
+
+- FPS estéreo e giroscópio no celular real (spike 0.2).
+- Deploy HTTPS estático funcional (spike 0.3).

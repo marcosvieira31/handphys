@@ -66,7 +66,7 @@ const HYSTERESIS = 0.12;
 // Estado de pinça por mão (com histerese), chaveado por esquerda/direita —
 // a ordem das mãos no resultado do MediaPipe pode trocar entre quadros.
 type HandState = { ratio: number; pinched: boolean; handedness: string; raw: Landmark[] };
-type Tracked = { pinched: boolean; lastSeen: number };
+type Tracked = { pinched: boolean; lastSeen: number; stateSince: number };
 const trackedBy = new Map<string, Tracked>();
 const pendingRelease = new Map<string, number>();
 const ratioStats = new Map<string, { min: number; max: number; at: number }>();
@@ -257,14 +257,18 @@ function detectOnce() {
       if (count >= RELEASE_FRAMES) pinched = false;
     }
 
-    // Faixa da razão nos últimos2 s, separando estado fechado/aberto:
-    // mostra se a folga em relação ao limiar é confortável ou apertada.
-    const stateKey = `${side} ${pinched ? 'fechada' : 'aberta'}`;
-    const rs = ratioStats.get(stateKey);
-    if (!rs || now - rs.at > 2000) ratioStats.set(stateKey, { min: ratio, max: ratio, at: now });
-    else {
-      rs.min = Math.min(rs.min, ratio);
-      rs.max = Math.max(rs.max, ratio);
+    // Faixa da razão nos últimos2 s, separando estado fechado/aberto.
+    // Só mede em estado ESTÁVEL (sem troca há ≥300 ms): durante a transição a
+    // razão atravessa todo o intervalo e contaminava a faixa (medição inútil).
+    const stateSince = pinched === wasPinched ? (prevTracked?.stateSince ?? now) : now;
+    if (now - stateSince >= 300) {
+      const stateKey = `${side} ${pinched ? 'fechada' : 'aberta'}`;
+      const rs = ratioStats.get(stateKey);
+      if (!rs || now - rs.at > 2000) ratioStats.set(stateKey, { min: ratio, max: ratio, at: now });
+      else {
+        rs.min = Math.min(rs.min, ratio);
+        rs.max = Math.max(rs.max, ratio);
+      }
     }
 
     if (pinched !== wasPinched) {
@@ -273,7 +277,7 @@ function detectOnce() {
       if (prevTracked) tremorTimes.push(now);
       else replaceTimes.push(now);
     }
-    trackedBy.set(side, { pinched, lastSeen: now });
+    trackedBy.set(side, { pinched, lastSeen: now, stateSince });
 
     return { ratio, pinched, raw, handedness: side };
   });
@@ -289,9 +293,17 @@ function detectOnce() {
       trackedBy.delete(side);
       smoothedBy.delete(side);
       pendingRelease.delete(side);
-      ratioStats.delete(side);
+      // As chaves de razão são "<lado> <estado>", por isso o apagamento por prefixo.
+      for (const key of [...ratioStats.keys()]) {
+        if (key.startsWith(`${side} `)) ratioStats.delete(key);
+      }
       dropoutTimes.push(now);
     }
+  }
+
+  // Entrada de razão sem atualização há >4 s (mão que saiu sem passar pela graça).
+  for (const [key, r] of [...ratioStats]) {
+    if (now - r.at > 4000) ratioStats.delete(key);
   }
 
   prune5s(now);

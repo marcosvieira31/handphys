@@ -72,10 +72,26 @@ Testes manuais: celular **sem** giroscópio (fallback "arraste"); entrar em tela
 ## Resultados parciais (validado por automação em2026-10-10)
 
 ### Spike 0.1 — webcam
-- [x] Modelo + WASM **locais** carregam (`/mp/*`, sem CDN) e o **delegate GPU funciona**
-  (log: “Graph successfully started running”, WebGL2).
-- [ ] Métricas de fps/latência/pinça: o navegador automatizado **negou a câmera**
-  (“Permission denied”). Precisa ser medido no PC com webcam real.
+- [x] Modelo + WASM **locais** carregam (`/mp/*`, sem CDN) e o **delegate GPU funciona**.
+- [x] Medido no PC real (10/10/2026, janela em primeiro plano):
+
+| Métrica | Alvo | Medido | |
+|---|---|---|---|
+| Render fps | – | 61 | ✅ |
+| Detecções/s | ≥ 24 | **15** | ⚠️ confirmar fps real da webcam (linha “câmera” do relatório) |
+| Latência média | ≤ 60 ms | 29,5 ms | ✅ |
+| Trocas agarrado↔solto (5s, mão parada) | ~2 | **0** | ✅ |
+| Perdas de rastreio (5s) | 0–2 | 0 | ✅ |
+| Duas mãos simultâneas | – | detecta2 | ✅ |
+| Razão de pinça fechada | – | 0,20–0,24 | ⚠️ folga de0,01 para o limiar0,25 → medir estado aberto e calibrar |
+| Delegate | GPU | GPU | ✅ |
+
+- Bugs encontrados e corrigidos durante o spike (o spike já pagou o próprio custo):
+  - contador de trocas acumulava quando a aba ficava oculta (vídeo congela);
+  - fps/latência sempre mostravam1 e0 (`lastFpsAt` nunca atualizado);
+  - oclusão dos dedos na pinça gerava ~15 trocas/s → resolvido com **razão3D** (`world landmarks`) + **debounce de soltura de3 quadros**.
+- [ ] Medir a razão **aberta** (mão estendida) para calibrar limiar/histerese.
+- [ ] Confirmar se15 detecções/s é limite da câmera (luz/fraca) ou do pipeline.
 
 ### Spike 0.2 — cardboard
 - [x] WebGL2 renderizando; **fps ~60 em estéreo** no desktop (janela visível).

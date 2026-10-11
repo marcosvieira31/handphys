@@ -77,6 +77,7 @@ let tremorTimes: number[] = []; // troca com rastreio contínuo = tremor real do
 let replaceTimes: number[] = []; // troca ao (re)aparecer a mão = reposição de estado
 let labelTimes: number[] = []; // etiqueta esquerda/direita trocou com o nº de mãos constante
 let dropoutTimes: number[] = [];
+let cameraInfo = '–';
 
 function prune5s(now: number) {
   flickerTimes = flickerTimes.filter((t) => now - t < 5000);
@@ -135,6 +136,12 @@ async function start() {
     });
     video.srcObject = stream;
     await video.play();
+    // Resolução/fps reais da câmera: se detecções/s é baixa, o limite pode ser a webcam
+    // (notebooks caem para15 fps em luz fraca), não o MediaPipe.
+    const settings = stream.getVideoTracks()[0]?.getSettings();
+    cameraInfo = settings
+      ? `${settings.width}×${settings.height} @ ${Math.round(settings.frameRate ?? 0)} fps`
+      : '–';
     setStatus('Mãos à vista — faça a pinça.');
     stopBtn.disabled = false;
     loop();
@@ -217,14 +224,6 @@ function detectLoop() {
     const world = result.worldLandmarks[i];
     const ratio = world ? pinchRatio3D(world) : pinchRatio2D(raw);
 
-    // Faixa da razão nos últimos2 s: mostra se ela pula o limiar (oclusão) ou se está calibrada.
-    const rs = ratioStats.get(side);
-    if (!rs || now - rs.at > 2000) ratioStats.set(side, { min: ratio, max: ratio, at: now });
-    else {
-      rs.min = Math.min(rs.min, ratio);
-      rs.max = Math.max(rs.max, ratio);
-    }
-
     const prevTracked = trackedBy.get(side);
     const wasPinched = prevTracked?.pinched ?? false;
 
@@ -237,6 +236,16 @@ function detectLoop() {
       const count = above ? (pendingRelease.get(side) ?? 0) + 1 : 0;
       pendingRelease.set(side, count);
       if (count >= RELEASE_FRAMES) pinched = false;
+    }
+
+    // Faixa da razão nos últimos2 s, separando estado fechado/aberto:
+    // mostra se a folga em relação ao limiar é confortável ou apertada.
+    const stateKey = `${side} ${pinched ? 'fechada' : 'aberta'}`;
+    const rs = ratioStats.get(stateKey);
+    if (!rs || now - rs.at > 2000) ratioStats.set(stateKey, { min: ratio, max: ratio, at: now });
+    else {
+      rs.min = Math.min(rs.min, ratio);
+      rs.max = Math.max(rs.max, ratio);
     }
 
     if (pinched !== wasPinched) {
@@ -394,6 +403,7 @@ function loop() {
     label5s: labelTimes.length,
     dropouts5s: dropoutTimes.length,
     visible: document.visibilityState === 'visible',
+    camera: cameraInfo,
     delegate: el.delegate.textContent,
     status: statusEl.textContent,
     modelLoaded: landmarker !== null,
@@ -411,6 +421,7 @@ copyBtn.addEventListener('click', async () => {
   const text = [
     `handphys spike0.1 — ${new Date().toLocaleString('pt-BR')}`,
     `aba visível: ${document.visibilityState === 'visible' ? 'sim' : 'NÃO (fps/latência não valem)'} · vídeo pronto: ${video.readyState}`,
+    `câmera: ${cameraInfo}`,
     `render fps: ${el.fps.textContent}`,
     `detecções/s: ${el.det.textContent}`,
     `latência média: ${el.lat.textContent}`,

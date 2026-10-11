@@ -1,0 +1,83 @@
+import { useEffect, useRef } from 'react';
+import { hands, useHandsStatus } from '../hands/controller';
+
+/**
+ * Painel das mãos (Fase 2b): liga/desliga a câmera, mostra estado, calibra a
+ * pinça e oferece a prévia da câmera RECOLHIDA (privacidade: a cena nunca
+ * mostra o vídeo, só o esqueleto).
+ */
+export function HandsPanel() {
+  const st = useHandsStatus(hands);
+  const previewRef = useRef<HTMLVideoElement>(null);
+
+  useEffect(() => {
+    hands.attachPreview(previewRef.current);
+    return () => hands.attachPreview(null);
+  }, []);
+
+  return (
+    <section className="editor-box">
+      <h3>Mãos (webcam)</h3>
+      {!st.active && !st.starting && (
+        <>
+          <div className="actions">
+            <button type="button" onClick={() => hands.toggle()}>
+              Usar as mãos
+            </button>
+          </div>
+          <p className="hint">
+            A pinça aperta, move e solta como o mouse — que continua funcionando. A cena mostra
+            só o esqueleto da mão, nunca o vídeo.
+          </p>
+        </>
+      )}
+      {st.starting && <p className="hint">Ligando câmera e modelo…</p>}
+      {st.error && <p className="notice error">{st.error}</p>}
+      {st.active && (
+        <>
+          <ul className="hands-status">
+            <li>
+              Mãos <strong>{st.hands}</strong>
+              {st.pinched.length > 0 && (
+                <>
+                  {' '}· pinça <strong className="pinch-on">{st.pinched.join(', ')}</strong>
+                </>
+              )}
+            </li>
+            <li>
+              {st.fps} det/s · {st.latencyMs} ms · {st.delegate}
+            </li>
+            <li>Limiar da pinça: {st.threshold.toFixed(2)}</li>
+          </ul>
+          {st.calibrating ? (
+            <p className="hint">
+              {st.calibrating.phase === 'closed' ? (
+                <>
+                  Feche a pinça e <strong>segure</strong>… {Math.ceil(st.calibrating.leftMs / 1000)} s
+                </>
+              ) : (
+                <>
+                  Agora <strong>abra bem</strong> a mão… {Math.ceil(st.calibrating.leftMs / 1000)} s
+                </>
+              )}
+            </p>
+          ) : (
+            <div className="actions">
+              <button type="button" className="ghost" onClick={() => hands.startCalibration()}>
+                Calibrar pinça
+              </button>
+              <button type="button" className="ghost" onClick={() => hands.toggle()}>
+                Parar
+              </button>
+            </div>
+          )}
+          <details className="camera-preview">
+            <summary>Prévia da câmera (só aqui)</summary>
+            <video ref={previewRef} className="camera-video" muted playsInline />
+            <p className="hint">A imagem não sai desta máquina e nunca aparece na cena.</p>
+          </details>
+        </>
+      )}
+    </section>
+  );
+}

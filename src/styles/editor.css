@@ -231,6 +231,63 @@ body.editor-page {
   pointer-events: none;
 }
 
+/* ---------- mãos (Fase 2b): esqueleto sobre o quadro, sem vídeo ---------- */
+.hands-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.hands-canvas {
+  position: absolute;
+  pointer-events: none;
+}
+
+.hands-video {
+  position: absolute;
+  width: 2px;
+  height: 2px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.hands-status {
+  list-style: none;
+  margin: 0 0 10px;
+  padding: 0;
+  font-size: 12px;
+  color: var(--dim);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.hands-status strong {
+  color: var(--ink);
+}
+
+.pinch-on {
+  color: #3fb950;
+}
+
+.camera-preview {
+  margin-top: 10px;
+  font-size: 12px;
+  color: var(--dim);
+}
+
+.camera-preview summary {
+  cursor: pointer;
+  padding: 4px 0;
+}
+
+.camera-video {
+  width: 100%;
+  border-radius: 6px;
+  border: 1px solid var(--line);
+  transform: scaleX(-1); /* espelho, igual ao cursor */
+}
+
 /* ---------- grupo 2D/3D ---------- */
 .seg {
   display: inline-flex;

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import type { CompKind, Placed, Reading } from '../core/netlist';
 import { formatAmps, formatValue } from './symbol';
+import { HandsPanel } from './HandsPanel';
 import { useEditor } from './store';
 
 const KIND_LABEL: Record<CompKind, string> = {
@@ -151,6 +152,8 @@ export function Inspector({ reading }: { reading: Reading }) {
           </p>
         </section>
       )}
+
+      <HandsPanel />
     </aside>
   );
 }

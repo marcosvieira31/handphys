@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import {
   EMPTY_DOC,
+  compAt,
   nearestTerminal,
   reattachWires,
   samePt,
@@ -12,11 +13,9 @@ import {
   type Pt,
   type Wire,
 } from '../core/netlist';
+import { GRAB_DIST, SNAP_DIST, WIRE_GRAB, wireAt } from './coords';
 
 const LIMIT = 30; // células de 0..29 — o quadro tem borda, nada sai da grade
-
-/** Raio do imã ao soltar o fio (em células): perto basta, no vazio cancela. */
-const SNAP_DIST = 1.5;
 
 export interface Selection {
   kind: 'comp' | 'wire';
@@ -37,6 +36,8 @@ export interface EditorState {
   wiring: boolean;
   selection: Selection | null;
   draft: Draft | null;
+  /** Componente segurado (arraste em curso, mouse ou pinça). */
+  grip: { id: string; dx: number; dy: number } | null;
   colorByVoltage: boolean;
   seq: number;
   past: CircuitDoc[];
@@ -48,6 +49,11 @@ export interface EditorState {
   moveDraft: (p: Pt) => void;
   endDraft: (p: Pt) => void;
   cancelDraft: () => void;
+  /** Aperta / move com aperto / solta: a MESMA semântica para mouse e pinça. */
+  pressAt: (cell: Pt) => void;
+  moveAt: (cell: Pt) => void;
+  releaseAt: (cell: Pt) => void;
+  releaseGrip: () => void;
   moveComp: (id: string, x: number, y: number) => void;
   rotate: (id: string) => void;
   removeSelected: () => void;
@@ -91,13 +97,14 @@ export const useEditor = create<EditorState>((set, get) => ({
   wiring: false,
   selection: null,
   draft: null,
+  grip: null,
   colorByVoltage: true,
   seq: 0,
   past: [],
 
-  arm: (kind) => set({ placing: kind, wiring: false, selection: null, draft: null }),
+  arm: (kind) => set({ placing: kind, wiring: false, selection: null, draft: null, grip: null }),
 
-  armWire: (on) => set({ wiring: on, placing: null, selection: null, draft: null }),
+  armWire: (on) => set({ wiring: on, placing: null, selection: null, draft: null, grip: null }),
 
   place: (kind, at) => {
     const s = get();
@@ -119,7 +126,7 @@ export const useEditor = create<EditorState>((set, get) => ({
     });
   },
 
-  select: (sel) => set({ selection: sel, draft: null }),
+  select: (sel) => set({ selection: sel, draft: null, grip: null }),
 
   startDraft: (p) => set({ draft: { from: p, cursor: p, moved: false }, selection: null }),
 
@@ -163,6 +170,63 @@ export const useEditor = create<EditorState>((set, get) => ({
   },
 
   cancelDraft: () => set({ draft: null }),
+
+  /**
+   * Aperta numa célula: a MESMA decisão para mouse (pointerdown) e pinça
+   * (fechar os dedos). Ordem: posicionar > terminar fio > modo fio >
+   * começar fio > segurar componente > selecionar fio.
+   */
+  pressAt: (cell) => {
+    const s = get();
+    if (s.placing) {
+      s.place(s.placing, cell);
+      return;
+    }
+    if (s.draft?.moved) {
+      s.endDraft(cell);
+      return;
+    }
+    if (s.wiring) {
+      const grab = nearestTerminal(s.doc, cell, WIRE_GRAB);
+      if (grab) s.startDraft(grab.pos);
+      return;
+    }
+    const grab = nearestTerminal(s.doc, cell, GRAB_DIST);
+    if (grab) {
+      s.startDraft(grab.pos);
+      return;
+    }
+    const comp = compAt(s.doc, cell);
+    if (comp) {
+      set({
+        selection: { kind: 'comp', id: comp.id },
+        draft: null,
+        grip: { id: comp.id, dx: comp.x - cell.x, dy: comp.y - cell.y },
+      });
+      return;
+    }
+    const wire = wireAt(s.doc, cell);
+    s.select(wire ? { kind: 'wire', id: wire.id } : null);
+  },
+
+  /** Move com aperto: leva o fio em arraste ou o componente segurado. */
+  moveAt: (cell) => {
+    const s = get();
+    if (s.draft) {
+      s.moveDraft(cell);
+      return;
+    }
+    if (s.grip) s.moveComp(s.grip.id, cell.x + s.grip.dx, cell.y + s.grip.dy);
+  },
+
+  /** Solta o aperto: termina o fio ou larga o componente. */
+  releaseAt: (cell) => {
+    const s = get();
+    if (s.draft) s.endDraft(cell);
+    set({ grip: null });
+  },
+
+  releaseGrip: () => set({ grip: null }),
 
   moveComp: (id, x, y) => {
     const s = get();
@@ -241,15 +305,15 @@ export const useEditor = create<EditorState>((set, get) => ({
   },
 
   load: (doc) =>
-    set((s) => ({ doc, past: [...s.past, s.doc].slice(-30), selection: null, draft: null, placing: null, wiring: false })),
+    set((s) => ({ doc, past: [...s.past, s.doc].slice(-30), selection: null, draft: null, placing: null, wiring: false, grip: null })),
 
-  clear: () => set((s) => ({ doc: EMPTY_DOC, past: [...s.past, s.doc].slice(-30), selection: null, draft: null, wiring: false })),
+  clear: () => set((s) => ({ doc: EMPTY_DOC, past: [...s.past, s.doc].slice(-30), selection: null, draft: null, wiring: false, grip: null })),
 
   undo: () =>
     set((s) => {
       if (!s.past.length) return s;
       const past = s.past.slice(0, -1);
-      return { past, doc: s.past[s.past.length - 1], selection: null, draft: null };
+      return { past, doc: s.past[s.past.length - 1], selection: null, draft: null, grip: null };
     }),
 
   setColorByVoltage: (on) => set({ colorByVoltage: on }),

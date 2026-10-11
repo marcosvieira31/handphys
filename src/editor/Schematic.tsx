@@ -1,7 +1,6 @@
-import { useCallback, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import type { Reading } from '../core/netlist';
 import {
-  compAt,
   nearestTerminal,
   samePt,
   terminalCount,
@@ -10,29 +9,10 @@ import {
   type Pt,
   type Wire,
 } from '../core/netlist';
+import { CELL, GRAB_DIST, GRID, SNAP_DIST, WIRE_GRAB, clientToCell } from './coords';
 import { formatValue, labelPos, Symbol } from './symbol';
 import { voltageColor } from './colors';
 import { useEditor } from './store';
-
-const CELL = 16;
-const GRID = 30; // células 0..29, como no store
-/** Raio do imã ao AGARRAR o fio: clicar perto do pontinho já vale. */
-const GRAB_DIST = 0.75;
-/** Mira do MODO FIO: generosa, pois nele nada se arrasta (sem conflito). */
-const WIRE_GRAB = 1.5;
-/** Raio do imã ao SOLTAR (igual ao do store: o preview é o resultado). */
-const SNAP_DIST = 1.5;
-
-/** Menor distância do ponto a um segmento, em células. */
-function distToSegment(p: Pt, a: Pt, b: Pt): number {
-  const vx = b.x - a.x;
-  const vy = b.y - a.y;
-  const len2 = vx * vx + vy * vy;
-  const t = len2 === 0 ? 0 : Math.max(0, Math.min(1, ((p.x - a.x) * vx + (p.y - a.y) * vy) / len2));
-  const dx = p.x - (a.x + t * vx);
-  const dy = p.y - (a.y + t * vy);
-  return Math.hypot(dx, dy);
-}
 
 export function Schematic({ reading }: { reading: Reading }) {
   const svgRef = useRef<SVGSVGElement>(null);
@@ -43,94 +23,33 @@ export function Schematic({ reading }: { reading: Reading }) {
   const wiring = useEditor((s) => s.wiring);
   const colorByVoltage = useEditor((s) => s.colorByVoltage);
   const [hoverCell, setHoverCell] = useState<Pt | null>(null);
-  const dragOrigin = useRef<{ id: string; dx: number; dy: number } | null>(null);
+
+  const toCell = (clientX: number, clientY: number): Pt => clientToCell(svgRef.current, clientX, clientY);
+
+  const capture = (e: React.PointerEvent) => {
+    const st = useEditor.getState();
+    if (st.draft || st.grip) (e.target as Element).setPointerCapture?.(e.pointerId);
+  };
 
   const onPointerDown = (e: React.PointerEvent) => {
-    const cell = toCell(e);
-    // Estado FRESCO do store (getState), não o da closure: dois eventos no mesmo
-    // tick (toque rápido, pinça da Fase 2) veriam um draft obsoleto e o fio falhava.
-    const st = useEditor.getState();
-    if (st.placing) {
-      st.place(st.placing, cell);
-      return;
-    }
-    // 0) fio "na mão" (clique-clique)? => este clique TERMINA o fio, com imã
-    if (st.draft?.moved) {
-      st.endDraft(cell);
-      return;
-    }
-    // W) modo fio: só conecta — mira generosa, vazio não faz nada (nem perde o fio)
-    if (st.wiring) {
-      const grab = nearestTerminal(st.doc, cell, WIRE_GRAB);
-      if (grab) {
-        st.startDraft(grab.pos);
-        (e.target as Element).setPointerCapture?.(e.pointerId);
-      }
-      return;
-    }
-    // 1) perto de um terminal? => começa um fio (imã: não precisa acertar o pixel)
-    const grab = nearestTerminal(st.doc, cell, GRAB_DIST);
-    if (grab) {
-      st.startDraft(grab.pos);
-      (e.target as Element).setPointerCapture?.(e.pointerId);
-      return;
-    }
-    // 2) componente? => seleciona e prepara arraste
-    const comp = compAt(st.doc, cell);
-    if (comp) {
-      st.select({ kind: 'comp', id: comp.id });
-      dragOrigin.current = { id: comp.id, dx: comp.x - cell.x, dy: comp.y - cell.y };
-      (e.target as Element).setPointerCapture?.(e.pointerId);
-      return;
-    }
-    // 3) fio? => seleciona (o fio tem traçado com dobras: testa cada trecho)
-    const wire = st.doc.wires.find((w) => {
-      const pts = wireRoute(st.doc, w);
-      for (let i = 1; i < pts.length; i++) if (distToSegment(cell, pts[i - 1], pts[i]) < 0.35) return true;
-      return false;
-    });
-    st.select(wire ? { kind: 'wire', id: wire.id } : null);
+    useEditor.getState().pressAt(toCell(e.clientX, e.clientY));
+    capture(e);
   };
 
   const onPointerMove = (e: React.PointerEvent) => {
-    const cell = toCell(e);
+    const cell = toCell(e.clientX, e.clientY);
     setHoverCell(cell);
-    const st = useEditor.getState();
-    if (st.draft) {
-      st.moveDraft(cell);
-      return;
-    }
-    if (dragOrigin.current) {
-      const { id, dx, dy } = dragOrigin.current;
-      st.moveComp(id, cell.x + dx, cell.y + dy);
-    }
+    useEditor.getState().moveAt(cell);
   };
 
   const onPointerUp = (e: React.PointerEvent) => {
-    const cell = toCell(e);
-    const st = useEditor.getState();
-    if (st.draft) st.endDraft(cell);
-    dragOrigin.current = null;
+    useEditor.getState().releaseAt(toCell(e.clientX, e.clientY));
   };
-
-  /** Cliente => célula da grade (pela matriz do SVG: exato mesmo com sobra de layout). */
-  const toCell = useCallback((e: { clientX: number; clientY: number }): Pt => {
-    const svg = svgRef.current;
-    if (!svg) return { x: 0, y: 0 };
-    const ctm = svg.getScreenCTM();
-    if (!ctm) return { x: 0, y: 0 };
-    // floor, não round: o clique cai DENTRO da célula (round erra no centro exato,
-    // onde 7,5 arredonda para 8 por poeira de ponto flutuante).
-    const pt = new DOMPoint(e.clientX, e.clientY).matrixTransform(ctm.inverse());
-    return {
-      x: Math.max(0, Math.min(GRID - 1, Math.floor(pt.x / CELL))),
-      y: Math.max(0, Math.min(GRID - 1, Math.floor(pt.y / CELL))),
-    };
-  }, []);
 
   const onPointerLeave = () => {
     setHoverCell(null);
-    if (!useEditor.getState().draft) dragOrigin.current = null;
+    const st = useEditor.getState();
+    if (!st.draft) st.releaseGrip();
   };
 
   const wires = doc.wires.map((w) => {

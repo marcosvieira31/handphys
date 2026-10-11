@@ -89,3 +89,63 @@ describe('fio com imã (store.endDraft)', () => {
     expect(useEditor.getState().placing).toBe('resistor');
   });
 });
+
+describe('semântica única press/move/release (mouse e pinça)', () => {
+  beforeEach(() => {
+    useEditor.setState({
+      doc: {
+        comps: [
+          { id: 'bat1', kind: 'vsource', x: 4, y: 10, rot: 0, value: 9 },
+          { id: 'lamp1', kind: 'lamp', x: 12, y: 10, rot: 0, value: 20 },
+        ],
+        wires: [],
+      },
+      placing: null,
+      wiring: false,
+      draft: null,
+      grip: null,
+      selection: null,
+      seq: 100,
+      past: [],
+    });
+  });
+
+  it('press no terminal começa o fio; release no alvo conecta (via press/move/release)', () => {
+    const s = useEditor.getState();
+    s.pressAt({ x: 5, y: 10 });
+    expect(useEditor.getState().draft).not.toBeNull();
+    s.moveAt({ x: 8, y: 10 });
+    s.releaseAt({ x: 11, y: 11 }); // perto: o imã puxa para (11,10)
+    const after = useEditor.getState();
+    expect(after.doc.wires).toHaveLength(1);
+    expect(after.doc.wires[0]).toMatchObject({ from: { x: 5, y: 10 }, to: { x: 11, y: 10 } });
+  });
+
+  it('press no corpo segura o componente; move arrasta; release larga', () => {
+    const s = useEditor.getState();
+    s.pressAt({ x: 12, y: 10 }); // centro da lâmpada (a 1,0 do terminal: não é fio)
+    expect(useEditor.getState().grip?.id).toBe('lamp1');
+    s.moveAt({ x: 14, y: 12 });
+    expect(useEditor.getState().doc.comps.find((c) => c.id === 'lamp1')).toMatchObject({ x: 14, y: 12 });
+    s.releaseAt({ x: 14, y: 12 });
+    expect(useEditor.getState().grip).toBeNull();
+  });
+
+  it('press com fio na mão termina o fio (clique-clique pela mesma via)', () => {
+    const s = useEditor.getState();
+    s.pressAt({ x: 5, y: 10 });
+    s.releaseAt({ x: 5, y: 10 });
+    expect(useEditor.getState().draft).not.toBeNull();
+    s.pressAt({ x: 11, y: 10 });
+    expect(useEditor.getState().doc.wires).toHaveLength(1);
+  });
+
+  it('press posiciona quando há componente armado', () => {
+    const s = useEditor.getState();
+    s.arm('resistor');
+    s.pressAt({ x: 20, y: 5 });
+    const after = useEditor.getState();
+    expect(after.doc.comps.some((c) => c.x === 20 && c.y === 5)).toBe(true);
+    expect(after.placing).toBeNull();
+  });
+});

@@ -1,6 +1,6 @@
 # Plano — Laboratório Virtual de Física (Circuitos) em Realidade Mista
 
-> Status: **Fase 0 concluída (spikes 0.1–0.3 aprovados) — Fase 1 concluída (editor desktop) — Fase 2a em execução (vista 3D)**
+> Status: **Fase 0 concluída (spikes 0.1–0.3 aprovados) — Fase 1 concluída (editor desktop) — Fase 2a concluída (vista 3D) — Fase 2b em execução (mãos)**
 > Objetivo: evolução contínua (sem data de entrega marcada), uso real em sala de aula.
 
 ---

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { readCircuit, type CircuitDoc } from '../core/netlist';
+import { HandsLayer } from './HandsLayer';
 import { Inspector } from './Inspector';
 import { Palette } from './Palette';
 import { Schematic } from './Schematic';
@@ -148,6 +149,7 @@ export function App() {
           ) : (
             <SceneView key="scene3d" reading={reading} />
           )}
+          <HandsLayer />
         </main>
         <Inspector reading={reading} />
       </div>

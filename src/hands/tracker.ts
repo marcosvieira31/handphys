@@ -1,0 +1,180 @@
+import type { HandLandmarker } from '@mediapipe/tasks-vision';
+// NOTE: import só de TIPOS — o runtime entra por import dinâmico (fora do bundle inicial).
+
+export interface Pt3 {
+  x: number;
+  y: number;
+  z: number;
+}
+
+/** Distância polegar×indicador normalizada pelo tamanho aparente da mão. */
+export function pinchRatio2D(lm: Array<{ x: number; y: number }>): number {
+  const d = (a: { x: number; y: number }, b: { x: number; y: number }) =>
+    Math.hypot(a.x - b.x, a.y - b.y);
+  return d(lm[4], lm[8]) / (d(lm[0], lm[9]) || 1e-6);
+}
+
+/**
+ * Mesma razão em coordenadas de mundo (metros). Mais estável quando as pontas
+ * se tocam: em imagem um dedo some atrás do outro (medido no spike 0.1).
+ */
+export function pinchRatio3D(world: Pt3[]): number {
+  const d = (a: Pt3, b: Pt3) => Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z);
+  return d(world[4], world[8]) / (d(world[0], world[9]) || 1e-6);
+}
+
+export interface FrameHand {
+  /** 'Left' | 'Right' (etiqueta do classificador) — nunca índice de array. */
+  side: string;
+  pts: Pt3[];
+  world: Pt3[] | null;
+}
+
+export interface FrameStats {
+  latencyMs: number;
+}
+
+/**
+ * Webcam + Hand Landmarker. Assets 100% locais (`public/mp`, sem CDN em aula),
+ * GPU com fallback CPU, detecção no ritmo do vídeo (rVFC) com fallback rAF.
+ * Só sente: suavização, pinça e semântica moram no controller.
+ */
+export class HandTracker {
+  private landmarker: HandLandmarker | null = null;
+  private delegate = '–';
+  private video: HTMLVideoElement | null = null;
+  private stream: MediaStream | null = null;
+  private lastVideoTime = -1;
+  private videoFrameHandle = 0;
+  private stopped = true;
+  private onFrame: (hands: FrameHand[], stats: FrameStats) => void = () => {};
+  private onVideoTick: () => void = () => {};
+
+  get running(): boolean {
+    return !this.stopped;
+  }
+
+  get gpuDelegate(): string {
+    return this.delegate;
+  }
+
+  /** Elemento de vídeo com o stream (para a prévia opcional do painel). */
+  get streamVideo(): HTMLVideoElement | null {
+    return this.video;
+  }
+
+  getStream(): MediaStream | null {
+    return this.stream;
+  }
+
+  async start(
+    video: HTMLVideoElement,
+    callbacks: {
+      onFrame: (hands: FrameHand[], stats: FrameStats) => void;
+      onVideoTick?: () => void;
+    },
+  ): Promise<void> {
+    if (!this.stopped) return;
+    this.onFrame = callbacks.onFrame;
+    if (callbacks.onVideoTick) this.onVideoTick = callbacks.onVideoTick;
+    if (!this.landmarker) {
+      const { landmarker, delegate } = await createLandmarker();
+      this.landmarker = landmarker;
+      this.delegate = delegate;
+    }
+    this.video = video;
+    this.stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 } },
+      audio: false,
+    });
+    video.srcObject = this.stream;
+    video.muted = true;
+    await video.play().catch(() => {});
+    this.stopped = false;
+    this.lastVideoTime = -1;
+    this.scheduleVideoFrame();
+  }
+
+  stop() {
+    this.stopped = true;
+    if (this.videoFrameHandle && this.video) {
+      const v = this.video as HTMLVideoElement & {
+        cancelVideoFrameCallback?: (h: number) => void;
+      };
+      v.cancelVideoFrameCallback?.(this.videoFrameHandle);
+    }
+    this.videoFrameHandle = 0;
+    this.stream?.getTracks().forEach((t) => t.stop());
+    this.stream = null;
+    if (this.video) this.video.srcObject = null;
+    this.video = null;
+    this.lastVideoTime = -1;
+  }
+
+  /** Um passo de detecção (o controller chama no rAF quando não há rVFC). */
+  detectFallback() {
+    const v = this.video;
+    if (this.stopped || !v || v.readyState < 2) return;
+    if (v.currentTime === this.lastVideoTime) return;
+    this.lastVideoTime = v.currentTime;
+    this.detectOnce();
+  }
+
+  get hasVideoCallback(): boolean {
+    return this.videoFrameHandle !== 0;
+  }
+
+  private scheduleVideoFrame() {
+    const v = this.video as (HTMLVideoElement & {
+      requestVideoFrameCallback?: (cb: () => void) => number;
+    }) | null;
+    if (this.stopped || !v || typeof v.requestVideoFrameCallback !== 'function') return;
+    this.videoFrameHandle = v.requestVideoFrameCallback(() => {
+      if (this.stopped) return;
+      this.onVideoTick();
+      this.detectOnce();
+      this.scheduleVideoFrame();
+    });
+  }
+
+  private detectOnce() {
+    const lm = this.landmarker;
+    const v = this.video;
+    if (!lm || !v || v.readyState < 2) return;
+    const t0 = performance.now();
+    const result = lm.detectForVideo(v, t0);
+    const latencyMs = performance.now() - t0;
+    const hands: FrameHand[] = result.landmarks.map((pts, i) => ({
+      side: result.handedness[i]?.[0]?.categoryName ?? `mão${i}`,
+      pts: pts.map((p) => ({ x: p.x, y: p.y, z: p.z })),
+      world: (result.worldLandmarks[i] ?? null) as Pt3[] | null,
+    }));
+    this.onFrame(hands, { latencyMs });
+  }
+}
+
+// BASE_URL espelha o `base` do Vite: '/' em dev, '/handphys/' no GitHub Pages.
+const PUB = import.meta.env.BASE_URL;
+
+async function createLandmarker(): Promise<{ landmarker: HandLandmarker; delegate: string }> {
+  const tasks = await import('@mediapipe/tasks-vision');
+  const fileset = await tasks.FilesetResolver.forVisionTasks(`${PUB}mp/wasm`);
+  const base = {
+    baseOptions: { modelAssetPath: `${PUB}mp/hand_landmarker.task` },
+    runningMode: 'VIDEO' as const,
+    numHands: 2,
+    minHandDetectionConfidence: 0.5,
+    minHandPresenceConfidence: 0.5,
+    minTrackingConfidence: 0.5,
+  };
+  try {
+    const landmarker = await tasks.HandLandmarker.createFromOptions(fileset, {
+      ...base,
+      baseOptions: { ...base.baseOptions, delegate: 'GPU' },
+    });
+    return { landmarker, delegate: 'GPU' };
+  } catch {
+    const landmarker = await tasks.HandLandmarker.createFromOptions(fileset, base);
+    return { landmarker, delegate: 'CPU (GPU falhou)' };
+  }
+}

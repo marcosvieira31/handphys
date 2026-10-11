@@ -1,6 +1,6 @@
 # Plano — Laboratório Virtual de Física (Circuitos) em Realidade Mista
 
-> Status: **Fase 0–2b concluídas — Fase 3a em execução (Cardboard)**
+> Status: **Fase 0–2c concluídas — Fase 3a em execução (Cardboard)**
 > Objetivo: evolução contínua (sem data de entrega marcada), uso real em sala de aula.
 
 ---

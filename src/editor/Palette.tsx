@@ -32,6 +32,7 @@ export function Palette() {
               type="button"
               className={placing === it.kind ? 'palette-item active' : 'palette-item'}
               onClick={() => arm(placing === it.kind ? null : it.kind)}
+              data-dwell={`kind:${it.kind}`}
             >
               <svg viewBox="-24 -24 48 48" width={34} height={34} aria-hidden>
                 <Symbol
@@ -60,6 +61,7 @@ export function Palette() {
             type="button"
             className={wiring ? 'palette-item active' : 'palette-item'}
             onClick={() => armWire(!wiring)}
+            data-dwell="wire"
           >
             <svg viewBox="-24 -24 48 48" width={34} height={34} aria-hidden>
               <line x1={-13} y1={11} x2={13} y2={-11} stroke="#c9d1d9" strokeWidth={2.5} strokeLinecap="round" />
@@ -75,8 +77,8 @@ export function Palette() {
       </ul>
       <p className="hint">
         No modo fio os terminais ficam acesos: clique num pontinho e depois noutro (a mira é
-        generosa, errar não perde o fio). <kbd>Esc</kbd> sai do modo. Fora dele, também dá para
-        arrastar de um terminal até outro — e componentes voltam a arrastar.
+        generosa, errar não perde o fio). <kbd>Esc</kbd> sai do modo. Com as mãos ligadas, fixar
+        a mira 3 s também seleciona itens e funções.
       </p>
     </aside>
   );

@@ -39,6 +39,8 @@ export interface EditorState {
   /** Componente segurado (arraste em curso, mouse ou pinça). */
   grip: { id: string; dx: number; dy: number } | null;
   colorByVoltage: boolean;
+  /** Vista ativa: o MESMO documento em 2D ou na bancada 3D. */
+  view: '2d' | '3d';
   seq: number;
   past: CircuitDoc[];
   arm: (kind: CompKind | null) => void;
@@ -63,6 +65,7 @@ export interface EditorState {
   clear: () => void;
   undo: () => void;
   setColorByVoltage: (on: boolean) => void;
+  setView: (v: '2d' | '3d') => void;
 }
 
 const clamp = (v: number) => Math.max(0, Math.min(LIMIT - 1, v));
@@ -99,6 +102,7 @@ export const useEditor = create<EditorState>((set, get) => ({
   draft: null,
   grip: null,
   colorByVoltage: true,
+  view: '2d',
   seq: 0,
   past: [],
 
@@ -317,4 +321,6 @@ export const useEditor = create<EditorState>((set, get) => ({
     }),
 
   setColorByVoltage: (on) => set({ colorByVoltage: on }),
+
+  setView: (v) => set({ view: v, draft: null, grip: null }),
 }));

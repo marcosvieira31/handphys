@@ -26,8 +26,15 @@ export function SceneView({ reading }: { reading: Reading }) {
       setReady(true);
       const s = useEditor.getState();
       view.update(s.doc, reading);
-      // mira da pinça no 3D: cursor espelhado => célula sob o dedo
-      hands.bindSlot('3d', (p) => view.cellAt(p.x, p.y));
+      // mira da pinça no 3D: cursor espelhado (fração da JANELA) => célula sob o dedo
+      hands.bindSlot('3d', (p) => {
+        const r = canvasRef.current?.getBoundingClientRect();
+        if (!r || r.width <= 0 || r.height <= 0) return null;
+        const cx = p.x * window.innerWidth;
+        const cy = p.y * window.innerHeight;
+        if (cx < r.left || cx > r.right || cy < r.top || cy > r.bottom) return null;
+        return view.cellAt((cx - r.left) / r.width, (cy - r.top) / r.height);
+      });
       if (import.meta.env.DEV) {
         (window as unknown as { __lab?: unknown }).__lab = view;
       }

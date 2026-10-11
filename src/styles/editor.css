@@ -23,6 +23,7 @@ body.editor-page {
 }
 
 .editor {
+  position: relative;
   display: flex;
   flex-direction: column;
   height: 100vh;
@@ -231,15 +232,17 @@ body.editor-page {
   pointer-events: none;
 }
 
-/* ---------- mãos (Fase 2b): esqueleto sobre o quadro, sem vídeo ---------- */
+/* ---------- mãos (Fase 2b): esqueleto + mira por toda a janela ---------- */
 .hands-layer {
   position: absolute;
   inset: 0;
+  z-index: 50;
   pointer-events: none;
 }
 
-.hands-canvas {
+.hands-canvas-window {
   position: absolute;
+  inset: 0;
   pointer-events: none;
 }
 

@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import './style.css';
 import { readCircuit, type Reading } from '../core/netlist';
 import { EXAMPLES } from '../editor/examples';
+import { DwellController } from '../hands/dwell';
 
 // Módulo avaliado (imports baixados): avisa o alarme de carga. O "pronto"
 // (__cbReady) só vem após a bancada montar, no fim do arquivo.
@@ -109,6 +110,7 @@ hudCanvas.height = 256;
 const hudCtx = hudCanvas.getContext('2d')!;
 const hudTexture = new THREE.CanvasTexture(hudCanvas);
 
+const reticles: THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial>[] = [];
 for (const eye of eyes) {
   const reticle = new THREE.Mesh(
     new THREE.RingGeometry(0.012, 0.017, 32),
@@ -117,6 +119,7 @@ for (const eye of eyes) {
   reticle.position.set(0, 0, -1);
   reticle.renderOrder = 1000;
   eye.cam.add(reticle);
+  reticles.push(reticle);
 
   const hud = new THREE.Mesh(
     new THREE.PlaneGeometry(0.64, 0.32),
@@ -159,6 +162,8 @@ function loadCircuit(index: number) {
   scene.add(circuit);
   selectedId = null;
   ring.visible = false;
+  dwell.reset();
+  dwellProgress = 0;
   exampleSel.value = String(index);
   [...examplesEl.querySelectorAll('button')].forEach((x, j) => x.classList.toggle('active-example', j === index));
   frameCircuit();
@@ -275,14 +280,20 @@ canvas.addEventListener('pointerup', () => {
 
 const raycaster = new THREE.Raycaster();
 const center = new THREE.Vector2(0, 0);
+const dwell = new DwellController(3000);
 
-function selectCenter() {
-  if (!circuit) return;
+/** Componente sob a mira do olhar (id) ou null. */
+function gazeTarget(): string | null {
+  if (!circuit) return null;
   head.updateMatrixWorld();
   raycaster.setFromCamera(center, head);
   const hit = raycaster.intersectObject(circuit, true)[0];
   const id = hit ? compIdOf(hit.object) : '';
-  selectedId = id || null;
+  return id || null;
+}
+
+function selectComponent(id: string | null) {
+  selectedId = id;
   if (selectedId) {
     const node = layout.comps.find((c) => c.id === selectedId);
     if (node) {
@@ -294,6 +305,27 @@ function selectCenter() {
   }
   drawHud();
 }
+
+function selectCenter() {
+  selectComponent(gazeTarget());
+}
+
+/** Mira fixada por 3 s (sem tocar): anel cresce e seleciona ao completar. */
+function updateGazeDwell(now: number) {
+  const id = gazeTarget();
+  const res = dwell.update(id ? 'sel:' + id : null, now);
+  // reticle cresce e esquenta durante a fixação
+  const scale = res.fired ? 2.6 : 1 + res.progress * 1.6;
+  const color = res.fired ? 0x3fb950 : res.progress > 0 ? 0xe3b341 : 0x58a6ff;
+  for (const r of reticles) {
+    r.scale.setScalar(scale);
+    r.material.color.setHex(color);
+  }
+  dwellProgress = res.progress;
+  if (res.fired && id) selectComponent(id);
+  return id;
+}
+let dwellProgress = 0;
 
 // -------------------------------------------------------------- HUD
 
@@ -315,8 +347,15 @@ function drawHud() {
   hudCtx.fillText(selectedText().slice(0, 30), 24, 142);
   hudCtx.fillStyle = '#8b949e';
   hudCtx.font = '22px system-ui';
-  hudCtx.fillText('toque = ver V/I', 24, 184);
+  hudCtx.fillText('mire 3 s ou toque = ver V/I', 24, 184);
   hudCtx.fillText(`estéreo ${stereo ? 'ON' : 'OFF'}`, 24, 216);
+  // barra de progresso da fixação
+  if (dwellProgress > 0) {
+    hudCtx.fillStyle = '#2d333b';
+    hudCtx.fillRect(24, 232, 464, 12);
+    hudCtx.fillStyle = dwellProgress >= 1 ? '#3fb950' : '#e3b341';
+    hudCtx.fillRect(24, 232, 464 * dwellProgress, 12);
+  }
   hudTexture.needsUpdate = true;
 }
 
@@ -413,14 +452,24 @@ function frame() {
   renderFrame();
 }
 
-function renderFrame() {
+let hudDirtyAt = 0;
 
+function renderFrame() {
   if (gyroState === 'active') {
     applyGyro(head.quaternion);
   } else {
     head.quaternion.setFromEuler(new THREE.Euler(manual.pitch, manual.yaw, 0, 'YXZ'));
   }
   head.updateMatrixWorld();
+
+  // fixação por olhar: mantém a mira no componente 3 s e ele é selecionado
+  const now = performance.now();
+  updateGazeDwell(now);
+  // HUD periódico: a barra de fixação precisa animar
+  if (now - hudDirtyAt > 120) {
+    hudDirtyAt = now;
+    drawHud();
+  }
 
   renderer.getSize(size);
   const w = Math.floor(size.x);
@@ -459,7 +508,15 @@ frame();
 
 // Gancho mínimo de suporte (estado legível por automação/remoto).
 (window as unknown as { __cb?: unknown }).__cb = {
-  stats: () => ({ gyroState, stereo, example: exampleName, selected: selectedId }),
+  stats: () => ({
+    gyroState,
+    stereo,
+    example: exampleName,
+    selected: selectedId,
+    // úteis no suporte em aula: o que a mira está vendo e quanto falta para ativar
+    hit: gazeTarget(),
+    dwell: Number(dwellProgress.toFixed(2)),
+  }),
   // Aponta a câmera (testes e suporte): yaw/pitch em radianos, modo manual.
   look: (yaw: number, pitch: number) => {
     gyroState = 'absent';

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import { readCircuit } from '../core/netlist';
 import { EXAMPLES } from './examples';
 import { HandsLayer } from './HandsLayer';
@@ -11,8 +11,8 @@ import { useEditor } from './store';
 export function App() {
   const doc = useEditor((s) => s.doc);
   const colorByVoltage = useEditor((s) => s.colorByVoltage);
-  const [view, setView] = useState<'2d' | '3d'>('2d');
-  const { clear, load, setColorByVoltage, undo, rotate, removeSelected } = useEditor();
+  const view = useEditor((s) => s.view);
+  const { clear, load, setColorByVoltage, undo, rotate, removeSelected, setView } = useEditor();
   const reading = readCircuit(doc);
 
   useEffect(() => {
@@ -25,7 +25,7 @@ export function App() {
       else if (e.key === 'Delete' || e.key === 'Backspace') removeSelected();
       else if (e.key.toLowerCase() === 'r' && sel?.kind === 'comp') rotate(sel.id);
       else if (e.key.toLowerCase() === 'f') st.armWire(!st.wiring);
-      else if (e.key.toLowerCase() === 'v') setView((v) => (v === '2d' ? '3d' : '2d'));
+      else if (e.key.toLowerCase() === 'v') setView(st.view === '2d' ? '3d' : '2d');
       else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
         e.preventDefault();
         undo();
@@ -33,7 +33,7 @@ export function App() {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [rotate, removeSelected, undo]);
+  }, [rotate, removeSelected, undo, setView]);
 
   return (
     <div className="editor">
@@ -47,6 +47,7 @@ export function App() {
               className={view === '2d' ? 'ghost active' : 'ghost'}
               onClick={() => setView('2d')}
               title="Esquemático 2D (tecla V)"
+              data-dwell="view:2d"
             >
               2D
             </button>
@@ -55,6 +56,7 @@ export function App() {
               className={view === '3d' ? 'ghost active' : 'ghost'}
               onClick={() => setView('3d')}
               title="Bancada 3D (tecla V)"
+              data-dwell="view:3d"
             >
               3D
             </button>
@@ -68,12 +70,18 @@ export function App() {
             <span>Cores por tensão</span>
           </label>
           <span className="sep" />
-          {EXAMPLES.map((ex) => (
-            <button key={ex.name} type="button" className="ghost" onClick={() => load(ex.doc)}>
+          {EXAMPLES.map((ex, i) => (
+            <button
+              key={ex.name}
+              type="button"
+              className="ghost"
+              onClick={() => load(ex.doc)}
+              data-dwell={`example:${i}`}
+            >
               {ex.name}
             </button>
           ))}
-          <button type="button" className="ghost" onClick={clear}>
+          <button type="button" className="ghost" onClick={clear} data-dwell="clear">
             Limpar
           </button>
         </nav>
@@ -86,10 +94,10 @@ export function App() {
           ) : (
             <SceneView key="scene3d" reading={reading} />
           )}
-          <HandsLayer />
         </main>
         <Inspector reading={reading} />
       </div>
+      <HandsLayer />
     </div>
   );
 }

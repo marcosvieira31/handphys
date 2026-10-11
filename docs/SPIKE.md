@@ -78,20 +78,22 @@ Testes manuais: celular **sem** giroscópio (fallback "arraste"); entrar em tela
 | Métrica | Alvo | Medido | |
 |---|---|---|---|
 | Render fps | – | 61 | ✅ |
-| Detecções/s | ≥ 24 | **15** | ⚠️ confirmar fps real da webcam (linha “câmera” do relatório) |
+| Detecções/s | ≥ 24 | **15 → corrigido (esperado ~30)** | ⚠️ câmera confirmada30 fps; reconfirmar no reteste |
 | Latência média | ≤ 60 ms | 29,5 ms | ✅ |
 | Trocas agarrado↔solto (5s, mão parada) | ~2 | **0** | ✅ |
 | Perdas de rastreio (5s) | 0–2 | 0 | ✅ |
 | Duas mãos simultâneas | – | detecta2 | ✅ |
-| Razão de pinça fechada | – | 0,20–0,24 | ⚠️ folga de0,01 para o limiar0,25 → medir estado aberto e calibrar |
+| Razão de pinça fechada | – | 0,20–0,24 | ✅ |
+| Razão de pinça aberta | – | 0,84–0,88 | ✅ → **limiar calibrado: 0,45 ± 0,12** |
 | Delegate | GPU | GPU | ✅ |
 
 - Bugs encontrados e corrigidos durante o spike (o spike já pagou o próprio custo):
   - contador de trocas acumulava quando a aba ficava oculta (vídeo congela);
   - fps/latência sempre mostravam1 e0 (`lastFpsAt` nunca atualizado);
-  - oclusão dos dedos na pinça gerava ~15 trocas/s → resolvido com **razão3D** (`world landmarks`) + **debounce de soltura de3 quadros**.
-- [ ] Medir a razão **aberta** (mão estendida) para calibrar limiar/histerese.
-- [ ] Confirmar se15 detecções/s é limite da câmera (luz/fraca) ou do pipeline.
+  - oclusão dos dedos na pinça gerava ~15 trocas/s → resolvido com **razão3D** (`world landmarks`) + **debounce de soltura de3 quadros**;
+  - **15 detecções/s com câmera de30 fps**: o ciclo de30 ms do `detectForVideo` batia com o rAF de33 ms e metade dos quadros era descartada → agora a detecção roda **1× por quadro de vídeo real** (`requestVideoFrameCallback`), com fallback rAF.
+- [x] Faixa aberta medida (0,84–0,88) → limiar **0,45**, histerese **0,12** (folga0,21 p/ agarrar,0,27 p/ soltar).
+- [x]15 detecções/s era o pipeline (não a câmera) → corrigido; reconfirmar no reteste (esperado ~30/s).
 
 ### Spike 0.2 — cardboard
 - [x] WebGL2 renderizando; **fps ~60 em estéreo** no desktop (janela visível).

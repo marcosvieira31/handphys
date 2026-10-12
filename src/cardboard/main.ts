@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import './style.css';
-import { readCircuit, type Reading } from '../core/netlist';
+import { readCircuit, type CircuitDoc, type Reading } from '../core/netlist';
 import { EXAMPLES } from '../editor/examples';
 import { DwellController } from '../hands/dwell';
 
@@ -10,6 +10,7 @@ import { DwellController } from '../hands/dwell';
 import { voltageColor } from '../editor/colors';
 import { applyLayoutReading, buildBoard, buildCircuitGroup, compIdOf, disposeGroup } from '../scene/buildScene';
 import { layoutScene } from '../scene/layout';
+import { decodeDoc, sharePayload } from '../editor/share';
 
 /**
  * Fase 3a — Cardboard de produção: os circuitos de verdade na bancada 3D,
@@ -142,14 +143,27 @@ scene.add(ring);
 
 // ------------------------------------------------------- circuito
 
+/**
+ * Exemplos + o circuito do LINK (?c=), quando a página abriu por QR/link: ele
+ * vira a primeira opção, para o celular abrir exatamente o que o professor
+ * acabou de mostrar na telona.
+ */
+const linkedDoc = (() => {
+  const payload = sharePayload(location.search);
+  return payload ? decodeDoc(payload) : null;
+})();
+const CIRCUITS: { name: string; doc: CircuitDoc }[] = linkedDoc
+  ? [{ name: 'Circuito do link', doc: linkedDoc }, ...EXAMPLES]
+  : EXAMPLES;
+
 let circuit: THREE.Group | null = null;
-let layout = layoutScene(EXAMPLES[0].doc, readCircuit(EXAMPLES[0].doc), voltageColor);
-let reading: Reading = readCircuit(EXAMPLES[0].doc);
-let exampleName = EXAMPLES[0].name;
+let layout = layoutScene(CIRCUITS[0].doc, readCircuit(CIRCUITS[0].doc), voltageColor);
+let reading: Reading = readCircuit(CIRCUITS[0].doc);
+let exampleName = CIRCUITS[0].name;
 let selectedId: string | null = null;
 
 function loadCircuit(index: number) {
-  const ex = EXAMPLES[index];
+  const ex = CIRCUITS[index];
   exampleName = ex.name;
   reading = readCircuit(ex.doc);
   layout = layoutScene(ex.doc, reading, voltageColor);
@@ -380,7 +394,7 @@ fullscreenBtn.addEventListener('click', async () => {
   }
 });
 
-EXAMPLES.forEach((ex, i) => {
+CIRCUITS.forEach((ex, i) => {
   const b = document.createElement('button');
   b.type = 'button';
   b.textContent = ex.name;
@@ -502,7 +516,7 @@ function renderFrame() {
 }
 
 loadCircuit(0);
-bootLog(`WebGL ok · bancada pronta (${EXAMPLES.length} circuitos)`);
+bootLog(`WebGL ok · bancada pronta (${CIRCUITS.length} circuitos)`);
 (window as unknown as { __cbReady?: boolean }).__cbReady = true;
 frame();
 

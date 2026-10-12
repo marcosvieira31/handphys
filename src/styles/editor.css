@@ -558,3 +558,96 @@ button:disabled {
   opacity: 0.4;
   cursor: not-allowed;
 }
+
+/* ---------- compartilhar: link + QR ---------- */
+.share-mask {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: rgba(1, 4, 9, 0.74);
+}
+
+.share-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: min(420px, 100%);
+  max-height: calc(100vh - 32px);
+  overflow: auto;
+  padding: 16px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.55);
+}
+
+.share-card h2 {
+  margin: 0;
+  font-size: 15px;
+}
+
+.share-card .hint,
+.share-card .notice {
+  margin: 0;
+}
+
+.share-card .actions {
+  margin-bottom: 0;
+}
+
+/* o QR é o alvo da câmera: fundo branco não negociável (o resto é escuro) */
+.share-qr {
+  align-self: center;
+  width: min(44vh, 300px);
+  aspect-ratio: 1;
+  background: #fff;
+  border-radius: 8px;
+}
+
+.share-qr svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.share-url {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--dim);
+}
+
+.share-url input {
+  width: 100%;
+  padding: 7px 8px;
+  font: 12px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace;
+  color: var(--ink);
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+}
+
+.share-url input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+/* selo curto na barra: de onde veio o circuito (ou que o link está podre) */
+.chip {
+  padding: 3px 9px;
+  font-size: 12px;
+  color: var(--dim);
+  background: #1c2128;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+}
+
+.chip.warn {
+  color: var(--err);
+  border-color: var(--err);
+}

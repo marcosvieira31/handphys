@@ -47,6 +47,13 @@ export interface EditorState {
   pan: Pt;
   seq: number;
   past: CircuitDoc[];
+  /**
+   * Diálogo em cima da cena (compartilhar): enquanto estiver aberto a cena não
+   * recebe aperto nem movimento — senão a pinça continuaria arrastando
+   * componentes atrás do cartão, sem o professor ver.
+   */
+  modal: boolean;
+  setModal: (on: boolean) => void;
   arm: (kind: CompKind | null) => void;
   armWire: (on: boolean) => void;
   place: (kind: CompKind, at: Pt) => void;
@@ -89,8 +96,9 @@ const DEFAULT_VALUE: Record<CompKind, number> = {
   ground: 0,
 };
 
-/** Prefixo curto de id: "r3", "bat2" — legível no painel e nas mensagens. */
-const PREFIX: Record<CompKind, string> = {
+/** Prefixo curto de id: "r3", "bat2" — legível no painel e nas mensagens.
+ *  Exportado porque o share por URL regenera ids do mesmo jeito. */
+export const ID_PREFIX: Record<CompKind, string> = {
   vsource: 'bat',
   resistor: 'r',
   capacitor: 'c',
@@ -116,16 +124,33 @@ export const useEditor = create<EditorState>((set, get) => ({
   pan: { x: 0, y: 0 },
   seq: 0,
   past: [],
+  modal: false,
 
-  arm: (kind) => set({ placing: kind, wiring: false, selection: null, draft: null, grip: null }),
+  setModal: (on) => {
+    if (!on) {
+      set({ modal: false });
+      return;
+    }
+    // abrir já larga o que estava na mão (senão o aperto fica preso atrás do
+    // cartão e o componente salta sozinho quando o diálogo fecha)
+    set({ modal: true, grip: null, draft: null, placing: null, wiring: false });
+  },
 
-  armWire: (on) => set({ wiring: on, placing: null, selection: null, draft: null, grip: null }),
+  arm: (kind) => {
+    if (get().modal) return; // diálogo em cima: nada arma componente
+    set({ placing: kind, wiring: false, selection: null, draft: null, grip: null });
+  },
+
+  armWire: (on) => {
+    if (get().modal) return;
+    set({ wiring: on, placing: null, selection: null, draft: null, grip: null });
+  },
 
   place: (kind, at) => {
     const s = get();
     const n = s.seq + 1;
     const comp: Placed = {
-      id: `${PREFIX[kind]}${n}`,
+      id: `${ID_PREFIX[kind]}${n}`,
       kind,
       x: clamp(at.x),
       y: clamp(at.y),
@@ -193,6 +218,7 @@ export const useEditor = create<EditorState>((set, get) => ({
    */
   pressAt: (cell) => {
     const s = get();
+    if (s.modal) return; // diálogo em cima: a cena não recebe aperto
     if (s.placing) {
       s.place(s.placing, cell);
       return;
@@ -227,6 +253,7 @@ export const useEditor = create<EditorState>((set, get) => ({
   /** Move com aperto: leva o fio em arraste ou o componente segurado. */
   moveAt: (cell) => {
     const s = get();
+    if (s.modal) return;
     if (s.draft) {
       s.moveDraft(cell);
       return;
@@ -237,6 +264,7 @@ export const useEditor = create<EditorState>((set, get) => ({
   /** Solta o aperto: termina o fio ou larga o componente. */
   releaseAt: (cell) => {
     const s = get();
+    if (s.modal) return;
     if (s.draft) s.endDraft(cell);
     set({ grip: null });
   },

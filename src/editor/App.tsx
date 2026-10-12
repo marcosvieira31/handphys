@@ -6,10 +6,12 @@ import { Inspector } from './Inspector';
 import { Palette } from './Palette';
 import { Schematic } from './Schematic';
 import { SceneView } from './SceneView';
+import { ShareDialog } from './ShareDialog';
 import { useEditor } from './store';
 import { applyZoom, applyZoomReset } from './zoom';
 
-export function App() {
+/** `ok`/`bad` = a página abriu com `?c=` (circuito no link) — bom ou podre. */
+export function App({ shared = 'none' }: { shared?: 'none' | 'ok' | 'bad' }) {
   const doc = useEditor((s) => s.doc);
   const colorByVoltage = useEditor((s) => s.colorByVoltage);
   const view = useEditor((s) => s.view);
@@ -24,6 +26,7 @@ export function App() {
       const st = useEditor.getState();
       const sel = st.selection;
       if (e.key === 'Escape') st.arm(null);
+      else if (st.modal) return; // diálogo em cima: tecla não mexe na cena
       else if (e.key === 'Delete' || e.key === 'Backspace') removeSelected();
       else if (e.key.toLowerCase() === 'r' && sel?.kind === 'comp') rotate(sel.id);
       else if (e.key.toLowerCase() === 'f') st.armWire(!st.wiring);
@@ -86,9 +89,22 @@ export function App() {
               {ex.name}
             </button>
           ))}
+          <ShareDialog />
           <button type="button" className="ghost" onClick={clear} data-hand="clear">
             Limpar
           </button>
+          {shared !== 'none' && (
+            <span
+              className={shared === 'ok' ? 'chip' : 'chip warn'}
+              title={
+                shared === 'ok'
+                  ? 'Este circuito veio do link aberto — edite à vontade.'
+                  : 'O endereço traz ?c= mas não decifrou nenhum circuito.'
+              }
+            >
+              {shared === 'ok' ? 'vindo do link' : 'link inválido'}
+            </span>
+          )}
         </nav>
       </header>
       <div className="body">

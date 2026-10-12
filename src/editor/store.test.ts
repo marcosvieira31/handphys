@@ -149,3 +149,67 @@ describe('semântica única press/move/release (mouse e pinça)', () => {
     expect(after.placing).toBeNull();
   });
 });
+
+/**
+ * Diálogo em cima da cena (compartilhar): enquanto estiver aberto nada aperta,
+ * nada move — a pinça continuaria arrastando componente atrás do cartão.
+ */
+describe('diálogo em cima (store.modal)', () => {
+  beforeEach(() => {
+    useEditor.setState({
+      doc: {
+        comps: [
+          { id: 'bat1', kind: 'vsource', x: 4, y: 10, rot: 0, value: 9 },
+          { id: 'lamp1', kind: 'lamp', x: 12, y: 10, rot: 0, value: 20 },
+        ],
+        wires: [],
+      },
+      placing: null,
+      wiring: false,
+      draft: null,
+      grip: null,
+      selection: null,
+      modal: false,
+      seq: 100,
+      past: [],
+    });
+  });
+
+  it('com o diálogo aberto, aperto e movimento não tocam na cena', () => {
+    const st = useEditor.getState();
+    st.setModal(true);
+
+    st.pressAt({ x: 12, y: 10 }); // em cima da lâmpada: não segura nada
+    expect(useEditor.getState().grip).toBeNull();
+    expect(useEditor.getState().selection).toBeNull();
+
+    st.arm('resistor'); // nem posiciona componente armado
+    st.pressAt({ x: 20, y: 5 });
+    expect(useEditor.getState().doc.comps).toHaveLength(2);
+
+    st.moveAt({ x: 20, y: 5 });
+    st.releaseAt({ x: 20, y: 5 });
+    expect(useEditor.getState().doc.comps.find((c) => c.id === 'lamp1')).toMatchObject({
+      x: 12,
+      y: 10,
+    });
+    expect(useEditor.getState().grip).toBeNull();
+  });
+
+  it('abrir já larga o que estava na mão', () => {
+    useEditor.getState().pressAt({ x: 12, y: 10 });
+    expect(useEditor.getState().grip).not.toBeNull();
+    useEditor.getState().setModal(true);
+    expect(useEditor.getState().grip).toBeNull();
+  });
+
+  it('fechar devolve o controle na hora', () => {
+    const st = useEditor.getState();
+    st.setModal(true);
+    st.pressAt({ x: 12, y: 10 });
+    expect(useEditor.getState().grip).toBeNull();
+    st.setModal(false);
+    st.pressAt({ x: 12, y: 10 });
+    expect(useEditor.getState().grip?.id).toBe('lamp1');
+  });
+});

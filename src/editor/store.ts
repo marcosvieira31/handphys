@@ -14,6 +14,7 @@ import {
   type Wire,
 } from '../core/netlist';
 import { GRAB_DIST, SNAP_DIST, WIRE_GRAB, wireAt } from './coords';
+import { zoomAbout, panPx } from './zoomMath';
 
 const LIMIT = 30; // células de 0..29 — o quadro tem borda, nada sai da grade
 
@@ -41,6 +42,9 @@ export interface EditorState {
   colorByVoltage: boolean;
   /** Vista ativa: o MESMO documento em 2D ou na bancada 3D. */
   view: '2d' | '3d';
+  /** Zoom do quadro 2D (1 = cabe tudo, 4 = o teto) e deslocamento do centro. */
+  zoom: number;
+  pan: Pt;
   seq: number;
   past: CircuitDoc[];
   arm: (kind: CompKind | null) => void;
@@ -66,6 +70,11 @@ export interface EditorState {
   undo: () => void;
   setColorByVoltage: (on: boolean) => void;
   setView: (v: '2d' | '3d') => void;
+  /** Zoom mantendo um ponto do quadro preso na tela (`anchor` nulo = centro). */
+  zoomBy: (factor: number, anchor?: Pt | null) => void;
+  /** Arraste em px de tela => desloca a vista (o conteúdo acompanha o dedo). */
+  panBy: (dxPx: number, dyPx: number, viewportPx: number) => void;
+  resetView: () => void;
 }
 
 const clamp = (v: number) => Math.max(0, Math.min(LIMIT - 1, v));
@@ -103,6 +112,8 @@ export const useEditor = create<EditorState>((set, get) => ({
   grip: null,
   colorByVoltage: true,
   view: '2d',
+  zoom: 1,
+  pan: { x: 0, y: 0 },
   seq: 0,
   past: [],
 
@@ -323,4 +334,12 @@ export const useEditor = create<EditorState>((set, get) => ({
   setColorByVoltage: (on) => set({ colorByVoltage: on }),
 
   setView: (v) => set({ view: v, draft: null, grip: null }),
+
+  zoomBy: (factor, anchor) =>
+    set((s) => zoomAbout({ zoom: s.zoom, pan: s.pan }, factor, anchor ?? null)),
+
+  panBy: (dxPx, dyPx, viewportPx) =>
+    set((s) => panPx({ zoom: s.zoom, pan: s.pan }, dxPx, dyPx, viewportPx)),
+
+  resetView: () => set({ zoom: 1, pan: { x: 0, y: 0 } }),
 }));

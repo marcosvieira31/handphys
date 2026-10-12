@@ -38,6 +38,7 @@ Publicação automática no **GitHub Pages** a cada push em `main`
 - [x] Fase 2a — **vista 3D do mesmo modelo** (bancada three.js, mesma leitura V/I/cor)
 - [x] Fase 2b — **mãos na webcam** (gesto de pinça na ponta dos dedos: aperta/move/solta como o mouse, também no 3D por raycast; a pinça também clica nos botões da tela; **mira travada na palma** ao fechar — os dedos convergindo não deslocam o ponto; esqueleto sem vídeo; calibração; laço de reserva p/ navegadores sem rVFC — iOS)
 - [x] Fase 2c — **mira por fixação (3 s) no Cardboard** (olhar fixa 3 s num componente e ele é selecionado, com anel de progresso) — exclusivo do giroscópio, pois com as mãos o gesto é a pinça
+- [x] Fase 2b+ — **profundidade da mão + zoom**: o esqueleto fica maior quando a mão se aproxima da câmera (o único indicador de profundidade que a webcam entrega de verdade); a razão de pinça passou a usar as coordenadas de **mundo (eixo Z, em metros)** e o painel diz se ela está em `3D` ou só `2D`. Zoom do quadro 2D e da bancada 3D pelos botões `− / % / +` (canto), pela **roda do mouse** (amplia embaixo do cursor), pela **pinça de dois dedos** no toque (zoom + arraste) e pelo gesto de **DUAS mãos abrindo/juntando** — teclas `+ − 0` também valem
 - [ ] Fase 3a — **Cardboard de produção** ([`cardboard.html`](cardboard.html): bancada estéreo, mira+toque V/I, fixação por olhar; em execução)
 - [ ] Fase 4 — camada de sala de aula
 - [ ] Fase 5 — piloto com turma

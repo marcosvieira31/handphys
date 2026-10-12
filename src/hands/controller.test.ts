@@ -19,6 +19,21 @@ function hand(side: string, tx: number, ix: number, y = 0.35): FrameHand {
 // mira (já espelhada) => célula: grade 30x30 direta
 const toCell = (p: HandPoint) => ({ x: Math.round(p.x * 29), y: Math.round(p.y * 29) });
 
+/**
+ * Mão sintética COMPACTA e ABERTA (razão 1,0) centrada em (cx,cy): serve para o
+ * gesto de DUAS mãos. Identidade vem do centroide, então os dois centros ficam
+ * a mais de 0,25 um do outro; e a pinça tem de ficar bem aberta para não virar
+ * arraste no meio do gesto.
+ */
+function blob(side: string, cx: number, cy: number): FrameHand {
+  const pts = Array.from({ length: 21 }, () => ({ x: cx, y: cy, z: 0 }));
+  pts[0] = { x: cx - 0.02, y: cy + 0.02, z: 0 };
+  pts[9] = { x: cx - 0.02, y: cy - 0.02, z: 0 };
+  pts[4] = { x: cx + 0.02, y: cy + 0.02, z: 0 };
+  pts[8] = { x: cx + 0.02, y: cy - 0.02, z: 0 };
+  return { side, pts, world: null };
+}
+
 function resetDoc() {
   useEditor.setState({
     doc: {
@@ -33,6 +48,8 @@ function resetDoc() {
     draft: null,
     grip: null,
     selection: null,
+    zoom: 1,
+    pan: { x: 0, y: 0 },
     seq: 100,
     past: [],
   });
@@ -236,5 +253,94 @@ describe('HandsController sem câmera (ingest)', () => {
     const ctl = new HandsController();
     ctl.bindSlot('2d', () => null);
     expect(ctl.resolveCell({ x: 0.5, y: 0.5 })).toBeNull();
+  });
+
+  it('DUAS mãos abrindo dão zoom; juntando, afastam (gesto de zoom)', () => {
+    const ctl = wireUp();
+    let now = 0;
+    // separação VERTICAL: os centroides ficam a mais de 0,25 (identidades distintas)
+    const pair = (gap: number) => [
+      blob('Right', 0.5, 0.5 - gap / 2),
+      blob('Left', 0.5, 0.5 + gap / 2),
+    ];
+    const feed = (hs: FrameHand[], n = 3) => {
+      for (let i = 0; i < n; i++) {
+        now += 33;
+        ctl.ingest(hs, 5, now);
+      }
+    };
+    feed(pair(0.4)); // as duas mãos aparecem
+    expect(useEditor.getState().zoom).toBe(1);
+    for (let g = 0.45; g <= 0.62; g += 0.05) feed(pair(g)); // afasta
+    const z = useEditor.getState().zoom;
+    expect(z).toBeGreaterThan(1.5);
+    for (let g = 0.6; g >= 0.4; g -= 0.05) feed(pair(g)); // junta
+    expect(useEditor.getState().zoom).toBeLessThan(z);
+  });
+
+  it('UMA mão só não mexe no zoom (não é gesto)', () => {
+    const ctl = wireUp();
+    let now = 0;
+    for (let i = 0; i < 20; i++) {
+      now += 33;
+      ctl.ingest([blob('Right', 0.5, 0.2 + i * 0.02)], 5, now);
+    }
+    expect(useEditor.getState().zoom).toBe(1);
+  });
+
+  it('quem está PINÇANDO não dá zoom (está agarrando algo)', () => {
+    const ctl = wireUp();
+    let now = 0;
+    const pinchBlob = (cy: number): FrameHand => {
+      const h = blob('Left', 0.3, cy);
+      h.pts[4] = { x: 0.3, y: cy + 0.005, z: 0 };
+      h.pts[8] = { x: 0.3, y: cy - 0.005, z: 0 }; // razão ~0,25: pinçada
+      return h;
+    };
+    const feed = (hs: FrameHand[], n = 3) => {
+      for (let i = 0; i < n; i++) {
+        now += 33;
+        ctl.ingest(hs, 5, now);
+      }
+    };
+    feed([blob('Right', 0.5, 0.2), pinchBlob(0.8)]);
+    for (let g = 0.25; g <= 0.4; g += 0.05) feed([blob('Right', 0.5, g), pinchBlob(1 - g)]);
+    expect(useEditor.getState().zoom).toBe(1);
+  });
+
+  it('diagnóstico: diz se a pinça tem profundidade (3D) ou só imagem (2D)', () => {
+    const ctl = wireUp();
+    ctl.ingest([atBat()], 5, 0);
+    expect(ctl.getSnapshot().prof).toBe('2D'); // sem coordenadas de mundo
+    // coordenadas de MUNDO (metros) => a razão passa a ter o eixo Z
+    const world = Array.from({ length: 21 }, () => ({ x: 0, y: 0, z: 0 }));
+    world[9] = { x: 0, y: 0.09, z: 0 };
+    world[4] = { x: 0.08, y: 0.09, z: 0 };
+    world[8] = { x: 0.08, y: 0, z: 0 }; // d(4,8) == d(0,9): mão aberta
+    ctl.ingest([{ ...atBat(), world }], 5, 33);
+    expect(ctl.getSnapshot().prof).toBe('3D');
+  });
+
+  it('tamanho aparente é a profundidade que a webcam entrega (perto = maior)', () => {
+    // mesma mão a 100% e a 40% do tamanho: o esqueleto tem de refletir isso
+    const shrunk = () => {
+      const h = hand('Right', 0.45, 0.7867);
+      for (const p of h.pts) {
+        p.x = 0.5 + (p.x - 0.5) * 0.4;
+        p.y = 0.5 + (p.y - 0.5) * 0.4;
+      }
+      return h;
+    };
+    const perto = wireUp();
+    const longe = wireUp();
+    let now = 0;
+    for (let i = 0; i < 8; i++) {
+      now += 33;
+      perto.ingest([hand('Right', 0.45, 0.7867)], 5, now);
+      longe.ingest([shrunk()], 5, now);
+    }
+    const a = perto.drawFrame().hands[0]?.size ?? 0;
+    const b = longe.drawFrame().hands[0]?.size ?? 0;
+    expect(a).toBeGreaterThan(b * 2);
   });
 });

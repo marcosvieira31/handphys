@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { Reading } from '../core/netlist';
 import { hands } from '../hands/controller';
 import { useEditor } from './store';
+import { bindZoomTarget } from './zoom';
 import type { LabView } from '../scene/buildScene';
 
 /**
@@ -23,6 +24,7 @@ export function SceneView({ reading }: { reading: Reading }) {
       if (!alive || !canvasRef.current) return;
       const view = createLabView(canvasRef.current);
       viewRef.current = view;
+      bindZoomTarget(view); // botões/gestos de zoom passam a mexer a câmera
       setReady(true);
       const s = useEditor.getState();
       view.update(s.doc, reading);
@@ -42,6 +44,7 @@ export function SceneView({ reading }: { reading: Reading }) {
     return () => {
       alive = false;
       hands.unbindSlot('3d');
+      bindZoomTarget(null);
       viewRef.current?.dispose();
       viewRef.current = null;
     };

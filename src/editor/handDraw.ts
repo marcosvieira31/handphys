@@ -50,3 +50,21 @@ export const tipMid = (pts: Pt[], i = 4, j = 8): Pt => ({
   x: ((pts[i]?.x ?? 0.5) + (pts[j]?.x ?? 0.5)) / 2,
   y: ((pts[i]?.y ?? 0.5) + (pts[j]?.y ?? 0.5)) / 2,
 });
+
+/**
+ * Raio de desenho a partir do TAMANHO APARENTE da mão (pulso→metacarpal, em
+ * fração da imagem; `ref` = 0,20 ≈ 40 cm da câmera). É a profundidade que a
+ * webcam entrega de verdade — ela não mede distância, mede aparente. Desenhar
+ * o esqueleto sempre no mesmo tamanho apagava essa pista: mão perto e mão
+ * longe viravam a mesma coisa.
+ */
+export function radiusForSize(
+  size: number,
+  base = 70,
+  ref = 0.2,
+  min = 42,
+  max = 118,
+): number {
+  if (!Number.isFinite(size) || size <= 0) return base;
+  return Math.max(min, Math.min(max, base * (size / ref)));
+}

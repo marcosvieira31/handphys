@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { Reading } from '../core/netlist';
 import {
   nearestTerminal,
@@ -9,10 +9,18 @@ import {
   type Pt,
   type Wire,
 } from '../core/netlist';
-import { CELL, GRAB_DIST, GRID, SNAP_DIST, WIRE_GRAB, clientToCell } from './coords';
+import {
+  CELL,
+  GRAB_DIST,
+  SNAP_DIST,
+  WIRE_GRAB,
+  clientToBoard,
+  clientToCell,
+} from './coords';
 import { formatValue, labelPos, Symbol } from './symbol';
 import { voltageColor } from './colors';
 import { useEditor } from './store';
+import { viewBoxOf } from './zoomMath';
 
 export function Schematic({ reading }: { reading: Reading }) {
   const svgRef = useRef<SVGSVGElement>(null);
@@ -22,7 +30,17 @@ export function Schematic({ reading }: { reading: Reading }) {
   const draft = useEditor((s) => s.draft);
   const wiring = useEditor((s) => s.wiring);
   const colorByVoltage = useEditor((s) => s.colorByVoltage);
+  const zoom = useEditor((s) => s.zoom);
+  const pan = useEditor((s) => s.pan);
   const [hoverCell, setHoverCell] = useState<Pt | null>(null);
+  /** Pontos de dedo ativos e o estado do gesto de pinça no toque (zoom + pan). */
+  const pointers = useRef(new Map<number, { x: number; y: number }>());
+  const pinch = useRef<{ d: number; x: number; y: number } | null>(null);
+  /** Dedos que andaram desde a última conta: os dois têm de andar, senão a
+   *  distância medida é a de um dedo andado e o outro parado (zoom fantasma). */
+  const pinchFresh = useRef(new Set<number>());
+  /** true = esta gesta de toque virou zoom (não pode virar clique ao soltar). */
+  const pinchMode = useRef(false);
 
   const toCell = (clientX: number, clientY: number): Pt => clientToCell(svgRef.current, clientX, clientY);
 
@@ -31,26 +49,102 @@ export function Schematic({ reading }: { reading: Reading }) {
     if (st.draft || st.grip) (e.target as Element).setPointerCapture?.(e.pointerId);
   };
 
+  /** Dois dedos sobre o quadro => zoom pelo afastamento + pan pelo arraste.
+   *  Cada dedo chega num evento; só CONTAMOS quando os dois andaram — medir no
+   *  meio do caminho dá uma distância de um dedo andado e outro parado, e o
+   *  zoom disparava sozinho ao arrastar os dedos. */
+  const onTouchPinch = (movedId: number) => {
+    const ids = [...pointers.current.keys()];
+    if (ids.length !== 2) return;
+    const fresh = pinchFresh.current;
+    fresh.add(movedId);
+    if (!ids.every((id) => fresh.has(id))) return; // falta um dedo andar
+    fresh.clear();
+    const a = pointers.current.get(ids[0])!;
+    const b = pointers.current.get(ids[1])!;
+    const d = Math.hypot(a.x - b.x, a.y - b.y);
+    const x = (a.x + b.x) / 2;
+    const y = (a.y + b.y) / 2;
+    const prev = pinch.current;
+    pinch.current = { d, x, y };
+    const el = svgRef.current;
+    if (!prev || !el || prev.d < 8 || d < 8) return;
+    const st = useEditor.getState();
+    // acha a âncora ANTES de mexer na vista: o ponto do quadro sob os dedos
+    const anchor = clientToBoard(el, prev.x, prev.y);
+    st.zoomBy(d / prev.d, anchor);
+    const r = el.getBoundingClientRect();
+    st.panBy(x - prev.x, y - prev.y, r.width);
+  };
+
   const onPointerDown = (e: React.PointerEvent) => {
+    pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (pointers.current.size > 1) {
+      // chegou o segundo dedo: vira GESTO — desengata o que estivesse na mão
+      const st = useEditor.getState();
+      st.cancelDraft();
+      st.releaseGrip();
+      pinch.current = null;
+      pinchFresh.current.clear();
+      pinchMode.current = true;
+      onTouchPinch(e.pointerId);
+      return;
+    }
     useEditor.getState().pressAt(toCell(e.clientX, e.clientY));
     capture(e);
   };
 
   const onPointerMove = (e: React.PointerEvent) => {
+    if (pointers.current.has(e.pointerId))
+      pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (pointers.current.size === 2) {
+      onTouchPinch(e.pointerId);
+      return;
+    }
     const cell = toCell(e.clientX, e.clientY);
     setHoverCell(cell);
     useEditor.getState().moveAt(cell);
   };
 
   const onPointerUp = (e: React.PointerEvent) => {
+    const eraGesture = pinchMode.current;
+    pointers.current.delete(e.pointerId);
+    pinchFresh.current.clear();
+    if (pointers.current.size < 2) pinch.current = null;
+    if (pointers.current.size === 0) pinchMode.current = false;
+    if (eraGesture) return; // o gesto já soltou draft/grip; não vira clique
     useEditor.getState().releaseAt(toCell(e.clientX, e.clientY));
+  };
+
+  const dropPointers = () => {
+    pointers.current.clear();
+    pinch.current = null;
+    pinchFresh.current.clear();
+    pinchMode.current = false;
   };
 
   const onPointerLeave = () => {
     setHoverCell(null);
     const st = useEditor.getState();
     if (!st.draft) st.releaseGrip();
+    dropPointers();
   };
+
+  // Roda do mouse (e o zoom do trackpad, que chega como ctrl+wheel): amplia
+  // EMBAIXO DO CURSOR. Listener nativo não-passivo: o React registra wheel como
+  // passivo e o preventDefault viraria aviso no console.
+  useEffect(() => {
+    const el = svgRef.current;
+    if (!el) return;
+    const onWheel = (e: WheelEvent) => {
+      if (!e.cancelable) return;
+      e.preventDefault();
+      const anchor = clientToBoard(el, e.clientX, e.clientY);
+      useEditor.getState().zoomBy(e.deltaY < 0 ? 1.13 : 1 / 1.13, anchor);
+    };
+    el.addEventListener('wheel', onWheel, { passive: false });
+    return () => el.removeEventListener('wheel', onWheel);
+  }, []);
 
   const wires = doc.wires.map((w) => {
     const net = reading.netAt(w.from);
@@ -154,15 +248,18 @@ export function Schematic({ reading }: { reading: Reading }) {
   const hoverTerm =
     !placing && hoverCell ? nearestTerminal(doc, hoverCell, wiring ? WIRE_GRAB : GRAB_DIST) : null;
 
+  const vb = viewBoxOf({ zoom, pan });
+
   return (
     <svg
       ref={svgRef}
       className={`schematic${placing ? ' placing' : ''}`}
-      viewBox={`0 0 ${GRID * CELL} ${GRID * CELL}`}
+      viewBox={`${vb.x} ${vb.y} ${vb.w} ${vb.h}`}
       style={hoverTerm || draft || wiring ? { cursor: 'crosshair' } : undefined}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
+      onPointerCancel={dropPointers}
       onPointerLeave={onPointerLeave}
       onContextMenu={(e) => e.preventDefault()}
     >

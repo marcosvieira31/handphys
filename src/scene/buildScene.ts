@@ -13,8 +13,16 @@ export interface LabView {
   update(doc: CircuitDoc, reading: Reading): void;
   /** Cursor normalizado (0..1, já espelhado) => célula da grade sob ele. */
   cellAt(nx: number, ny: number): { x: number; y: number } | null;
+  /** Afasta/aproxima a câmera (o MESMO gesto de zoom do quadro 2D). */
+  dolly(factor: number): void;
+  /** Volta a câmera ao enquadro de chegada. */
+  resetView(): void;
   dispose(): void;
 }
+
+/** Enquadro de chegada da bancada: de cima, enxergando a mesa inteira. */
+const HOME_POS = new THREE.Vector3(13, 17, 23);
+const HOME_TARGET = new THREE.Vector3(0, 0, 1);
 
 const METAL = 0x9aa3ad;
 const DARK = 0x1c2128;
@@ -240,9 +248,9 @@ export function createLabView(canvas: HTMLCanvasElement): LabView {
   scene.background = new THREE.Color(0x0a0d12);
 
   const camera = new THREE.PerspectiveCamera(45, 1, 0.1, 300);
-  camera.position.set(13, 17, 23);
+  camera.position.copy(HOME_POS);
   const controls = new OrbitControls(camera, canvas);
-  controls.target.set(0, 0, 1);
+  controls.target.copy(HOME_TARGET);
   controls.enableDamping = true;
   controls.dampingFactor = 0.12;
   controls.minDistance = 8;
@@ -328,6 +336,23 @@ export function createLabView(canvas: HTMLCanvasElement): LabView {
       }
     },
     cellAt,
+    dolly(factor: number) {
+      // anda a câmera sobre a reta alvo->câmera: mesmo efeito do scroll do
+      // OrbitControls, mas acionável pelos botões e pelo gesto de duas mãos
+      const dir = camera.position.clone().sub(controls.target);
+      const len = THREE.MathUtils.clamp(
+        dir.length() / Math.max(0.05, factor),
+        controls.minDistance,
+        controls.maxDistance,
+      );
+      camera.position.copy(controls.target).add(dir.setLength(len));
+      controls.update();
+    },
+    resetView() {
+      camera.position.copy(HOME_POS);
+      controls.target.copy(HOME_TARGET);
+      controls.update();
+    },
     dispose() {
       dead = true;
       cancelAnimationFrame(raf);

@@ -7,11 +7,13 @@ import { Palette } from './Palette';
 import { Schematic } from './Schematic';
 import { SceneView } from './SceneView';
 import { useEditor } from './store';
+import { applyZoom, applyZoomReset } from './zoom';
 
 export function App() {
   const doc = useEditor((s) => s.doc);
   const colorByVoltage = useEditor((s) => s.colorByVoltage);
   const view = useEditor((s) => s.view);
+  const zoom = useEditor((s) => s.zoom);
   const { clear, load, setColorByVoltage, undo, rotate, removeSelected, setView } = useEditor();
   const reading = readCircuit(doc);
 
@@ -26,6 +28,9 @@ export function App() {
       else if (e.key.toLowerCase() === 'r' && sel?.kind === 'comp') rotate(sel.id);
       else if (e.key.toLowerCase() === 'f') st.armWire(!st.wiring);
       else if (e.key.toLowerCase() === 'v') setView(st.view === '2d' ? '3d' : '2d');
+      else if (e.key === '+' || e.key === '=') applyZoom(1.25);
+      else if (e.key === '-') applyZoom(1 / 1.25);
+      else if (e.key === '0') applyZoomReset();
       else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
         e.preventDefault();
         undo();
@@ -94,6 +99,38 @@ export function App() {
           ) : (
             <SceneView key="scene3d" reading={reading} />
           )}
+          <div className="zoom-bar" role="group" aria-label="Zoom">
+            <button
+              type="button"
+              className="ghost"
+              data-hand="zoom:out"
+              aria-label="Reduzir o zoom"
+              title="Reduzir (−)"
+              onClick={() => applyZoom(1 / 1.25)}
+            >
+              −
+            </button>
+            <button
+              type="button"
+              className="ghost zoom-pct"
+              data-hand="zoom:reset"
+              aria-label={view === '2d' ? 'Caber o quadro inteiro' : 'Enquadrar a bancada'}
+              title="Caber tudo / enquadrar de novo (0)"
+              onClick={applyZoomReset}
+            >
+              {view === '2d' ? `${Math.round(zoom * 100)}%` : 'enquadrar'}
+            </button>
+            <button
+              type="button"
+              className="ghost"
+              data-hand="zoom:in"
+              aria-label="Ampliar o zoom"
+              title="Ampliar (+)"
+              onClick={() => applyZoom(1.25)}
+            >
+              +
+            </button>
+          </div>
         </main>
         <Inspector reading={reading} />
       </div>

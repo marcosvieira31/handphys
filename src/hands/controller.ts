@@ -1,9 +1,10 @@
 import { useSyncExternalStore } from 'react';
+import { applyZoom } from '../editor/zoom';
 import { useEditor } from '../editor/store';
 import { Clutch } from './clutch';
 import { OneEuroFilter } from './oneEuro';
 import { PinchTracker } from './pinch';
-import { HandTracker, pinchRatio2D, pinchRatio3D, type FrameHand } from './tracker';
+import { HandTracker, pinchRatio2D, pinchRatio3D, type FrameHand, type Pt3 } from './tracker';
 
 export interface HandPoint {
   x: number;
@@ -17,6 +18,12 @@ export interface DrawHand {
   pinched: boolean;
   /** true = esta mão é a que fornece a mira (o esqueleto é ancorado nela). */
   cursor: boolean;
+  /**
+   * Tamanho aparente da mão (pulso→metacarpal do meio, em fração da imagem):
+   * é a PROFUNDIDADE que sobra na webcam (ela não mede distância, mede
+   * aparencia). Mão perto do celular => número grande; longe => pequeno.
+   */
+  size: number;
 }
 
 export interface DrawCursor {
@@ -37,6 +44,11 @@ export interface HandsStatus {
   cursor: HandPoint | null;
   /** 'travada' = mira congelada na palma (dedos fechando não deslocam o ponto). */
   mira: 'livre' | 'travada';
+  /**
+   * Fonte da razão de pinça: '3D' = coordenadas de MUNDO (tem o eixo Z, em
+   * metros — estável com as pontas se tocando); '2D' = só a imagem da câmera.
+   */
+  prof: '3D' | '2D' | '–';
   /** 'rVFC' = no ritmo do vídeo; 'rAF' = laço de reserva (iOS). */
   mode: 'rVFC' | 'rAF' | '–';
   fps: number;
@@ -50,6 +62,8 @@ export interface HandsStatus {
 
 const LS_KEY = 'handphys.pinchThreshold';
 const CALIB_MS = 2500;
+/** Pulso→metacarpal do meio, em fração da imagem, com a mão a ~40 cm da câmera. */
+const HAND_REF = 0.2;
 
 function loadThreshold(): number {
   try {
@@ -69,6 +83,21 @@ function loadThreshold(): number {
  */
 export type LocateFn = (cursor: HandPoint) => { x: number; y: number } | null;
 
+/** Uma mão já identificada e suavizada (uma linha do `ingest`). */
+interface SeenHand {
+  sm: HandPoint[];
+  fast: HandPoint[];
+  mir: HandPoint[];
+  pinched: boolean;
+  edge: 'down' | 'up' | null;
+  label: string;
+  ratio: number;
+  /** Tamanho aparente (pulso→metacarpal) — é a "profundidade" da webcam. */
+  size: number;
+  /** true = o modelo entregou coordenadas de mundo (a pinça tem o eixo Z). */
+  hasWorld: boolean;
+}
+
 export class HandsController {
   private tracker = new HandTracker();
   /** Miras por vista ("3d" antes de "2d"): só uma vista está montada por vez. */
@@ -77,6 +106,13 @@ export class HandsController {
   /** Suavização LENTA (razão de pinça estável) e RÁPIDA (cursor sem lag), por mão. */
   private slowFilters = new Map<string, { x: OneEuroFilter[]; y: OneEuroFilter[] }>();
   private fastFilters = new Map<string, { x: OneEuroFilter[]; y: OneEuroFilter[] }>();
+  /** Coordenadas de MUNDO (x,y,z em METROS) suavizadas: alimentam a razão 3D. */
+  private worldFilters = new Map<
+    string,
+    { x: OneEuroFilter[]; y: OneEuroFilter[]; z: OneEuroFilter[] }
+  >();
+  /** Distância entre as DUAS mãos do quadro anterior (gesto de zoom). */
+  private spread: number | null = null;
   /** Identidade estável: o classificador troca Left/Right; o centroide, não. */
   private slots = new Map<string, { x: number; y: number; lastSeen: number }>();
   private slotSeq = 0;
@@ -98,6 +134,7 @@ export class HandsController {
     ratio: null,
     cursor: null,
     mira: 'livre',
+    prof: '–',
     mode: '–',
     fps: 0,
     latencyMs: 0,
@@ -222,6 +259,8 @@ export class HandsController {
     this.pinch.reset();
     this.slowFilters.clear();
     this.fastFilters.clear();
+    this.worldFilters.clear();
+    this.spread = null;
     this.slots.clear();
     this.lastCell.clear();
     this.pressed.clear();
@@ -302,16 +341,35 @@ export class HandsController {
     // 1) identidade estável por centroide (a etiqueta Left/Right oscila e
     // teleportava o cursor) + suavização dupla: lenta p/ a razão, rápida p/ o cursor
     const t = now / 1000;
-    const seen = new Map<string, { sm: HandPoint[]; fast: HandPoint[]; mir: HandPoint[]; pinched: boolean; edge: 'down' | 'up' | null; label: string; ratio: number }>();
+    const seen = new Map<string, SeenHand>();
     let firstRatio: number | null = null;
     for (const h of hands) {
       const id = this.stableId(h, now);
       const sm = this.smooth(this.slowFilters, id, h.pts, t, {});
       const fast = this.smooth(this.fastFilters, id, h.pts, t, { minCutoff: 2.5, beta: 0.07 });
-      const ratio = h.world ? pinchRatio3D(h.world) : pinchRatio2D(sm);
+      // razão de pinça: com o eixo Z quando existe (coordenadas de mundo, em
+      // metros) — é o que não mente quando uma ponta some atrás da outra na
+      // imagem. Suavizamos os dois caminhos; sem isso a razão 3D treme no ponto
+      // de contato e a pinça "fisga" no meio do gesto.
+      const hasWorld = !!h.world;
+      const world = h.world ? this.smoothWorld(id, h.world, t) : null;
+      const ratio = world ? pinchRatio3D(world) : pinchRatio2D(sm);
       if (firstRatio === null) firstRatio = ratio;
       const { pinched, edge } = this.pinch.update(id, ratio, now);
-      seen.set(id, { sm, fast, mir: this.mirroredFast(id), pinched, edge, label: h.side, ratio });
+      const wrist = sm[0] ?? { x: 0.5, y: 0.5 };
+      const mid = sm[9] ?? { x: 0.5, y: 0.5 };
+      seen.set(id, {
+        sm,
+        fast,
+        mir: this.mirroredFast(id),
+        pinched,
+        edge,
+        label: h.side,
+        ratio,
+        // profundidade da mão: só o que a webcam dá de verdade (aparencia)
+        size: Math.hypot(mid.x - wrist.x, mid.y - wrist.y),
+        hasWorld,
+      });
     }
     // calibração: UMA mão (a primeira) — duas mãos misturam as amostras
     if (firstRatio !== null && this.calib) this.collectCalib(firstRatio, now);
@@ -324,6 +382,7 @@ export class HandsController {
       this.pressed.delete(side);
       this.slowFilters.delete(side);
       this.fastFilters.delete(side);
+      this.worldFilters.delete(side);
       if (this.driver === side) this.driver = null;
       if (this.clutchId === side) {
         this.clutch.reset();
@@ -386,12 +445,32 @@ export class HandsController {
       }
     }
 
+    // 5.5) GESTO DE ZOOM: as DUAS mãos abrindo/juntando (é o "pinça" de toque,
+    // mas com as mãos inteiras). Exige nenhuma pinça fechada: quem está
+    // pinçando está AGARRANDO algo e não pode mexer a vista junto.
+    const hands2 = [...seen.values()];
+    if (seen.size === 2 && pinchedNow.length === 0) {
+      const a = midOf(hands2[0].mir, 0, 9);
+      const b = midOf(hands2[1].mir, 0, 9);
+      const dist = Math.hypot(a.x - b.x, a.y - b.y);
+      if (this.spread !== null && this.spread > 0.08 && dist > 0.08) {
+        // ganho 1,2: 10% de afastamento ≈ 12% de zoom; trava por quadro para
+        // um salto de detecção não arremessar a câmera
+        const f = Math.min(1.05, Math.max(0.95, Math.pow(dist / this.spread, 1.2)));
+        if (Math.abs(f - 1) > 0.003) applyZoom(f);
+      }
+      this.spread = dist;
+    } else {
+      this.spread = null;
+    }
+
     // 6) quadro para desenho (esqueleto rápido) + status com etiquetas legíveis
     const drawHands: DrawHand[] = [...seen].map(([id, s]) => ({
       side: s.label,
       pts: s.mir,
       pinched: s.pinched,
       cursor: id === hoverId,
+      size: Number.isFinite(s.size) && s.size > 0 ? s.size : HAND_REF,
     }));
     this.draw = {
       hands: drawHands,
@@ -405,6 +484,7 @@ export class HandsController {
       ratio: hover?.ratio ?? null,
       cursor: cursorPoint,
       mira: this.clutch.isFrozen ? 'travada' : 'livre',
+      prof: hover ? (hover.hasWorld ? '3D' : '2D') : '–',
       mode: this.tracker.usingVideoCallback ? 'rVFC' : 'rAF',
       calibrating: this.calib
         ? { phase: this.calib.phase, leftMs: Math.max(0, this.calib.until - now) }
@@ -474,6 +554,25 @@ export class HandsController {
   ): HandPoint[] {
     const b = this.bank(store, side, pts.length, opts);
     return pts.map((p, i) => ({ x: b.x[i].filter(p.x, t), y: b.y[i].filter(p.y, t) }));
+  }
+
+  /** Mesma suavização lenta das coordenadas 2D, agora nos TRÊS eixos (metros). */
+  private smoothWorld(side: string, pts: Pt3[], t: number): Pt3[] {
+    let b = this.worldFilters.get(side);
+    if (!b || b.x.length !== pts.length) {
+      b = {
+        x: Array.from({ length: pts.length }, () => new OneEuroFilter({})),
+        y: Array.from({ length: pts.length }, () => new OneEuroFilter({})),
+        z: Array.from({ length: pts.length }, () => new OneEuroFilter({})),
+      };
+      this.worldFilters.set(side, b);
+    }
+    const bank = b;
+    return pts.map((p, i) => ({
+      x: bank.x[i].filter(p.x, t),
+      y: bank.y[i].filter(p.y, t),
+      z: bank.z[i].filter(p.z, t),
+    }));
   }
 
   private mirroredFast(id: string): HandPoint[] {

@@ -26,8 +26,10 @@ export function HandsPanel() {
           </div>
           <p className="hint">
             Gesto de <strong>pinça</strong>: feche para apertar/arrastar e abrir para soltar — no
-            quadro 2D, na bancada 3D e nos botões da tela (a pinça clica neles). A cena mostra só
-            o esqueleto da mão, nunca o vídeo.
+            quadro 2D, na bancada 3D e nos botões da tela (a pinça clica neles).{' '}
+            <strong>Duas mãos</strong> abrindo e juntando dão zoom (ou os botões −/%/+ no canto).
+            O esqueleto fica maior quando a mão se aproxima da câmera. A cena mostra só o
+            esqueleto da mão, nunca o vídeo.
           </p>
         </>
       )}
@@ -46,6 +48,12 @@ export function HandsPanel() {
             </li>
             <li>
               {st.fps} det/s · {st.latencyMs} ms · {st.delegate} · {st.mode}
+            </li>
+            <li>
+              <span title="Fonte da razão de pinça: 3D usa o eixo Z (coordenadas de mundo, em metros); 2D usa só a imagem da câmera.">
+                Pinça em{' '}
+                <strong>{st.prof === '3D' ? 'profundidade (3D)' : st.prof === '2D' ? 'só imagem (2D)' : '…'}</strong>
+              </span>
             </li>
             <li>
               Limiar da pinça: {st.threshold.toFixed(2)}

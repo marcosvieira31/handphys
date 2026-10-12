@@ -232,6 +232,37 @@ body.editor-page {
   pointer-events: none;
 }
 
+/* ---------- zoom: botões flutuantes sobre o quadro (e sobre a bancada 3D) --
+   A roda do mouse, o gesto de pinça no toque e o afastar/juntar as DUAS mãos
+   fazem o mesmo efeito por outros caminhos — aqui fica o controle explícito. */
+.zoom-bar {
+  position: absolute;
+  right: 12px;
+  bottom: 12px;
+  z-index: 6;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px;
+  background: rgba(13, 17, 23, 0.86);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.zoom-bar button {
+  min-width: 32px;
+  height: 28px;
+  padding: 0 8px;
+  font-size: 15px;
+  line-height: 1;
+}
+
+.zoom-bar button.zoom-pct {
+  min-width: 56px;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
 /* ---------- mãos (Fase 2b): esqueleto + mira por toda a janela ---------- */
 .hands-layer {
   position: absolute;

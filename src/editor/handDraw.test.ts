@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { handFrame, tipMid, type Pt } from './handDraw';
+import { handFrame, radiusForSize, tipMid, type Pt } from './handDraw';
 
 const W = 1200;
 const H = 800;
@@ -74,5 +74,29 @@ describe('esqueleto ancorado num ponto material (handFrame)', () => {
     expect(handFrame([], { x: 0.5, y: 0.5 }, W, H, 70)).toBeNull();
     expect(handFrame(aberta(), { x: NaN, y: 0.5 }, W, H, 70)).toBeNull();
     expect(handFrame(aberta(), { x: 0.5, y: Infinity }, W, H, 70)).toBeNull();
+  });
+});
+
+describe('profundidade da mão = tamanho do esqueleto (radiusForSize)', () => {
+  it('na referência (mão a ~40 cm) o raio é o de sempre', () => {
+    expect(radiusForSize(0.2)).toBe(70);
+  });
+
+  it('mão MAIS PERTO => esqueleto maior (é a pista de profundidade que sobra)', () => {
+    const perto = radiusForSize(0.3); // ~27 cm da câmera
+    const longe = radiusForSize(0.14); // ~57 cm
+    expect(perto).toBeGreaterThan(radiusForSize(0.2));
+    expect(longe).toBeLessThan(radiusForSize(0.2));
+    expect(perto).toBeGreaterThan(longe * 2);
+  });
+
+  it('trava nos limites: nem fantasma, nem mão que cobre a tela', () => {
+    expect(radiusForSize(0.001)).toBe(42);
+    expect(radiusForSize(9)).toBe(118);
+  });
+
+  it('medida inválida cai no raio de referência (não some o esqueleto)', () => {
+    expect(radiusForSize(0)).toBe(70);
+    expect(radiusForSize(NaN)).toBe(70);
   });
 });

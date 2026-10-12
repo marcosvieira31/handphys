@@ -11,6 +11,22 @@ export const GRAB_DIST = 0.75;
 export const SNAP_DIST = 1.5;
 
 /**
+ * Cliente => ponto do quadro (unidades do viewBox) pela matriz do SVG: exato
+ * mesmo com zoom, sobra de layout ou preserveAspectRatio.
+ */
+export function clientToBoard(
+  svg: SVGSVGElement | null,
+  clientX: number,
+  clientY: number,
+): Pt {
+  if (!svg) return { x: 0, y: 0 };
+  const ctm = svg.getScreenCTM();
+  if (!ctm) return { x: 0, y: 0 };
+  const pt = new DOMPoint(clientX, clientY).matrixTransform(ctm.inverse());
+  return { x: pt.x, y: pt.y };
+}
+
+/**
  * Cliente => célula da grade (pela matriz do SVG: exato mesmo com sobra de layout).
  * Usado pelo mouse E pela pinça: os dois apertam a mesma grade.
  */
@@ -19,15 +35,12 @@ export function clientToCell(
   clientX: number,
   clientY: number,
 ): Pt {
-  if (!svg) return { x: 0, y: 0 };
-  const ctm = svg.getScreenCTM();
-  if (!ctm) return { x: 0, y: 0 };
+  const p = clientToBoard(svg, clientX, clientY);
   // floor, não round: o clique cai DENTRO da célula (round erra no centro exato,
   // onde 7,5 arredonda para 8 por poeira de ponto flutuante).
-  const pt = new DOMPoint(clientX, clientY).matrixTransform(ctm.inverse());
   return {
-    x: Math.max(0, Math.min(GRID - 1, Math.floor(pt.x / CELL))),
-    y: Math.max(0, Math.min(GRID - 1, Math.floor(pt.y / CELL))),
+    x: Math.max(0, Math.min(GRID - 1, Math.floor(p.x / CELL))),
+    y: Math.max(0, Math.min(GRID - 1, Math.floor(p.y / CELL))),
   };
 }
 

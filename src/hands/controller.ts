@@ -337,6 +337,7 @@ export class HandsController {
     this.releaseAllPressed(); // mão que estava agarrando não pode ficar presa
     this.filter = f;
     this.lockedId = null; // no modo travar, gruda na próxima que aparecer
+    this.spread = null; // gesto de zoom das duas mãos recomeça do zero
     try {
       localStorage.setItem(LS_FILTER, f);
     } catch {
@@ -521,11 +522,12 @@ export class HandsController {
     }
 
     // 5.5) GESTO DE ZOOM: as DUAS mãos abrindo/juntando (é o "pinça" de toque,
-    // mas com as mãos inteiras). Vale com o seletor de uma mão ligado também —
-    // é um gesto deliberado e não disputa a mira. Só exige que NENHUMA das
-    // mãos que comanda esteja pinçando: quem agarrou algo não muda a vista.
+    // mas com as mãos inteiras). SÓ vale em "Qualquer mão comanda": escolhida
+    // UMA mão, a outra não interage para nada — nem zoom (a mira, a pinça e a
+    // calibração já a ignoram; aqui fecha o último acesso). E continua exigindo
+    // que nenhuma esteja pinçando: quem agarrou algo não muda a vista.
     const hands2 = [...seen.values()];
-    if (seen.size === 2 && pinchedNow.length === 0) {
+    if (this.filter === 'auto' && seen.size === 2 && pinchedNow.length === 0) {
       const a = midOf(hands2[0].mir, 0, 9);
       const b = midOf(hands2[1].mir, 0, 9);
       const dist = Math.hypot(a.x - b.x, a.y - b.y);

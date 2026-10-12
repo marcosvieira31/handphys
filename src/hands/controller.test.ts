@@ -454,9 +454,8 @@ describe('HandsController sem câmera (ingest)', () => {
     expect(usadas).toEqual([false, true]);
   });
 
-  it('com o seletor de uma mão, as DUAS mãos ainda dão zoom', () => {
+  it('com o seletor de UMA mão, as duas mãos NÃO dão zoom (a outra não interage)', () => {
     const ctl = wireUp();
-    ctl.setFilter('right');
     let now = 0;
     const pair = (gap: number) => [
       blob('Right', 0.5 - gap / 2, 0.35),
@@ -468,9 +467,26 @@ describe('HandsController sem câmera (ingest)', () => {
         ctl.ingest(hs, 5, now);
       }
     };
-    feed(pair(0.1));
-    for (let g = 0.15; g <= 0.3; g += 0.05) feed(pair(g));
+    const abrir = () => {
+      feed(pair(0.1));
+      for (let g = 0.15; g <= 0.3; g += 0.05) feed(pair(g));
+    };
+
+    // em "Qualquer mão comanda" o gesto vale (serve de prova de que não quebrou)
+    abrir();
     expect(useEditor.getState().zoom).toBeGreaterThan(1);
+
+    // escolhida UMA mão: o MESMO gesto não mexe mais a vista
+    ctl.setFilter('right');
+    useEditor.setState({ zoom: 1, pan: { x: 0, y: 0 } });
+    abrir();
+    expect(useEditor.getState().zoom).toBe(1);
     expect(ctl.getSnapshot().ignored).toBe(1);
+
+    // e voltar para "Qualquer" devolve o gesto
+    ctl.setFilter('auto');
+    useEditor.setState({ zoom: 1, pan: { x: 0, y: 0 } });
+    abrir();
+    expect(useEditor.getState().zoom).toBeGreaterThan(1);
   });
 });

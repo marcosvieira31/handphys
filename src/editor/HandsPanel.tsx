@@ -41,11 +41,13 @@ export function HandsPanel() {
           <p className="hint">
             Gesto de <strong>pinça</strong>: feche para apertar/arrastar e abrir para soltar — no
             quadro 2D, na bancada 3D e nos botões da tela (a pinça clica neles).{' '}
-            <strong>Duas mãos</strong> abrindo e juntando dão zoom (ou os botões −/%/+ no canto).
-            O esqueleto fica maior quando a mão se aproxima da câmera. A cena mostra só o
-            esqueleto da mão, nunca o vídeo. Com a câmera ligada, <strong>Mão que comanda</strong>{' '}
-            restringe o cursor e a pinça a UMA mão só (direita, esquerda ou travar na que estiver
-            em uso) — a outra aparece apagada e não comanda nada.
+            <strong>Duas mãos</strong> abrindo e juntando dão zoom só enquanto{' '}
+            <strong>Mão que comanda</strong> estiver em <strong>Qualquer</strong> (ou use os
+            botões −/%/+ no canto). O esqueleto fica maior quando a mão se aproxima da câmera e a
+            cena mostra só o esqueleto, nunca o vídeo. Com a câmera ligada,{' '}
+            <strong>Mão que comanda</strong> restringe tudo — cursor, pinça, calibração e zoom — à
+            UMA mão escolhida (direita, esquerda ou travar na que estiver em uso): a outra fica
+            apagada e não comanda nada.
           </p>
         </>
       )}

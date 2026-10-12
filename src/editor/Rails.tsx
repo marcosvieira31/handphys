@@ -77,14 +77,16 @@ export function ItemsRail() {
   );
 }
 
-/** Direita: alternar vista 2D/3D e zoom (− / % / +), empilhados. */
+/** Direita: vista 2D/3D, cores por tensão e zoom (− / % / +), empilhados. */
 export function ViewRail() {
   const view = useEditor((s) => s.view);
   const zoom = useEditor((s) => s.zoom);
+  const colorByVoltage = useEditor((s) => s.colorByVoltage);
   const setView = useEditor((s) => s.setView);
+  const setColorByVoltage = useEditor((s) => s.setColorByVoltage);
 
   return (
-    <aside className="rail rail-view" role="group" aria-label="Vista e zoom">
+    <aside className="rail rail-view" role="group" aria-label="Vista, cores e zoom">
       <span className="seg" role="group" aria-label="Vista">
         <button
           type="button"
@@ -105,6 +107,22 @@ export function ViewRail() {
           3D
         </button>
       </span>
+
+      <button
+        type="button"
+        className={colorByVoltage ? 'rail-item active' : 'rail-item'}
+        onClick={() => setColorByVoltage(!colorByVoltage)}
+        data-hand="colors"
+        title="Cores por tensão: pinta cada nó pelo potencial"
+      >
+        <svg viewBox="-24 -24 48 48" width={26} height={26} aria-hidden>
+          <circle cx={-10} cy={0} r={7} fill="currentColor" opacity={0.95} />
+          <circle cx={2} cy={0} r={7} fill="currentColor" opacity={0.55} />
+          <circle cx={14} cy={0} r={7} fill="currentColor" opacity={0.28} />
+        </svg>
+        <strong>Cores</strong>
+        <em>por tensão</em>
+      </button>
 
       <span className="rail-zoom" role="group" aria-label="Zoom">
         <button

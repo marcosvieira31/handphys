@@ -14,9 +14,8 @@ import { applyZoom, applyZoomReset } from './zoom';
 /** `ok`/`bad` = a página abriu com `?c=` (circuito no link) — bom ou podre. */
 export function App({ shared = 'none' }: { shared?: 'none' | 'ok' | 'bad' }) {
   const doc = useEditor((s) => s.doc);
-  const colorByVoltage = useEditor((s) => s.colorByVoltage);
   const view = useEditor((s) => s.view);
-  const { clear, load, setColorByVoltage, undo, rotate, removeSelected, setView } = useEditor();
+  const { clear, load, undo, rotate, removeSelected, setView } = useEditor();
   const reading = readCircuit(doc);
 
   useEffect(() => {
@@ -49,14 +48,6 @@ export function App({ shared = 'none' }: { shared?: 'none' | 'ok' | 'bad' }) {
         <h1>handphys — editor de circuitos</h1>
         <nav>
           <a href="./">Voltar</a>
-          <label className="toggle">
-            <input
-              type="checkbox"
-              checked={colorByVoltage}
-              onChange={(e) => setColorByVoltage(e.target.checked)}
-            />
-            <span>Cores por tensão</span>
-          </label>
           <span className="sep" />
           {EXAMPLES.map((ex, i) => (
             <button
@@ -90,15 +81,16 @@ export function App({ shared = 'none' }: { shared?: 'none' | 'ok' | 'bad' }) {
       </header>
       <div className="body">
         <main className="canvas">
-          <ItemsRail />
           <div className="canvas-view">
             {view === '2d' ? (
               <Schematic reading={reading} />
             ) : (
               <SceneView key="scene3d" reading={reading} />
             )}
+            {/* trilhos DENTRO da bancada: pegar e carregar é um gesto só */}
+            <ItemsRail />
+            <ViewRail />
           </div>
-          <ViewRail />
         </main>
         <Inspector reading={reading} />
       </div>

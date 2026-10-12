@@ -57,6 +57,13 @@ export interface EditorState {
   arm: (kind: CompKind | null) => void;
   armWire: (on: boolean) => void;
   place: (kind: CompKind, at: Pt) => void;
+  /**
+   * Célula em que o item ARMADO está sendo carregado. Apertar = pegar (o
+   * fantasma gruda na mira), soltar = posicionar — o gesto da pinça vira um
+   * arrastar de verdade, em UMA apertada, em vez de posicionar na borda do
+   * quadro no primeiro aperto que encontra célula.
+   */
+  carry: Pt | null;
   select: (sel: Selection | null) => void;
   startDraft: (p: Pt) => void;
   moveDraft: (p: Pt) => void;
@@ -114,6 +121,7 @@ export const ID_PREFIX: Record<CompKind, string> = {
 export const useEditor = create<EditorState>((set, get) => ({
   doc: EMPTY_DOC,
   placing: null,
+  carry: null,
   wiring: false,
   selection: null,
   draft: null,
@@ -133,17 +141,17 @@ export const useEditor = create<EditorState>((set, get) => ({
     }
     // abrir já larga o que estava na mão (senão o aperto fica preso atrás do
     // cartão e o componente salta sozinho quando o diálogo fecha)
-    set({ modal: true, grip: null, draft: null, placing: null, wiring: false });
+    set({ modal: true, grip: null, draft: null, placing: null, carry: null, wiring: false });
   },
 
   arm: (kind) => {
     if (get().modal) return; // diálogo em cima: nada arma componente
-    set({ placing: kind, wiring: false, selection: null, draft: null, grip: null });
+    set({ placing: kind, carry: null, wiring: false, selection: null, draft: null, grip: null });
   },
 
   armWire: (on) => {
     if (get().modal) return;
-    set({ wiring: on, placing: null, selection: null, draft: null, grip: null });
+    set({ wiring: on, placing: null, carry: null, selection: null, draft: null, grip: null });
   },
 
   place: (kind, at) => {
@@ -163,6 +171,7 @@ export const useEditor = create<EditorState>((set, get) => ({
       doc: { ...s.doc, comps: [...s.doc.comps, comp] },
       selection: { kind: 'comp', id: comp.id },
       placing: null, // um clique = um componente: evita espalhar sem querer
+      carry: null,
     });
   },
 
@@ -209,18 +218,21 @@ export const useEditor = create<EditorState>((set, get) => ({
     });
   },
 
-  cancelDraft: () => set({ draft: null }),
+  cancelDraft: () => set({ draft: null, carry: null }),
 
   /**
    * Aperta numa célula: a MESMA decisão para mouse (pointerdown) e pinça
-   * (fechar os dedos). Ordem: posicionar > terminar fio > modo fio >
+   * (fechar os dedos). Ordem: carregar item armado > terminar fio > modo fio >
    * começar fio > segurar componente > selecionar fio.
    */
   pressAt: (cell) => {
     const s = get();
     if (s.modal) return; // diálogo em cima: a cena não recebe aperto
     if (s.placing) {
-      s.place(s.placing, cell);
+      // PEGOU o item: o fantasma gruda na mira e só cai no releaseAt — assim
+      // a pinça carrega do trilho até onde QUER soltar, sem posicionar no
+      // primeiro aperto (que acontecia na borda do quadro).
+      set({ carry: cell });
       return;
     }
     if (s.draft?.moved) {
@@ -250,10 +262,14 @@ export const useEditor = create<EditorState>((set, get) => ({
     s.select(wire ? { kind: 'wire', id: wire.id } : null);
   },
 
-  /** Move com aperto: leva o fio em arraste ou o componente segurado. */
+  /** Move com aperto: leva o item carregado, o fio em arraste ou o componente segurado. */
   moveAt: (cell) => {
     const s = get();
     if (s.modal) return;
+    if (s.placing && s.carry) {
+      set({ carry: cell }); // o fantasma acompanha a mira até o soltar
+      return;
+    }
     if (s.draft) {
       s.moveDraft(cell);
       return;
@@ -261,10 +277,14 @@ export const useEditor = create<EditorState>((set, get) => ({
     if (s.grip) s.moveComp(s.grip.id, cell.x + s.grip.dx, cell.y + s.grip.dy);
   },
 
-  /** Solta o aperto: termina o fio ou larga o componente. */
+  /** Solta o aperto: posiciona o item carredado, termina o fio ou larga o componente. */
   releaseAt: (cell) => {
     const s = get();
     if (s.modal) return;
+    if (s.placing) {
+      s.place(s.placing, cell); // SOLTOU = posiciona onde a mira estava
+      return;
+    }
     if (s.draft) s.endDraft(cell);
     set({ grip: null });
   },
@@ -348,9 +368,27 @@ export const useEditor = create<EditorState>((set, get) => ({
   },
 
   load: (doc) =>
-    set((s) => ({ doc, past: [...s.past, s.doc].slice(-30), selection: null, draft: null, placing: null, wiring: false, grip: null })),
+    set((s) => ({
+      doc,
+      past: [...s.past, s.doc].slice(-30),
+      selection: null,
+      draft: null,
+      placing: null,
+      carry: null,
+      wiring: false,
+      grip: null,
+    })),
 
-  clear: () => set((s) => ({ doc: EMPTY_DOC, past: [...s.past, s.doc].slice(-30), selection: null, draft: null, wiring: false, grip: null })),
+  clear: () =>
+    set((s) => ({
+      doc: EMPTY_DOC,
+      past: [...s.past, s.doc].slice(-30),
+      selection: null,
+      draft: null,
+      carry: null,
+      wiring: false,
+      grip: null,
+    })),
 
   undo: () =>
     set((s) => {

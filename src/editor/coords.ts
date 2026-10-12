@@ -44,6 +44,18 @@ export function clientToCell(
   };
 }
 
+/**
+ * A mira está sobre um botão da bancada ([data-hand])? Nesse caso a pinça
+ * CLIQUE no botão (HandsLayer) e o quadro não pode apertar por baixo — senão
+ * o item armado já caía na célula sob o botão, "preso na borda". Fora do
+ * navegador (testes em node) nunca está.
+ */
+export function overHandButton(clientX: number, clientY: number): boolean {
+  if (typeof document === 'undefined' || !document.elementFromPoint) return false;
+  const el = document.elementFromPoint(clientX, clientY);
+  return !!el && !!el.closest('[data-hand]');
+}
+
 /** Menor distância do ponto a um segmento, em células. */
 export function distToSegment(p: Pt, a: Pt, b: Pt): number {
   const vx = b.x - a.x;

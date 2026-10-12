@@ -121,13 +121,17 @@ body.editor-page {
   color: var(--dim);
 }
 
-/* ---------- trilhos: as ferramentas aos LADOS do quadro ----------
-   Componentes à esquerda, vista/zoom à direita — e NUNCA embaixo: o limite
-   INFERIOR da câmera é o mais perto (descer o braço perde o rastreio do
-   hand tracking justamente onde o item está); na horizontal a webcam rende
-   muito mais. Alvos grandes: a pinça "clica" num [data-hand] como um clique. */
+/* ---------- trilhos: as ferramentas DENTRO da bancada ----------
+   Componentes à esquerda, vista/cores/zoom à direita, sobre a superfície do
+   quadro — nada embaixo e nada fora: o limite INFERIOR da câmera é o mais
+   perto (descer o braço perde o rastreio do hand tracking justamente onde o
+   item está) e agora pegar → carregar → soltar é UM gesto só. Alvos grandes:
+   a pinça "clica" num [data-hand] como um clique. */
 .rail {
-  flex: 0 0 auto;
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 6;
   display: flex;
   flex-direction: column;
   flex-wrap: wrap; /* janela baixa: vira uma 2ª coluna em vez de estourar */
@@ -135,11 +139,19 @@ body.editor-page {
   align-items: center;
   justify-content: center;
   gap: 4px;
-  max-height: 100%;
+  max-height: calc(100% - 12px);
   padding: 6px;
-  background: var(--panel);
+  background: rgba(22, 27, 34, 0.92); /* painel quase opaco, a bancada visível por trás */
   border: 1px solid var(--line);
   border-radius: 10px;
+}
+
+.rail-items {
+  left: 6px;
+}
+
+.rail-view {
+  right: 6px;
 }
 
 .rail-item {
@@ -182,25 +194,30 @@ body.editor-page {
   line-height: 1.2;
 }
 
-/* ---------- quadro (entre os dois trilhos) ---------- */
+/* ---------- bancada: a superfície inteira é o quadro ---------- */
 .canvas {
   position: relative;
   display: flex;
-  gap: 10px;
   padding: 12px;
   min-width: 0;
   min-height: 0;
-  overflow: auto;
 }
 
-/* Faixa que isola a vista (2D/3D) dos trilhos: o quadrado do quadro cresce
- * aqui em largura E altura — os trilhos não consomem altura do quadro. */
+/* A bancada ocupa toda a área de trabalho (o quadrado do esquemático é a
+ * grade em cima dela) e os trilhos ficam absolutos POR CIMA dela — por isso
+ * "dentro da workbench": pegar o item e carregar até a grade é um gesto curto
+ * e contínuo. `overflow: hidden` prende os trilhos na bancada. */
 .canvas-view {
+  position: relative;
   flex: 1;
   min-height: 120px;
+  background: #0a0d12;
+  border: 1px solid var(--line);
+  border-radius: 8px;
   display: flex;
   align-items: center;
   justify-content: center;
+  overflow: hidden;
 }
 
 .schematic {

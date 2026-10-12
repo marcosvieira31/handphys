@@ -120,25 +120,39 @@ Feito (Fase 4, segundo passo) — **sala na rede, aparelhos diferentes**:
   navegador normal. O espelho da mesma máquina (BroadcastChannel) continua cobrindo a
   projeção ligada no PC do professor.
 
-### Bancada expandida (trilhos laterais) — onde está
+### Bancada expandida (trilhos dentro da bancada + inserir em 1 gesto) — onde está
 
-Feito (refino de uso com as mãos):
-- **O que mudou**: a paleta lateral original (componentes + Conectar), o alternador `2D/3D`
-  e o zoom `− / % / +` passaram a morar em **trilhos verticais dos dois lados do quadro**
-  ([`src/editor/Rails.tsx`](../src/editor/Rails.tsx)): componentes à esquerda, vista/zoom
-  à direita. Primeiro ficaram numa faixa embaixo, depois o usuário apontou o problema real:
-  o **limite INFERIOR da câmera** é o mais perto do corpo — descer o braço perde o
-  rastreio do hand tracking justamente onde o item está; na horizontal a webcam rende
-  muito mais. Lateral também devolve ao quadro a altura toda (os trilhos não consomem
-  altura) e ganha a largura da antiga sidebar.
-- **Sem quebrar a pinça**: os alvos mantêm os MESMOS `data-hand`
-  (`kind:*`, `wire`, `view:2d/3d`, `zoom:*`), então a pinça clica como sempre; os trilhos
-  ficam FORA do retângulo do SVG, então a mira não aperta o quadro por baixo do botão.
+Feito (refino de uso com as mãos, em três passos com o usuário):
+- **O que mudou**: a paleta lateral original (componentes + Conectar), o alternador `2D/3D`,
+  as **cores por tensão** e o zoom `− / % / +` passaram a morar em **trilhos verticais
+  sobre a própria bancada** ([`src/editor/Rails.tsx`](../src/editor/Rails.tsx)):
+  componentes à esquerda, vista/cores/zoom à direita, posicionados de forma absoluta
+  DENTRO de `.canvas-view` (a bancada virou a superfície inteira da área de trabalho).
+  História: primeiro numa faixa embaixo; depois o usuário apontou o **limite INFERIOR da
+  câmera** (descer o braço perde o rastreio); depois apontou que as opções ainda estavam
+  **fora** da bancada — e o gesto de inserção "ficava preso na borda".
+- **Inserir em UM gesto (o bug real)**: antes, pinçar o item só *armava*; ao entrar no
+  quadro o `pressAt` disparava NA BORDA (primeira célula que a mira encontrava) e
+  posicionava ali — tinha que pinçar de novo para arrastar até o lugar. Agora a semântica
+  é **apertar = pegar, soltar = posicionar** ([`src/editor/store.ts`](../src/editor/store.ts)):
+  `pressAt` com item armado guarda a célula em `carry` (o fantasma gruda na mira — vem do
+  store, então acompanha a PINÇA, não só o mouse), `moveAt` leva o `carry`, `releaseAt`
+  posiciona e limpa. `arm`/`armWire`/`setModal`/`place`/`cancelDraft`/`load`/`clear`
+  zeram o `carry`. O teste do store cobre pegar→levar→soltar.
+- **Sem quebrar a pinça (trilho sobre o SVG)**: como os trilhos agora podem cair por cima
+  do retângulo do quadro (janela retrato), a mira que estiver sobre um `[data-hand]`
+  devolve `null` no locator — `overHandButton()` em
+  [`src/editor/coords.ts`](../src/editor/coords.ts), aplicado no 2D
+  ([`HandsLayer.tsx`](../src/editor/HandsLayer.tsx)) e no 3D
+  ([`SceneView.tsx`](../src/editor/SceneView.tsx)). O botão que clica, o quadro não aperta
+  por baixo; a soltura continua no `lastCell` (última célula válida), então soltar sobre
+  o trilho posiciona no último ponto do quadro.
 - **Alvo de mão**: itens ≥ 46 px de altura; em janela baixa (`max-height: 620px`) o trilho
   esconde os valores impressos e, se ainda não couber, vira uma 2ª coluna
   (`flex-wrap`) — nunca estoura nem rola.
 - Verificado: `tsc` limpo, 162 testes, build ok; no navegador (dev) — clicar no item arma
-  `placing`, aperto no quadro posiciona (célula 15,15), `2D/3D`, zoom pelo trilho direito,
+  `placing`, apertar PEGA (`carry` + fantasma em `.ghost`), mover leva o fantasma, soltar
+  posiciona na célula da soltura e some o fantasma; `2D/3D`, cores e zoom pelos trilhos,
   ida e volta 2D↔3D sem erros de console.
 
 ## 6. Riscos e mitigações

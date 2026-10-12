@@ -140,13 +140,20 @@ describe('semântica única press/move/release (mouse e pinça)', () => {
     expect(useEditor.getState().doc.wires).toHaveLength(1);
   });
 
-  it('press posiciona quando há componente armado', () => {
+  it('armado: apertar PEGA (carry), mover leva o fantasma, soltar POSICIONA', () => {
     const s = useEditor.getState();
     s.arm('resistor');
-    s.pressAt({ x: 20, y: 5 });
+    s.pressAt({ x: 4, y: 5 }); // pegou: não cai na borda, só carrega
+    const pegou = useEditor.getState();
+    expect(pegou.carry).toMatchObject({ x: 4, y: 5 });
+    expect(pegou.doc.comps.some((c) => c.x === 4 && c.y === 5)).toBe(false);
+    pegou.moveAt({ x: 20, y: 11 }); // o fantasma acompanha a mira
+    expect(useEditor.getState().carry).toMatchObject({ x: 20, y: 11 });
+    useEditor.getState().releaseAt({ x: 21, y: 12 }); // soltou = posiciona
     const after = useEditor.getState();
-    expect(after.doc.comps.some((c) => c.x === 20 && c.y === 5)).toBe(true);
+    expect(after.doc.comps.some((c) => c.kind === 'resistor' && c.x === 21 && c.y === 12)).toBe(true);
     expect(after.placing).toBeNull();
+    expect(after.carry).toBeNull();
   });
 });
 

@@ -29,6 +29,7 @@ export function Schematic({ reading }: { reading: Reading }) {
   const selection = useEditor((s) => s.selection);
   const draft = useEditor((s) => s.draft);
   const wiring = useEditor((s) => s.wiring);
+  const carry = useEditor((s) => s.carry); // célula em que o item armado está sendo carregado
   const colorByVoltage = useEditor((s) => s.colorByVoltage);
   const zoom = useEditor((s) => s.zoom);
   const pan = useEditor((s) => s.pan);
@@ -238,8 +239,11 @@ export function Schematic({ reading }: { reading: Reading }) {
     targets = <g pointerEvents="none">{rings}</g>;
   }
 
-  const ghost = placing && hoverCell ? (
-    <g transform={`translate(${hoverCell.x * CELL} ${hoverCell.y * CELL})`} className="ghost">
+  // fantasma do item armado: em cima da célula em que está sendo CARREGADO
+  // (pinça/mouse com aperto) e, sem aperto, sobre a célula em que o mouse paira.
+  const ghostCell = carry ?? hoverCell;
+  const ghost = placing && ghostCell ? (
+    <g transform={`translate(${ghostCell.x * CELL} ${ghostCell.y * CELL})`} className="ghost">
       <Symbol comp={{ id: 'ghost', kind: placing, x: 0, y: 0, rot: 0, value: 0 }} />
     </g>
   ) : null;

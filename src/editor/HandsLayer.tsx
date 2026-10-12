@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { clientToCell } from './coords';
+import { clientToCell, overHandButton } from './coords';
 import { handFrame, radiusForSize, tipMid } from './handDraw';
 import { hands } from '../hands/controller';
 
@@ -49,6 +49,7 @@ export function HandsLayer() {
         const r = svg.getBoundingClientRect();
         const c = toClient(p.x, p.y);
         if (c.x < r.left || c.x > r.right || c.y < r.top || c.y > r.bottom) return null;
+        if (overHandButton(c.x, c.y)) return null; // sobre o botão: ele que clica
         return clientToCell(svg, c.x, c.y);
       },
       video,

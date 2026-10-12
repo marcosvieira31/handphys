@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { Reading } from '../core/netlist';
 import { hands } from '../hands/controller';
+import { overHandButton } from './coords';
 import { useEditor } from './store';
 import { bindZoomTarget } from './zoom';
 import type { LabView } from '../scene/buildScene';
@@ -35,6 +36,7 @@ export function SceneView({ reading }: { reading: Reading }) {
         const cx = p.x * window.innerWidth;
         const cy = p.y * window.innerHeight;
         if (cx < r.left || cx > r.right || cy < r.top || cy > r.bottom) return null;
+        if (overHandButton(cx, cy)) return null; // sobre o botão: ele que clica
         return view.cellAt((cx - r.left) / r.width, (cy - r.top) / r.height);
       });
       if (import.meta.env.DEV) {

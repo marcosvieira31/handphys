@@ -4,7 +4,11 @@ import { useEditor } from '../editor/store';
 import { Clutch } from './clutch';
 import { OneEuroFilter } from './oneEuro';
 import { PinchTracker } from './pinch';
+import { SideVote, type HandSide } from './side';
 import { HandTracker, pinchRatio2D, pinchRatio3D, type FrameHand, type Pt3 } from './tracker';
+
+/** Seletor de UMA mão: quem comanda o cursor, a pinça e a calibração. */
+export type HandFilter = 'auto' | 'right' | 'left' | 'lock';
 
 export interface HandPoint {
   x: number;
@@ -24,6 +28,8 @@ export interface DrawHand {
    * aparencia). Mão perto do celular => número grande; longe => pequeno.
    */
   size: number;
+  /** false = o seletor de UMA mão está ignorando esta (ela aparece apagada). */
+  used: boolean;
 }
 
 export interface DrawCursor {
@@ -49,6 +55,12 @@ export interface HandsStatus {
    * metros — estável com as pontas se tocando); '2D' = só a imagem da câmera.
    */
   prof: '3D' | '2D' | '–';
+  /** Posição do seletor de UMA mão (quem comanda). */
+  filter: HandFilter;
+  /** Lado da mão que está comandando agora (para o professor conferir). */
+  handSide: HandSide | '–';
+  /** Quantas mãos detectadas o seletor está ignorando. */
+  ignored: number;
   /** 'rVFC' = no ritmo do vídeo; 'rAF' = laço de reserva (iOS). */
   mode: 'rVFC' | 'rAF' | '–';
   fps: number;
@@ -61,9 +73,20 @@ export interface HandsStatus {
 }
 
 const LS_KEY = 'handphys.pinchThreshold';
+const LS_FILTER = 'handphys.handFilter';
 const CALIB_MS = 2500;
 /** Pulso→metacarpal do meio, em fração da imagem, com a mão a ~40 cm da câmera. */
 const HAND_REF = 0.2;
+
+function loadFilter(): HandFilter {
+  try {
+    const raw = typeof localStorage !== 'undefined' ? localStorage.getItem(LS_FILTER) : null;
+    if (raw === 'right' || raw === 'left' || raw === 'lock') return raw;
+  } catch {
+    /* sem storage: qualquer mão comanda */
+  }
+  return 'auto';
+}
 
 function loadThreshold(): number {
   try {
@@ -96,6 +119,8 @@ interface SeenHand {
   size: number;
   /** true = o modelo entregou coordenadas de mundo (a pinça tem o eixo Z). */
   hasWorld: boolean;
+  /** Lado VOTADO desta mão (direita/esquerda) — o rótulo cru oscila. */
+  handSide: HandSide;
 }
 
 export class HandsController {
@@ -122,6 +147,11 @@ export class HandsController {
   /** Trava de mira da mão piloto (a mira não escorrega quando os dedos convergem). */
   private clutch = new Clutch();
   private clutchId: string | null = null;
+  /** Seletor de UMA mão: o lado vem de VOTO (o rótulo do modelo oscila). */
+  private sideVote = new SideVote();
+  private filter: HandFilter = loadFilter();
+  /** No modo 'lock': o id estável da mão grudada (some => gruda na próxima). */
+  private lockedId: string | null = null;
   private hiddenVideo: HTMLVideoElement | null = null;
   private previewVideo: HTMLVideoElement | null = null;
   private listeners = new Set<() => void>();
@@ -135,6 +165,9 @@ export class HandsController {
     cursor: null,
     mira: 'livre',
     prof: '–',
+    filter: loadFilter(),
+    handSide: '–',
+    ignored: 0,
     mode: '–',
     fps: 0,
     latencyMs: 0,
@@ -260,7 +293,9 @@ export class HandsController {
     this.slowFilters.clear();
     this.fastFilters.clear();
     this.worldFilters.clear();
+    this.sideVote.clear();
     this.spread = null;
+    this.lockedId = null;
     this.slots.clear();
     this.lastCell.clear();
     this.pressed.clear();
@@ -291,6 +326,30 @@ export class HandsController {
       /* sem storage */
     }
     this.setStatus({ threshold: thr, lastCalib: `ajuste manual: ${thr.toFixed(2)}` }, true);
+  }
+
+  /** Seletor de UMA mão: qual delas comanda cursor, pinça e calibração.
+   *  'auto' = qualquer uma; 'right'/'left' = só aquela (lado por voto, porque o
+   *  rótulo do modelo troca sozinho); 'lock' = gruda na que estiver em uso e
+   *  esquece direita/esquerda. Persiste (localStorage) como o limiar. */
+  setFilter(f: HandFilter) {
+    if (f === this.filter) return;
+    this.releaseAllPressed(); // mão que estava agarrando não pode ficar presa
+    this.filter = f;
+    this.lockedId = null; // no modo travar, gruda na próxima que aparecer
+    try {
+      localStorage.setItem(LS_FILTER, f);
+    } catch {
+      /* sem storage */
+    }
+    this.setStatus({ filter: f, handSide: '–', ignored: 0 }, true);
+  }
+
+  /** Esta mão obedece ao seletor? (separa, no ingest, quem comanda de quem não) */
+  private useHand(id: string, seen: Map<string, SeenHand>): boolean {
+    if (this.filter === 'auto') return true;
+    if (this.filter === 'lock') return this.lockedId === null || this.lockedId === id;
+    return seen.get(id)?.handSide === this.filter;
   }
 
   /** Solta no store todo aperto vindo da mão (troca de limiar, calibração, sumiço). */
@@ -342,7 +401,6 @@ export class HandsController {
     // teleportava o cursor) + suavização dupla: lenta p/ a razão, rápida p/ o cursor
     const t = now / 1000;
     const seen = new Map<string, SeenHand>();
-    let firstRatio: number | null = null;
     for (const h of hands) {
       const id = this.stableId(h, now);
       const sm = this.smooth(this.slowFilters, id, h.pts, t, {});
@@ -354,7 +412,6 @@ export class HandsController {
       const hasWorld = !!h.world;
       const world = h.world ? this.smoothWorld(id, h.world, t) : null;
       const ratio = world ? pinchRatio3D(world) : pinchRatio2D(sm);
-      if (firstRatio === null) firstRatio = ratio;
       const { pinched, edge } = this.pinch.update(id, ratio, now);
       const wrist = sm[0] ?? { x: 0.5, y: 0.5 };
       const mid = sm[9] ?? { x: 0.5, y: 0.5 };
@@ -369,10 +426,25 @@ export class HandsController {
         // profundidade da mão: só o que a webcam dá de verdade (aparencia)
         size: Math.hypot(mid.x - wrist.x, mid.y - wrist.y),
         hasWorld,
+        // lado por VOTO: o rótulo cru do modelo troca sozinho no meio do gesto
+        handSide: this.sideVote.add(id, h.side),
       });
     }
-    // calibração: UMA mão (a primeira) — duas mãos misturam as amostras
-    if (firstRatio !== null && this.calib) this.collectCalib(firstRatio, now);
+
+    // 1.5) SELETOR DE UMA MÃO. 'auto' deixa qualquer mão comandar; 'right'/
+    // 'left' só aquela (lado votado); 'lock' gruda na que estiver em uso —
+    // não precisa acertar direita/esquerda, serve quando o rótulo mente.
+    const pinchedAll = [...seen].filter(([, s]) => s.pinched).map(([id]) => id);
+    if (this.filter === 'lock' && this.lockedId === null && seen.size > 0) {
+      this.lockedId = pinchedAll[0] ?? [...seen.keys()][0] ?? null;
+    }
+    const usedIds = new Set(
+      [...seen].filter(([id]) => this.useHand(id, seen)).map(([id]) => id),
+    );
+
+    // calibração: UMA mão (a primeira que COMANDA) — duas mãos misturam amostras
+    const firstUsed = [...seen].find(([id]) => usedIds.has(id))?.[1];
+    if (firstUsed && this.calib) this.collectCalib(firstUsed.ratio, now);
 
     // 2) mãos sumidas além da graça: solta o aperto das que estavam agarrando
     for (const side of this.pinch.prune(now)) {
@@ -383,6 +455,8 @@ export class HandsController {
       this.slowFilters.delete(side);
       this.fastFilters.delete(side);
       this.worldFilters.delete(side);
+      this.sideVote.forget(side);
+      if (this.lockedId === side) this.lockedId = null; // gruda na próxima
       if (this.driver === side) this.driver = null;
       if (this.clutchId === side) {
         this.clutch.reset();
@@ -403,8 +477,9 @@ export class HandsController {
       }
     }
 
-    // 4) piloto: mantém o atual se ainda pinçado; senão, a primeira pinçada
-    const pinchedNow = [...seen].filter(([, s]) => s.pinched).map(([side]) => side);
+    // 4) piloto: mantém o atual se ainda pinçado; senão, a primeira pinçada.
+    // Só mãos que COMANDAM entram (o seletor de uma mão pega só uma delas).
+    const pinchedNow = pinchedAll.filter((id) => usedIds.has(id));
     if (this.driver === null || !pinchedNow.includes(this.driver)) {
       this.driver = pinchedNow[0] ?? null;
     }
@@ -414,7 +489,7 @@ export class HandsController {
     // o esqueleto (ancorado na mira) deslizava junto — seleção errando alvo.
     // A trava congela a "apontada" dos dedos pouco antes da pinça e daí a mira
     // é palma + apontada: os dedos fecham em volta dela, ela não anda.
-    const hoverId = this.driver ?? [...seen.keys()][0] ?? null;
+    const hoverId = this.driver ?? [...usedIds][0] ?? null;
     let cursorPoint: HandPoint | null = null;
     const hover = hoverId !== null ? seen.get(hoverId) : undefined;
     if (hover && hover.mir.length >= 10) {
@@ -446,8 +521,9 @@ export class HandsController {
     }
 
     // 5.5) GESTO DE ZOOM: as DUAS mãos abrindo/juntando (é o "pinça" de toque,
-    // mas com as mãos inteiras). Exige nenhuma pinça fechada: quem está
-    // pinçando está AGARRANDO algo e não pode mexer a vista junto.
+    // mas com as mãos inteiras). Vale com o seletor de uma mão ligado também —
+    // é um gesto deliberado e não disputa a mira. Só exige que NENHUMA das
+    // mãos que comanda esteja pinçando: quem agarrou algo não muda a vista.
     const hands2 = [...seen.values()];
     if (seen.size === 2 && pinchedNow.length === 0) {
       const a = midOf(hands2[0].mir, 0, 9);
@@ -471,6 +547,8 @@ export class HandsController {
       pinched: s.pinched,
       cursor: id === hoverId,
       size: Number.isFinite(s.size) && s.size > 0 ? s.size : HAND_REF,
+      // as mãos que o seletor ignora aparecem apagadas (o professor vê por quê)
+      used: usedIds.has(id),
     }));
     this.draw = {
       hands: drawHands,
@@ -485,6 +563,9 @@ export class HandsController {
       cursor: cursorPoint,
       mira: this.clutch.isFrozen ? 'travada' : 'livre',
       prof: hover ? (hover.hasWorld ? '3D' : '2D') : '–',
+      filter: this.filter,
+      handSide: hover?.handSide ?? '–',
+      ignored: seen.size - usedIds.size,
       mode: this.tracker.usingVideoCallback ? 'rVFC' : 'rAF',
       calibrating: this.calib
         ? { phase: this.calib.phase, leftMs: Math.max(0, this.calib.until - now) }

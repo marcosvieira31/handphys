@@ -101,8 +101,14 @@ export function HandsLayer() {
         const ref = hand.cursor && c ? c : tipMid(pts);
         const f = handFrame(pts, ref, W, H, radiusForSize(hand.size, HAND_RADIUS_PX));
         if (!f) continue;
-        ctx.strokeStyle = hand.pinched ? '#3fb950' : 'rgba(88,166,255,0.85)';
-        ctx.lineWidth = 2;
+        // fora do seletor de uma mão => apagada (o professor vê que está ali,
+        // mas que não comanda nada)
+        ctx.strokeStyle = !hand.used
+          ? 'rgba(139,148,158,0.38)'
+          : hand.pinched
+            ? '#3fb950'
+            : 'rgba(88,166,255,0.85)';
+        ctx.lineWidth = hand.used ? 2 : 1.5;
         ctx.beginPath();
         for (const [a, b] of CONNECTIONS) {
           const pa = f.project(pts[a]);

@@ -1,5 +1,19 @@
 import { useCallback } from 'react';
-import { hands, useHandsStatus } from '../hands/controller';
+import { hands, useHandsStatus, type HandFilter } from '../hands/controller';
+
+const FILTERS: HandFilter[] = ['auto', 'right', 'left', 'lock'];
+const FILTER_TEXT: Record<HandFilter, string> = {
+  auto: 'Qualquer',
+  right: 'Direita',
+  left: 'Esquerda',
+  lock: 'Travar',
+};
+const FILTER_HINT: Record<HandFilter, string> = {
+  auto: 'Qualquer mão vista comanda o cursor e a pinça.',
+  right: 'Só a mão DIREITA comanda (o lado sai de um voto entre as últimas amostras, não do rótulo que troca sozinho).',
+  left: 'Só a mão ESQUERDA comanda.',
+  lock: 'Gruda na mão que estiver em uso e ignora as outras — não precisa acertar direita/esquerda.',
+};
 
 /**
  * Painel das mãos (Fase 2b): liga/desliga a câmera, mostra estado, calibra a
@@ -29,7 +43,9 @@ export function HandsPanel() {
             quadro 2D, na bancada 3D e nos botões da tela (a pinça clica neles).{' '}
             <strong>Duas mãos</strong> abrindo e juntando dão zoom (ou os botões −/%/+ no canto).
             O esqueleto fica maior quando a mão se aproxima da câmera. A cena mostra só o
-            esqueleto da mão, nunca o vídeo.
+            esqueleto da mão, nunca o vídeo. Com a câmera ligada, <strong>Mão que comanda</strong>{' '}
+            restringe o cursor e a pinça a UMA mão só (direita, esquerda ou travar na que estiver
+            em uso) — a outra aparece apagada e não comanda nada.
           </p>
         </>
       )}
@@ -56,6 +72,18 @@ export function HandsPanel() {
               </span>
             </li>
             <li>
+              Comandando:{' '}
+              <strong>
+                {st.handSide === 'right' ? 'direita' : st.handSide === 'left' ? 'esquerda' : '…'}
+              </strong>
+              {st.ignored > 0 && (
+                <span title="Fora do seletor de uma mão: aparecem apagadas e não comandam nada.">
+                  {' · '}
+                  {st.ignored} {st.ignored === 1 ? 'mão ignorada' : 'mãos ignoradas'}
+                </span>
+              )}
+            </li>
+            <li>
               Limiar da pinça: {st.threshold.toFixed(2)}
               {st.ratio !== null && (
                 <>
@@ -78,6 +106,22 @@ export function HandsPanel() {
             )}
             {st.lastCalib && <li>Última calibração: {st.lastCalib}</li>}
           </ul>
+          <div className="hands-filter" role="group" aria-label="Mão que comanda">
+            <span>Mão que comanda</span>
+            {FILTERS.map((f) => (
+              <button
+                key={f}
+                type="button"
+                className={`ghost${st.filter === f ? ' active' : ''}`}
+                data-hand={`hand:${f}`}
+                title={FILTER_HINT[f]}
+                aria-pressed={st.filter === f}
+                onClick={() => hands.setFilter(f)}
+              >
+                {FILTER_TEXT[f]}
+              </button>
+            ))}
+          </div>
           {st.calibrating ? (
             <p className="hint">
               Mostre UMA mão para a câmera.{' '}

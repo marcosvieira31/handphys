@@ -34,6 +34,14 @@ function blob(side: string, cx: number, cy: number): FrameHand {
   return { side, pts, world: null };
 }
 
+/** A mesma mão compacta, mas com os dedos JÁ FECHADOS (razão ~0,25). */
+function blobPinched(cx: number, cy: number, side = 'Left'): FrameHand {
+  const h = blob(side, cx, cy);
+  h.pts[4] = { x: cx + 0.01, y: cy + 0.005, z: 0 };
+  h.pts[8] = { x: cx + 0.01, y: cy - 0.005, z: 0 };
+  return h;
+}
+
 function resetDoc() {
   useEditor.setState({
     doc: {
@@ -55,9 +63,11 @@ function resetDoc() {
   });
 }
 
-// costura de teste: mira fixa (sem DOM) na vista 2d
+// costura de teste: mira fixa (sem DOM) na vista 2d + seletor no automático
+// (o filtro persiste em localStorage e contaminaria os testes seguintes)
 function wireUp(): HandsController {
   const ctl = new HandsController();
+  ctl.setFilter('auto');
   ctl.bindSlot('2d', toCell);
   return ctl;
 }
@@ -342,5 +352,125 @@ describe('HandsController sem câmera (ingest)', () => {
     const a = perto.drawFrame().hands[0]?.size ?? 0;
     const b = longe.drawFrame().hands[0]?.size ?? 0;
     expect(a).toBeGreaterThan(b * 2);
+  });
+
+  it('seletor em DIREITA: a mão esquerda não comanda nada', () => {
+    const ctl = wireUp();
+    ctl.setFilter('right');
+    let now = 0;
+    const feed = (hs: FrameHand[], n = 6) => {
+      for (let i = 0; i < n; i++) {
+        now += 33;
+        ctl.ingest(hs, 5, now);
+      }
+    };
+    // a ESQUERDA pinça em cima do terminal da bateria: nada pode acontecer
+    feed([hand('Left', 0.8, 0.8334)]);
+    expect(useEditor.getState().draft).toBeNull();
+    expect(ctl.getSnapshot().pinched).toEqual([]); // pinçou, mas não comanda
+    expect(ctl.getSnapshot().handSide).toBe('–');
+    // a DIREITA faz o MESMO gesto: aí sim
+    feed([hand('Right', 0.8, 0.8334)]);
+    expect(useEditor.getState().draft).not.toBeNull();
+    expect(ctl.getSnapshot().pinched).toEqual(['Right']);
+    expect(ctl.getSnapshot().handSide).toBe('right');
+  });
+
+  it('seletor em ESQUERDA inverte: a direita é a que é ignorada', () => {
+    const ctl = wireUp();
+    ctl.setFilter('left');
+    let now = 0;
+    const feed = (hs: FrameHand[], n = 6) => {
+      for (let i = 0; i < n; i++) {
+        now += 33;
+        ctl.ingest(hs, 5, now);
+      }
+    };
+    feed([hand('Right', 0.8, 0.8334)]);
+    expect(useEditor.getState().draft).toBeNull();
+    feed([hand('Left', 0.8, 0.8334)]);
+    expect(useEditor.getState().draft).not.toBeNull();
+  });
+
+  it('modo TRAVAR: gruda na primeira mão; a outra, mesmo pinçando, não comanda', () => {
+    const ctl = wireUp();
+    ctl.setFilter('lock');
+    let now = 0;
+    const feed = (hs: FrameHand[], n = 6) => {
+      for (let i = 0; i < n; i++) {
+        now += 33;
+        ctl.ingest(hs, 5, now);
+      }
+    };
+    // ABERTA com o ponto médio das pontas EXATAMENTE onde vai ficar a pinça
+    // (é o que a mão real faz: os dedos fecham em volta do alvo — se a pose
+    // mudasse de lugar, a trava de mira congelaria o apontar no meio do salto)
+    feed([hand('Right', 0.7, 0.9334), blob('Left', 0.2, 0.8)]);
+    expect(ctl.getSnapshot().ignored).toBe(1);
+    // a IGNORADA passa a pinçar: o store não pode mexer
+    feed([hand('Right', 0.7, 0.9334), blobPinched(0.2, 0.8)]);
+    expect(useEditor.getState().draft).toBeNull();
+    expect(useEditor.getState().grip).toBeNull();
+    expect(ctl.getSnapshot().pinched).toEqual([]);
+    // a grudada pinça no terminal da bateria: aí sim agarra
+    feed([hand('Right', 0.8, 0.8334), blobPinched(0.2, 0.8)]);
+    expect(useEditor.getState().draft).not.toBeNull();
+  });
+
+  it('trocar o seletor solta o que a mão estava segurando', () => {
+    const ctl = wireUp();
+    let now = 0;
+    for (let i = 0; i < 6; i++) {
+      now += 33;
+      ctl.ingest([hand('Right', 0.5667, 0.6)], 5, now);
+    }
+    expect(useEditor.getState().grip?.id).toBe('lamp1');
+    ctl.setFilter('right');
+    expect(useEditor.getState().grip).toBeNull();
+    expect(ctl.getSnapshot().filter).toBe('right');
+  });
+
+  it('status diz o filtro, quem comanda e quantas mãos foram ignoradas', () => {
+    const ctl = wireUp();
+    let now = 0;
+    const duas = () => [blob('Right', 0.5, 0.3), blob('Left', 0.5, 0.7)];
+    for (let i = 0; i < 3; i++) {
+      now += 33;
+      ctl.ingest(duas(), 5, now);
+    }
+    expect(ctl.getSnapshot().filter).toBe('auto');
+    expect(ctl.getSnapshot().ignored).toBe(0);
+    ctl.setFilter('left');
+    for (let i = 0; i < 3; i++) {
+      now += 33;
+      ctl.ingest(duas(), 5, now);
+    }
+    const s = ctl.getSnapshot();
+    expect(s.filter).toBe('left');
+    expect(s.ignored).toBe(1);
+    expect(s.handSide).toBe('left');
+    // e o quadro de desenho marca a ignorada (a camada desenha apagada)
+    const usadas = ctl.drawFrame().hands.map((h) => h.used);
+    expect(usadas).toEqual([false, true]);
+  });
+
+  it('com o seletor de uma mão, as DUAS mãos ainda dão zoom', () => {
+    const ctl = wireUp();
+    ctl.setFilter('right');
+    let now = 0;
+    const pair = (gap: number) => [
+      blob('Right', 0.5 - gap / 2, 0.35),
+      blob('Left', 0.5 + gap / 2, 0.75),
+    ];
+    const feed = (hs: FrameHand[], n = 3) => {
+      for (let i = 0; i < n; i++) {
+        now += 33;
+        ctl.ingest(hs, 5, now);
+      }
+    };
+    feed(pair(0.1));
+    for (let g = 0.15; g <= 0.3; g += 0.05) feed(pair(g));
+    expect(useEditor.getState().zoom).toBeGreaterThan(1);
+    expect(ctl.getSnapshot().ignored).toBe(1);
   });
 });

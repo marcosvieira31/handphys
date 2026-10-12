@@ -78,27 +78,18 @@ body.editor-page {
 /* ---------- corpo ---------- */
 .body {
   display: grid;
-  grid-template-columns: 216px 1fr 320px;
+  grid-template-columns: minmax(0, 1fr) 320px;
   flex: 1;
   min-height: 0;
 }
 
-.palette,
 .inspector {
   background: var(--panel);
   padding: 12px;
   overflow-y: auto;
-}
-
-.palette {
-  border-right: 1px solid var(--line);
-}
-
-.inspector {
   border-left: 1px solid var(--line);
 }
 
-.palette h2,
 .inspector h2,
 .inspector h3 {
   margin: 0 0 6px;
@@ -130,67 +121,104 @@ body.editor-page {
   color: var(--dim);
 }
 
-/* ---------- paleta ---------- */
-.palette ul {
-  list-style: none;
-  margin: 0 0 18px;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.palette-item {
+/* ---------- dock: as ferramentas DENTRO da bancada ----------
+   Paleta, vista (2D/3D) e zoom moram na faixa embaixo do quadro, no centro
+   da tela: com as mãos o alcance confortável é justamente o que a câmera
+   enxerga bem — item nos cantos exigia braço estendido para DEPOIS trazê-lo
+   ao quadro; aqui pegar e posicionar é o mesmo movimento. Alvos grandes:
+   a pinça "clica" num [data-hand] como um clique do mouse. */
+.dock {
+  flex: 0 0 auto;
   display: flex;
   align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
   gap: 8px;
-  width: 100%;
-  padding: 5px 7px;
+  padding: 6px 8px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+
+.dock-items {
+  flex: 0 0 auto; /* não encolhe: o wrap é do DOCK, não um "6+1" feio dentro da lista */
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 4px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.dock-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0;
+  min-width: 64px;
+  min-height: 56px;
+  padding: 4px 6px;
   background: transparent;
-  border: 1px solid transparent;
-  border-radius: 6px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
   color: var(--ink);
   cursor: pointer;
-  text-align: left;
   font: inherit;
 }
 
-.palette-item:hover {
+.dock-item:hover {
   background: #1c2128;
-  border-color: var(--line);
+  border-color: var(--accent);
 }
 
-.palette-item.active {
+.dock-item.active {
   background: rgba(88, 166, 255, 0.12);
   border-color: var(--accent);
 }
 
-.palette-item .meta {
-  display: flex;
-  flex-direction: column;
-  line-height: 1.25;
-}
-
-.palette-item strong {
-  font-size: 13px;
+.dock-item strong {
+  font-size: 12px;
   font-weight: 600;
+  line-height: 1.2;
 }
 
-.palette-item em {
+.dock-item em {
   font-style: normal;
-  font-size: 11px;
+  font-size: 10px;
   color: var(--dim);
+  line-height: 1.2;
+}
+
+.dock-sep {
+  width: 1px;
+  align-self: stretch;
+  min-height: 40px;
+  background: var(--line);
 }
 
 /* ---------- quadro ---------- */
 .canvas {
   position: relative;
   display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+}
+
+/* Faixa que isola a vista (2D/3D) do dock: altura definida pelo flex, para o
+ * quadrado do quadro caber nela sem empurrar o dock. O piso garante que, em
+ * janela baixa, o quadro encolha junto com o dock em vez de sumir. */
+.canvas-view {
+  flex: 1;
+  min-height: 120px;
+  display: flex;
   align-items: center;
   justify-content: center;
-  padding: 14px;
-  min-width: 0;
-  overflow: auto;
 }
 
 .schematic {
@@ -232,35 +260,53 @@ body.editor-page {
   pointer-events: none;
 }
 
-/* ---------- zoom: botões flutuantes sobre o quadro (e sobre a bancada 3D) --
+/* ---------- zoom: controles no dock ----------
    A roda do mouse, o gesto de pinça no toque e o afastar/juntar as DUAS mãos
-   fazem o mesmo efeito por outros caminhos — aqui fica o controle explícito. */
-.zoom-bar {
-  position: absolute;
-  right: 12px;
-  bottom: 12px;
-  z-index: 6;
+   fazem o mesmo efeito por outros caminhos — aqui fica o controle explícito,
+   ao lado da paleta, para a mira não precisar viajar até o canto da tela. */
+.dock-zoom {
   display: flex;
   align-items: center;
   gap: 5px;
-  padding: 4px;
-  background: rgba(13, 17, 23, 0.86);
-  border: 1px solid var(--line);
-  border-radius: 8px;
 }
 
-.zoom-bar button {
-  min-width: 32px;
-  height: 28px;
-  padding: 0 8px;
-  font-size: 15px;
+.dock-zoom button {
+  min-width: 36px;
+  height: 36px;
+  padding: 0 7px;
+  font-size: 16px;
   line-height: 1;
 }
 
-.zoom-bar button.zoom-pct {
-  min-width: 56px;
-  font-size: 12px;
+.dock-zoom button.zoom-pct {
+  min-width: 64px;
+  font-size: 11px;
   font-variant-numeric: tabular-nums;
+}
+
+/* o 2D/3D do dock em alvo de mão, mas enxuto para caber numa linha só */
+.dock .seg button {
+  min-width: 36px;
+  height: 36px;
+  padding: 0 8px;
+}
+
+/* janela baixa (notebook de 1024×600, metade de tela): o dock abre mão do
+ * valor impresso e aperta para o QUADRO nunca ser o que encolha primeiro. */
+@media (max-height: 620px) {
+  .dock {
+    gap: 6px;
+    padding: 4px 6px;
+  }
+
+  .dock-item {
+    min-height: 46px;
+    padding: 3px 5px;
+  }
+
+  .dock-item em {
+    display: none;
+  }
 }
 
 /* ---------- mãos (Fase 2b): esqueleto + mira por toda a janela ---------- */

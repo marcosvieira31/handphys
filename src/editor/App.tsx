@@ -3,7 +3,7 @@ import { readCircuit } from '../core/netlist';
 import { EXAMPLES } from './examples';
 import { HandsLayer } from './HandsLayer';
 import { Inspector } from './Inspector';
-import { Palette } from './Palette';
+import { Dock } from './Dock';
 import { MirrorToggle } from './MirrorToggle';
 import { Schematic } from './Schematic';
 import { SceneView } from './SceneView';
@@ -16,7 +16,6 @@ export function App({ shared = 'none' }: { shared?: 'none' | 'ok' | 'bad' }) {
   const doc = useEditor((s) => s.doc);
   const colorByVoltage = useEditor((s) => s.colorByVoltage);
   const view = useEditor((s) => s.view);
-  const zoom = useEditor((s) => s.zoom);
   const { clear, load, setColorByVoltage, undo, rotate, removeSelected, setView } = useEditor();
   const reading = readCircuit(doc);
 
@@ -50,26 +49,6 @@ export function App({ shared = 'none' }: { shared?: 'none' | 'ok' | 'bad' }) {
         <h1>handphys — editor de circuitos</h1>
         <nav>
           <a href="./">Voltar</a>
-          <span className="seg" role="group" aria-label="Vista">
-            <button
-              type="button"
-              className={view === '2d' ? 'ghost active' : 'ghost'}
-              onClick={() => setView('2d')}
-              title="Esquemático 2D (tecla V)"
-              data-hand="view:2d"
-            >
-              2D
-            </button>
-            <button
-              type="button"
-              className={view === '3d' ? 'ghost active' : 'ghost'}
-              onClick={() => setView('3d')}
-              title="Bancada 3D (tecla V)"
-              data-hand="view:3d"
-            >
-              3D
-            </button>
-          </span>
           <label className="toggle">
             <input
               type="checkbox"
@@ -110,45 +89,15 @@ export function App({ shared = 'none' }: { shared?: 'none' | 'ok' | 'bad' }) {
         </nav>
       </header>
       <div className="body">
-        <Palette />
         <main className="canvas">
-          {view === '2d' ? (
-            <Schematic reading={reading} />
-          ) : (
-            <SceneView key="scene3d" reading={reading} />
-          )}
-          <div className="zoom-bar" role="group" aria-label="Zoom">
-            <button
-              type="button"
-              className="ghost"
-              data-hand="zoom:out"
-              aria-label="Reduzir o zoom"
-              title="Reduzir (−)"
-              onClick={() => applyZoom(1 / 1.25)}
-            >
-              −
-            </button>
-            <button
-              type="button"
-              className="ghost zoom-pct"
-              data-hand="zoom:reset"
-              aria-label={view === '2d' ? 'Caber o quadro inteiro' : 'Enquadrar a bancada'}
-              title="Caber tudo / enquadrar de novo (0)"
-              onClick={applyZoomReset}
-            >
-              {view === '2d' ? `${Math.round(zoom * 100)}%` : 'enquadrar'}
-            </button>
-            <button
-              type="button"
-              className="ghost"
-              data-hand="zoom:in"
-              aria-label="Ampliar o zoom"
-              title="Ampliar (+)"
-              onClick={() => applyZoom(1.25)}
-            >
-              +
-            </button>
+          <div className="canvas-view">
+            {view === '2d' ? (
+              <Schematic reading={reading} />
+            ) : (
+              <SceneView key="scene3d" reading={reading} />
+            )}
           </div>
+          <Dock />
         </main>
         <Inspector reading={reading} />
       </div>

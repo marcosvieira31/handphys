@@ -156,9 +156,9 @@ export function shareUrl(doc: CircuitDoc, base?: string): string {
   return `${base ?? pageBase()}?c=${encodeDoc(doc)}`;
 }
 
-/** Mesmo link, apontando para outro arquivo (editor ↔ viewer do celular). */
-export function swapPage(url: string, page: 'editor.html' | 'cardboard.html'): string {
-  return url.replace(/\/(editor|cardboard)\.html/, `/${page}`);
+/** Mesmo link, apontando para outro arquivo (editor ↔ viewer ↔ espelho). */
+export function swapPage(url: string, page: 'editor.html' | 'cardboard.html' | 'mirror.html'): string {
+  return url.replace(/\/(editor|cardboard|mirror)\.html/, `/${page}`);
 }
 
 /** O payload `?c=` da query (ou null se não veio link de circuito). */

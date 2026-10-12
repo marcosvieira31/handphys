@@ -94,17 +94,31 @@ Feito (Fase 4, primeiro passo):
   funciona entre abas/janelas do mesmo PC (projetor ligado no PC do professor).
 - Protocolo plugável em [`src/mirror/`](../src/mirror/): `protocol.ts` (estado completo,
   compacto pelo codec do link), `transmitter.ts` (quem conduz), `follower.ts` (o espelho),
-  `channel.ts` (o transporte).
+  `channel.ts` (transporte local) e `peer.ts` (transporte pela rede).
+- **Por que um sinalizador público (PeerJS)**: oferta e resposta do WebRTC precisam
+  viajar nos dois sentidos — um QR só resolve um sentido e o QR de resposta sairia da
+  tela pequena; relé `ws://` na rede local seria **bloqueado como conteúdo misto** pela
+  página HTTPS. Com PeerJS só o *aperto de mão* passa pela internet; depois de pareados,
+  os dados andam de aparelho a aparelho, dentro da rede da sala.
 
-Falta para os **aparelhos diferentes na mesma rede** (celular do aluno ↔ projeção):
-- **Sinalização sem servidor não fecha.** Oferta e resposta do WebRTC precisam viajar nos
-  dois sentidos; um QR só resolve um sentido (projetor mostra → celular lê) e o QR de
-  resposta sairia da tela pequena (módulos de ~0,7 mm, fora de alcance de webcam). Relé
-  `ws://` na rede local é **bloqueado como conteúdo misto** pela página HTTPS.
-- Caminhos possíveis: (a) serviço público de sinalização (ex.: PeerJS) — só o aperto de
-  mão passa pela internet, a mídia fica na rede da sala; (b) QR de ida e volta exigindo
-  webcam no PC da projeção; (c) servidor próprio com TLS. A escolha é do piloto; o
-  protocolo e a tela de observação não mudam, só o `channel.ts`.
+Feito (Fase 4, segundo passo) — **sala na rede, aparelhos diferentes**:
+- **`peer.ts`**: sala com código curto de 5 caracteres sem letra ambígua
+  (prefixo `handphys-`), `openRoom`/`joinRoom`/`mirrorUrl`/`roomFromSearch`; código já
+  em uso → sorteia outro (3 tentativas); quem chega antes da sala re-tenta a cada 4 s
+  por ~3 min. `peerjs` só é carregado por `import()` dinâmico — chunk separado, fora do
+  carregamento normal do editor.
+- **No editor**: cartão *Sala na rede* com **QR + código**, contagem de telas
+  (local + rede) e *Encerrar sala*. **No espelho**: `mirror.html?sala=XXXXX` (o QR do
+  cartão já aponta para cá) entra na sala e mostra chip de status no topo
+  (`sala XXXXX` quando conectado, `procurando a sala…` enquanto re-tenta).
+- Verificado: **7 testes com rede falsa** (`peer.test.ts` — entra, recebe o estado ao
+  vivo, várias telas ao mesmo tempo, chega antes da sala, encerra) e sinalização real
+  em navegador (par registrado no sinalizador, oferta/SDP trocados entre abas).
+- **Falta**: validar o canal de dados em **duas máquinas reais** — o navegador do
+  ambiente de automação reúne **zero candidatos ICE** (WebRTC bloqueado nele: nem
+  host, nem STUN, nem TURN/TLS), então o aperto de mão só pode ser comprovado em
+  navegador normal. O espelho da mesma máquina (BroadcastChannel) continua cobrindo a
+  projeção ligada no PC do professor.
 
 ## 6. Riscos e mitigações
 

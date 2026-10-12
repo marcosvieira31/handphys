@@ -120,24 +120,26 @@ Feito (Fase 4, segundo passo) — **sala na rede, aparelhos diferentes**:
   navegador normal. O espelho da mesma máquina (BroadcastChannel) continua cobrindo a
   projeção ligada no PC do professor.
 
-### Bancada expandida (dock) — onde está
+### Bancada expandida (trilhos laterais) — onde está
 
 Feito (refino de uso com as mãos):
-- **O que mudou**: a paleta lateral (componentes + Conectar), o alternador `2D/3D` e o
-  zoom `− / % / +` saíram da sidebar e da barra superior e passaram a morar no **dock
-  dentro da área de trabalho**, na faixa embaixo do quadro. Motivo: com hand tracking o
-  alcance confortável é o CENTRO da tela (o que a câmera enxerga bem) — alcançar os
-  cantos exigia braço estendido e ainda trazer o item de lá para o quadro; agora pegar e
-  posicionar é o mesmo movimento, e o quadro ganhou a largura da antiga sidebar.
+- **O que mudou**: a paleta lateral original (componentes + Conectar), o alternador `2D/3D`
+  e o zoom `− / % / +` passaram a morar em **trilhos verticais dos dois lados do quadro**
+  ([`src/editor/Rails.tsx`](../src/editor/Rails.tsx)): componentes à esquerda, vista/zoom
+  à direita. Primeiro ficaram numa faixa embaixo, depois o usuário apontou o problema real:
+  o **limite INFERIOR da câmera** é o mais perto do corpo — descer o braço perde o
+  rastreio do hand tracking justamente onde o item está; na horizontal a webcam rende
+  muito mais. Lateral também devolve ao quadro a altura toda (os trilhos não consomem
+  altura) e ganha a largura da antiga sidebar.
 - **Sem quebrar a pinça**: os alvos mantêm os MESMOS `data-hand`
-  (`kind:*`, `wire`, `view:2d/3d`, `zoom:*`), então a pinça clica como sempre; o dock
-  fica FORA do retângulo do SVG, então a mira não aperta o quadro por baixo do botão.
-- **Alvo de mão**: itens ≥ 46 px de altura; em janela baixa (`max-height: 620px`) o dock
-  esconde os valores impressos antes de o quadro encolher (piso de 120 px no
-  `.canvas-view`).
+  (`kind:*`, `wire`, `view:2d/3d`, `zoom:*`), então a pinça clica como sempre; os trilhos
+  ficam FORA do retângulo do SVG, então a mira não aperta o quadro por baixo do botão.
+- **Alvo de mão**: itens ≥ 46 px de altura; em janela baixa (`max-height: 620px`) o trilho
+  esconde os valores impressos e, se ainda não couber, vira uma 2ª coluna
+  (`flex-wrap`) — nunca estoura nem rola.
 - Verificado: `tsc` limpo, 162 testes, build ok; no navegador (dev) — clicar no item arma
-  `placing`, clique no quadro posiciona (célula 15,15), `2D/3D`, zoom e modo fio
-  funcionam pelo dock, ida e volta 2D↔3D sem erros de console.
+  `placing`, aperto no quadro posiciona (célula 15,15), `2D/3D`, zoom pelo trilho direito,
+  ida e volta 2D↔3D sem erros de console.
 
 ## 6. Riscos e mitigações
 

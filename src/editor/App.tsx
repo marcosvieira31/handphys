@@ -3,7 +3,7 @@ import { readCircuit } from '../core/netlist';
 import { EXAMPLES } from './examples';
 import { HandsLayer } from './HandsLayer';
 import { Inspector } from './Inspector';
-import { Dock } from './Dock';
+import { ItemsRail, ViewRail } from './Rails';
 import { MirrorToggle } from './MirrorToggle';
 import { Schematic } from './Schematic';
 import { SceneView } from './SceneView';
@@ -90,6 +90,7 @@ export function App({ shared = 'none' }: { shared?: 'none' | 'ok' | 'bad' }) {
       </header>
       <div className="body">
         <main className="canvas">
+          <ItemsRail />
           <div className="canvas-view">
             {view === '2d' ? (
               <Schematic reading={reading} />
@@ -97,7 +98,7 @@ export function App({ shared = 'none' }: { shared?: 'none' | 'ok' | 'bad' }) {
               <SceneView key="scene3d" reading={reading} />
             )}
           </div>
-          <Dock />
+          <ViewRail />
         </main>
         <Inspector reading={reading} />
       </div>

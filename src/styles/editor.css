@@ -121,37 +121,28 @@ body.editor-page {
   color: var(--dim);
 }
 
-/* ---------- dock: as ferramentas DENTRO da bancada ----------
-   Paleta, vista (2D/3D) e zoom moram na faixa embaixo do quadro, no centro
-   da tela: com as mãos o alcance confortável é justamente o que a câmera
-   enxerga bem — item nos cantos exigia braço estendido para DEPOIS trazê-lo
-   ao quadro; aqui pegar e posicionar é o mesmo movimento. Alvos grandes:
-   a pinça "clica" num [data-hand] como um clique do mouse. */
-.dock {
+/* ---------- trilhos: as ferramentas aos LADOS do quadro ----------
+   Componentes à esquerda, vista/zoom à direita — e NUNCA embaixo: o limite
+   INFERIOR da câmera é o mais perto (descer o braço perde o rastreio do
+   hand tracking justamente onde o item está); na horizontal a webcam rende
+   muito mais. Alvos grandes: a pinça "clica" num [data-hand] como um clique. */
+.rail {
   flex: 0 0 auto;
   display: flex;
+  flex-direction: column;
+  flex-wrap: wrap; /* janela baixa: vira uma 2ª coluna em vez de estourar */
+  align-content: center;
   align-items: center;
   justify-content: center;
-  flex-wrap: wrap;
-  gap: 8px;
-  padding: 6px 8px;
+  gap: 4px;
+  max-height: 100%;
+  padding: 6px;
   background: var(--panel);
   border: 1px solid var(--line);
   border-radius: 10px;
 }
 
-.dock-items {
-  flex: 0 0 auto; /* não encolhe: o wrap é do DOCK, não um "6+1" feio dentro da lista */
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: 4px;
-  list-style: none;
-  margin: 0;
-  padding: 0;
-}
-
-.dock-item {
+.rail-item {
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -168,41 +159,33 @@ body.editor-page {
   font: inherit;
 }
 
-.dock-item:hover {
+.rail-item:hover {
   background: #1c2128;
   border-color: var(--accent);
 }
 
-.dock-item.active {
+.rail-item.active {
   background: rgba(88, 166, 255, 0.12);
   border-color: var(--accent);
 }
 
-.dock-item strong {
+.rail-item strong {
   font-size: 12px;
   font-weight: 600;
   line-height: 1.2;
 }
 
-.dock-item em {
+.rail-item em {
   font-style: normal;
   font-size: 10px;
   color: var(--dim);
   line-height: 1.2;
 }
 
-.dock-sep {
-  width: 1px;
-  align-self: stretch;
-  min-height: 40px;
-  background: var(--line);
-}
-
-/* ---------- quadro ---------- */
+/* ---------- quadro (entre os dois trilhos) ---------- */
 .canvas {
   position: relative;
   display: flex;
-  flex-direction: column;
   gap: 10px;
   padding: 12px;
   min-width: 0;
@@ -210,9 +193,8 @@ body.editor-page {
   overflow: auto;
 }
 
-/* Faixa que isola a vista (2D/3D) do dock: altura definida pelo flex, para o
- * quadrado do quadro caber nela sem empurrar o dock. O piso garante que, em
- * janela baixa, o quadro encolha junto com o dock em vez de sumir. */
+/* Faixa que isola a vista (2D/3D) dos trilhos: o quadrado do quadro cresce
+ * aqui em largura E altura — os trilhos não consomem altura do quadro. */
 .canvas-view {
   flex: 1;
   min-height: 120px;
@@ -260,51 +242,52 @@ body.editor-page {
   pointer-events: none;
 }
 
-/* ---------- zoom: controles no dock ----------
+/* ---------- zoom: coluna no trilho direito ----------
    A roda do mouse, o gesto de pinça no toque e o afastar/juntar as DUAS mãos
    fazem o mesmo efeito por outros caminhos — aqui fica o controle explícito,
-   ao lado da paleta, para a mira não precisar viajar até o canto da tela. */
-.dock-zoom {
+   junto da vista, sem a mira precisar viajar até o canto da tela. */
+.rail-zoom {
   display: flex;
-  align-items: center;
-  gap: 5px;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
 }
 
-.dock-zoom button {
-  min-width: 36px;
-  height: 36px;
-  padding: 0 7px;
+.rail-zoom button {
+  min-width: 56px;
+  height: 38px;
+  padding: 0 6px;
   font-size: 16px;
   line-height: 1;
 }
 
-.dock-zoom button.zoom-pct {
-  min-width: 64px;
+.rail-zoom button.zoom-pct {
+  min-width: 56px;
   font-size: 11px;
   font-variant-numeric: tabular-nums;
 }
 
-/* o 2D/3D do dock em alvo de mão, mas enxuto para caber numa linha só */
-.dock .seg button {
-  min-width: 36px;
-  height: 36px;
-  padding: 0 8px;
+/* o 2D/3D no topo do trilho, em alvo de mão mas enxuto */
+.rail .seg button {
+  min-width: 34px;
+  height: 34px;
+  padding: 0 6px;
 }
 
-/* janela baixa (notebook de 1024×600, metade de tela): o dock abre mão do
- * valor impresso e aperta para o QUADRO nunca ser o que encolha primeiro. */
+/* janela baixa (notebook de 1024×600, metade de tela): o trilho abre mão do
+ * valor impresso antes de precisar de mais colunas. */
 @media (max-height: 620px) {
-  .dock {
-    gap: 6px;
-    padding: 4px 6px;
+  .rail {
+    gap: 3px;
+    padding: 4px;
   }
 
-  .dock-item {
+  .rail-item {
     min-height: 46px;
     padding: 3px 5px;
   }
 
-  .dock-item em {
+  .rail-item em {
     display: none;
   }
 }

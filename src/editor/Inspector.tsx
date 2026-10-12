@@ -131,6 +131,7 @@ export function Inspector({ reading }: { reading: Reading }) {
             <label className="field row">
               <input
                 type="checkbox"
+                data-hand="switch-toggle"
                 checked={!!selected.closed}
                 onChange={() => toggleSwitch(selected.id)}
               />
@@ -139,15 +140,16 @@ export function Inspector({ reading }: { reading: Reading }) {
           )}
           <div className="actions">
             {selected.kind !== 'ground' && (
-              <button type="button" onClick={() => rotate(selected.id)}>
+              <button type="button" data-hand="insp-rotate" onClick={() => rotate(selected.id)}>
                 Girar 90°
               </button>
             )}
-            <button type="button" className="ghost" onClick={removeSelected}>
+            <button type="button" className="ghost" data-hand="insp-delete" onClick={removeSelected}>
               Excluir
             </button>
           </div>
           <p className="hint">
+            {selected.kind === 'switch' ? 'Clique na chave (sem arrastar) abre/fecha · ' : null}
             Arraste o componente para mover · <kbd>R</kbd> gira · <kbd>Delete</kbd> exclui
           </p>
         </section>

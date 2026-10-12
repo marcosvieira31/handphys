@@ -38,7 +38,9 @@ export interface EditorState {
   selection: Selection | null;
   draft: Draft | null;
   /** Componente segurado (arraste em curso, mouse ou pinça). */
-  grip: { id: string; dx: number; dy: number } | null;
+  /** Componente segurado. `moved` distingue CLIQUE (apertar e soltar sem andar
+   *  = alterna a chave) de ARRASTE (solta depois de mover = só posiciona). */
+  grip: { id: string; dx: number; dy: number; moved: boolean } | null;
   colorByVoltage: boolean;
   /** Vista ativa: o MESMO documento em 2D ou na bancada 3D. */
   view: '2d' | '3d';
@@ -257,7 +259,7 @@ export const useEditor = create<EditorState>((set, get) => ({
       set({
         selection: { kind: 'comp', id: comp.id },
         draft: null,
-        grip: { id: comp.id, dx: comp.x - cell.x, dy: comp.y - cell.y },
+        grip: { id: comp.id, dx: comp.x - cell.x, dy: comp.y - cell.y, moved: false },
       });
       return;
     }
@@ -280,7 +282,8 @@ export const useEditor = create<EditorState>((set, get) => ({
     if (s.grip) s.moveComp(s.grip.id, cell.x + s.grip.dx, cell.y + s.grip.dy);
   },
 
-  /** Solta o aperto: posiciona o item carredado, termina o fio ou larga o componente. */
+  /** Solta o aperto: posiciona o item carredado, termina o fio, alterna a chave
+   *  (clique = apertar e soltar sem andar) ou larga o componente. */
   releaseAt: (cell) => {
     const s = get();
     if (s.modal) return;
@@ -288,7 +291,19 @@ export const useEditor = create<EditorState>((set, get) => ({
       s.place(s.placing, cell); // SOLTOU = posiciona onde a mira estava
       return;
     }
-    if (s.draft) s.endDraft(cell);
+    if (s.draft) {
+      s.endDraft(cell);
+      return;
+    }
+    const g = s.grip;
+    if (g && !g.moved) {
+      const c = s.doc.comps.find((k) => k.id === g.id);
+      if (c?.kind === 'switch') {
+        set({ grip: null }); // solta a mão antes: sem isso a chave fica colada na mira
+        s.toggleSwitch(c.id); // clique na chave (sem arrastar) = abre/fecha
+        return;
+      }
+    }
     set({ grip: null });
   },
 
@@ -307,7 +322,11 @@ export const useEditor = create<EditorState>((set, get) => ({
       ...s.doc,
       comps: s.doc.comps.map((k) => (k.id === id ? moved : k)),
     };
-    set({ doc: reattachWires(doc, moved, before) });
+    // marcar o grip como "andou": soltar depois de mover NÃO vira clique de chave
+    set({
+      doc: reattachWires(doc, moved, before),
+      grip: s.grip && s.grip.id === id ? { ...s.grip, moved: true } : s.grip,
+    });
   },
 
   rotate: (id) => {

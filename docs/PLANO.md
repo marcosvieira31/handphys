@@ -167,7 +167,35 @@ Feito (refino de uso com as mãos, em três passos com o usuário):
   ok; no navegador (dev) — clicar no item arma, apertar PEGA (`carry` + fantasma), levar e
   soltar NA LIXEIRA apaga; item armado solto lá só desarma; clique na lixeira apaga a
   seleção; modo fio sai; `holding` acende/apaga; `2D/3D` e zoom pelos trilhos — 0 erros de
-  console.
+  console. (Depois disto: chave passou a alternar por clique — ver a seção abaixo.)
+
+### Chave: clique na chave abre/fechara — onde está
+
+Feito (relato do usuário: "a chave interruptor não está fechando o circuito"):
+- **O problema não era o modelo**: `buildNetlist` já trata `switch`/`closed` — chave aberta
+  remove o componente do solver e une os dois terminais quando fechada
+  ([`src/core/netlist.ts`](../src/core/netlist.ts)), coberto por teste ("aberta => corrente
+  zero", "fechada => conduz"). O buraco era **afordância**: o único caminho para alternar
+  era o checkbox "Fechada (conduz)" no Inspector — que a **pinça não alcança** (sem
+  `data-hand`) — e **não existia clique na chave no quadro**. Quem montava o circuito e
+  apertava a chave via mouse/pinça via nada acontecer.
+- **Clique na chave = alternar** ([`src/editor/store.ts`](../src/editor/store.ts)): o `grip`
+  ganhou `moved` (`false` no `pressAt`, vira `true` em `moveComp` quando o item anda de
+  verdade); no `releaseAt`, soltar **sem ter andado** num componente `switch` alterna
+  (`toggleSwitch`) e solta a mão — sem isso a chave ficaria colada na mira (pegou no
+  teste). Arrastou e soltou = só posiciona, não alterna. É a MESMA semântica da pinça
+  (apertar e soltar sem andar = clique) e do mouse (pointerdown+up na mesma célula).
+  Fio encostado no terminal continua sendo o primeiro a pegar (apertar perto do terminal
+  puxa fio, não alterna).
+- **Inspector alcançável pela pinça** ([`src/editor/Inspector.tsx`](../src/editor/Inspector.tsx)):
+  o checkbox da chave, "Girar 90°" e "Excluir" ganharam `data-hand`
+  (`switch-toggle`/`insp-rotate`/`insp-delete`) — a pinça clica neles como em qualquer
+  botão da bancada. A dica do Inspector agora ensina "clique na chave (sem arrastar)
+  abre/fecha".
+- Verificado: `tsc` limpo, 168 testes (novo: clique alterna 2×, arrastar não alterna e
+  move, resistor não alterna), build ok; no navegador (dev) — circuito fonte→chave→lâmpada:
+  chave aberta 0 A, clique fecha e a leitura passa a 0,09 A, clique de novo abre; arrastar
+  move sem alternar; checkbox do Inspector alterna; 0 erros de console.
 
 ## 6. Riscos e mitigações
 

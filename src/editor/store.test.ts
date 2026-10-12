@@ -214,6 +214,38 @@ describe('semântica única press/move/release (mouse e pinça)', () => {
     useEditor.getState().trash(); // modo fio sem nada na mão: só sai do modo
     expect(useEditor.getState().wiring).toBe(false);
   });
+
+  it('chave: clique (apertar e soltar sem andar) abre/fechara; arrastar não alterna', () => {
+    const s = useEditor.getState();
+    // troca a lâmpada por uma chave em (12,10)
+    useEditor.setState({
+      doc: { comps: [{ id: 'sw1', kind: 'switch', x: 12, y: 10, rot: 0, value: 0 }], wires: [] },
+    });
+    // 1º clique => fechada
+    s.pressAt({ x: 12, y: 10 });
+    expect(useEditor.getState().grip?.id).toBe('sw1');
+    useEditor.getState().releaseAt({ x: 12, y: 10 });
+    expect(useEditor.getState().doc.comps[0].closed).toBe(true);
+    expect(useEditor.getState().grip).toBeNull();
+    // 2º clique => abre de novo
+    s.pressAt({ x: 12, y: 10 });
+    useEditor.getState().releaseAt({ x: 12, y: 10 });
+    expect(useEditor.getState().doc.comps[0].closed).toBeFalsy();
+    // arrastou => só move (não alterna)
+    s.pressAt({ x: 12, y: 10 });
+    s.moveAt({ x: 10, y: 10 });
+    useEditor.getState().releaseAt({ x: 10, y: 10 });
+    const after = useEditor.getState();
+    expect(after.doc.comps[0]).toMatchObject({ x: 10, y: 10, closed: false });
+    // apertar NEM SEMPRE alterna resistor: clique em resistor comum é só soltar
+    useEditor.setState({
+      doc: { comps: [{ id: 'r1', kind: 'resistor', x: 12, y: 10, rot: 0, value: 100 }], wires: [] },
+    });
+    s.pressAt({ x: 12, y: 10 });
+    useEditor.getState().releaseAt({ x: 12, y: 10 });
+    expect(useEditor.getState().grip).toBeNull();
+    expect(useEditor.getState().doc.comps).toHaveLength(1);
+  });
 });
 
 /**

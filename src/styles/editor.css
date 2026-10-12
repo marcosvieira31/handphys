@@ -554,6 +554,13 @@ button.ghost:hover {
   color: var(--accent);
 }
 
+/* botão ligado (compartilhar aberto, espelho transmitindo) */
+button.ghost.active {
+  background: rgba(88, 166, 255, 0.16);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
 button:disabled {
   opacity: 0.4;
   cursor: not-allowed;

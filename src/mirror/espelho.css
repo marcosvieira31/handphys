@@ -1,0 +1,99 @@
+/* ---------- espelho da sala (mirror.html) ---------- */
+
+body.espelho-page {
+  margin: 0;
+  height: 100vh;
+  overflow: hidden;
+  background: var(--bg);
+  color: var(--ink);
+  font: 15px/1.5 system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+}
+
+.espelho {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+}
+
+.espelho-top {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 16px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--line);
+  flex-wrap: wrap;
+}
+
+.espelho-fill {
+  flex: 1;
+}
+
+.espelho-status {
+  color: var(--dim);
+}
+
+.espelho-cont {
+  color: var(--dim);
+  font-size: 14px;
+}
+
+/* ponto de estado: verde ao vivo, âmbar esperando, vermelho parado */
+.dot {
+  flex: none;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--dim);
+}
+
+.dot.ao-vivo {
+  background: #3fb950;
+  box-shadow: 0 0 0 4px rgba(63, 185, 80, 0.18);
+}
+
+.dot.esperando {
+  background: var(--hot);
+}
+
+.dot.parado {
+  background: var(--err);
+}
+
+/* quadro grande, no mesmo enquadamento de quem conduz */
+.espelho-board {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 1;
+  min-height: 0;
+  padding: 10px;
+  overflow: auto;
+  /* tela de observação: nada aqui é editável — nem toque, nem roda, nem pinça */
+  pointer-events: none;
+}
+
+/* leituras em letra de projeção: a última fileira tem que ler */
+.espelho-read {
+  padding: 10px 16px 14px;
+  max-height: 42vh;
+  overflow: auto;
+  background: var(--panel);
+  border-top: 1px solid var(--line);
+}
+
+.espelho-read .hint,
+.espelho-read .notice {
+  margin: 0;
+  font-size: 16px;
+}
+
+.readings.big {
+  font-size: 20px;
+}
+
+.readings.big th,
+.readings.big td {
+  padding: 8px 12px;
+}

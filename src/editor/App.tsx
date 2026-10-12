@@ -4,6 +4,7 @@ import { EXAMPLES } from './examples';
 import { HandsLayer } from './HandsLayer';
 import { Inspector } from './Inspector';
 import { Palette } from './Palette';
+import { MirrorToggle } from './MirrorToggle';
 import { Schematic } from './Schematic';
 import { SceneView } from './SceneView';
 import { ShareDialog } from './ShareDialog';
@@ -90,6 +91,7 @@ export function App({ shared = 'none' }: { shared?: 'none' | 'ok' | 'bad' }) {
             </button>
           ))}
           <ShareDialog />
+          <MirrorToggle />
           <button type="button" className="ghost" onClick={clear} data-hand="clear">
             Limpar
           </button>

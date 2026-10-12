@@ -15,7 +15,7 @@
  */
 
 import type { CircuitDoc, CompKind, Placed, Rot, Wire } from '../core/netlist';
-import { ID_PREFIX } from './store';
+import { ID_PREFIX, useEditor } from './store';
 
 /** Versão do payload: muda o formato, o link antigo passa a ser recusado. */
 export const SHARE_VERSION = 1;
@@ -165,4 +165,18 @@ export function swapPage(url: string, page: 'editor.html' | 'cardboard.html'): s
 export function sharePayload(search: string): string | null {
   const m = /[?&]c=([^&#]+)/.exec(search);
   return m ? m[1] : null;
+}
+
+/**
+ * Abre a página já com o circuito do link: editor E espelho usam. Tem que
+ * rodar ANTES do React montar, senão a tela pisca vazia e o professor vê o
+ * quadro em branco por um frame.
+ */
+export function bootFromLink(): 'none' | 'ok' | 'bad' {
+  const payload = sharePayload(location.search);
+  if (!payload) return 'none';
+  const doc = decodeDoc(payload);
+  if (!doc) return 'bad';
+  useEditor.setState({ doc });
+  return 'ok';
 }

@@ -79,8 +79,32 @@ fios, sondas de voltímetro/amperímetro.
 | **1 — Núcleo** | Solver MNA testado + editor de circuito no desktop (mouse) | 1–2 semanas |
 | **2 — Cena3D + mãos** | Bancada3D, pinch-drag-release, cores por tensão, animação de corrente, sondas | 1–2 semanas |
 | **3 — Cardboard** | Split estéreo + `DeviceOrientation` + gaze/tap, fps no celular | 3–5 dias |
-| **4 — Sala de aula** | Modo professor, desafios, relatório CSV, salvar/share por URL | ~1 semana |
+| **4 — Sala de aula** | Modo professor (espelho ao vivo), desafios, relatório CSV, salvar/share por URL | ~1 semana |
 | **5 — Piloto** | Testar com turma real e iterar | contínuo |
+
+### Espelho ao vivo — onde está
+
+Feito (Fase 4, primeiro passo):
+- **Share por URL + QR** (`?c=`): o circuito inteiro cabe no link; `mirror.html` abre
+  com ele mesmo sem ninguém transmitindo.
+- **Espelho ao vivo na mesma máquina**: botão *Espelhar* no editor publica o estado
+  (circuito, enquadramento/zoom, ferramenta em uso) e `mirror.html` acompanha em tempo
+  real, com leituras V/I em letra de projeção e nada editável (store em modo `modal` +
+  `pointer-events: none`). Transporte: **BroadcastChannel** — sem servidor, offline,
+  funciona entre abas/janelas do mesmo PC (projetor ligado no PC do professor).
+- Protocolo plugável em [`src/mirror/`](../src/mirror/): `protocol.ts` (estado completo,
+  compacto pelo codec do link), `transmitter.ts` (quem conduz), `follower.ts` (o espelho),
+  `channel.ts` (o transporte).
+
+Falta para os **aparelhos diferentes na mesma rede** (celular do aluno ↔ projeção):
+- **Sinalização sem servidor não fecha.** Oferta e resposta do WebRTC precisam viajar nos
+  dois sentidos; um QR só resolve um sentido (projetor mostra → celular lê) e o QR de
+  resposta sairia da tela pequena (módulos de ~0,7 mm, fora de alcance de webcam). Relé
+  `ws://` na rede local é **bloqueado como conteúdo misto** pela página HTTPS.
+- Caminhos possíveis: (a) serviço público de sinalização (ex.: PeerJS) — só o aperto de
+  mão passa pela internet, a mídia fica na rede da sala; (b) QR de ida e volta exigindo
+  webcam no PC da projeção; (c) servidor próprio com TLS. A escolha é do piloto; o
+  protocolo e a tela de observação não mudam, só o `channel.ts`.
 
 ## 6. Riscos e mitigações
 

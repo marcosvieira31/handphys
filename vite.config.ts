@@ -25,6 +25,7 @@ export default defineConfig({
         main: 'index.html',
         editor: 'editor.html',
         cardboard: 'cardboard.html',
+        mirror: 'mirror.html',
         hands: 'spikes/hands.html',
         spikeCardboard: 'spikes/cardboard.html',
       },

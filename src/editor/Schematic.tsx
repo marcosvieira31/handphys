@@ -16,6 +16,7 @@ import {
   WIRE_GRAB,
   clientToBoard,
   clientToCell,
+  overTrash,
 } from './coords';
 import { formatValue, labelPos, Symbol } from './symbol';
 import { voltageColor } from './colors';
@@ -47,7 +48,9 @@ export function Schematic({ reading }: { reading: Reading }) {
 
   const capture = (e: React.PointerEvent) => {
     const st = useEditor.getState();
-    if (st.draft || st.grip) (e.target as Element).setPointerCapture?.(e.pointerId);
+    // item armado também captura: sem isso, soltar em cima da lixeira chega no
+    // BOTÃO (não no svg) e o arraste morre no caminho.
+    if (st.draft || st.grip || st.placing) (e.target as Element).setPointerCapture?.(e.pointerId);
   };
 
   /** Dois dedos sobre o quadro => zoom pelo afastamento + pan pelo arraste.
@@ -114,7 +117,11 @@ export function Schematic({ reading }: { reading: Reading }) {
     if (pointers.current.size < 2) pinch.current = null;
     if (pointers.current.size === 0) pinchMode.current = false;
     if (eraGesture) return; // o gesto já soltou draft/grip; não vira clique
-    useEditor.getState().releaseAt(toCell(e.clientX, e.clientY));
+    const st = useEditor.getState();
+    // soltou EM CIMA da lixeira = jogou o que estava na mão fora; caso contrário
+    // solta normal (termina o fio, larga o componente, posiciona o armado).
+    if (overTrash(e.clientX, e.clientY)) st.trash();
+    else st.releaseAt(toCell(e.clientX, e.clientY));
   };
 
   const dropPointers = () => {

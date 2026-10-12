@@ -24,15 +24,43 @@ const ITEMS: { kind: CompKind; label: string; hint: string; value?: number }[] =
  * pelos MESMOS alvos ([data-hand] = a pinça clica como um clique).
  */
 
-/** Esquerda: os componentes + Conectar (armar → pinçar no quadro posicionar). */
+/** Esquerda: a lixeira no TOPO + os componentes + Conectar (armar → pinçar no quadro posicionar). */
 export function ItemsRail() {
   const placing = useEditor((s) => s.placing);
   const wiring = useEditor((s) => s.wiring);
+  // algo na mão (componente agarrado, item em arraste ou fio puxado): a lixeira
+  // "acende" convidando a soltar por lá
+  const holding = useEditor((s) => !!(s.grip || s.carry || s.draft));
   const arm = useEditor((s) => s.arm);
   const armWire = useEditor((s) => s.armWire);
+  const trash = useEditor((s) => s.trash);
 
   return (
-    <aside className="rail rail-items" role="group" aria-label="Componentes e fio">
+    <aside className="rail rail-items" role="group" aria-label="Lixeira, componentes e fio">
+      <button
+        type="button"
+        className={holding ? 'rail-item rail-trash holding' : 'rail-item rail-trash'}
+        onClick={trash}
+        data-hand="trash"
+        title="Lixeira: solte aqui o item que está na mão, ou clique com ele selecionado (Ctrl+Z desfaz)"
+      >
+        <svg viewBox="-24 -24 48 48" width={26} height={26} aria-hidden>
+          <line x1={-13} y1={-13} x2={13} y2={-13} stroke="currentColor" strokeWidth={3} strokeLinecap="round" />
+          <path d="M-4 -19 H4" stroke="currentColor" strokeWidth={3} strokeLinecap="round" />
+          <path
+            d="M-11 -7 L-8.5 14 H8.5 L11 -7"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth={2.5}
+            strokeLinejoin="round"
+            strokeLinecap="round"
+          />
+          <line x1={-3.5} y1={-1} x2={-3.5} y2={8} stroke="currentColor" strokeWidth={2} strokeLinecap="round" />
+          <line x1={3.5} y1={-1} x2={3.5} y2={8} stroke="currentColor" strokeWidth={2} strokeLinecap="round" />
+        </svg>
+        <strong>Lixeira</strong>
+        <em>apagar</em>
+      </button>
       {ITEMS.map((it) => (
         <button
           key={it.kind}

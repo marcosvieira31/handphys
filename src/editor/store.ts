@@ -77,6 +77,9 @@ export interface EditorState {
   moveComp: (id: string, x: number, y: number) => void;
   rotate: (id: string) => void;
   removeSelected: () => void;
+  /** Lixeira da bancada: soltou o item por lá (arrastou) ou clicou com algo
+   *  selecionado. Desfazer com Ctrl+Z. */
+  trash: () => void;
   setValue: (id: string, value: number) => void;
   toggleSwitch: (id: string) => void;
   load: (doc: CircuitDoc) => void;
@@ -343,6 +346,30 @@ export const useEditor = create<EditorState>((set, get) => ({
       },
       selection: null,
     });
+  },
+
+  /** Lixeira da bancada: o MESMO destino para soltar por lá (arrastou com a
+   *  pinça/mouse) e para clicar com o item selecionado. Fio na mão ou item em
+   *  arraste que ainda não foi colocado só são CANCELADOS — apagar mesmo é
+   *  quando tem algo selecionado/segurado (segurar já seleciona). */
+  trash: () => {
+    const s = get();
+    if (s.modal) return;
+    if (s.wiring) {
+      s.armWire(false); // modo fio (com ou sem fio na mão): sai — limpa o draft
+      return;
+    }
+    if (s.draft) {
+      s.cancelDraft(); // fio na mão no clique-clique: jogou fora antes de conectar
+      return;
+    }
+    if (s.placing) {
+      s.arm(null); // item armado/nas mãos: desiste de posicionar
+      return;
+    }
+    if (!s.grip && !s.selection) return; // lixeira sem nada selecionado: nada a apagar
+    s.removeSelected(); // segurar já seleciona o item (ou a seleção é um fio)
+    set({ grip: null, carry: null }); // solta a mão
   },
 
   setValue: (id, value) => {

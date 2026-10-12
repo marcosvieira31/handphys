@@ -1,5 +1,6 @@
 import { useSyncExternalStore } from 'react';
 import { applyZoom } from '../editor/zoom';
+import { miraOverTrash } from '../editor/coords';
 import { useEditor } from '../editor/store';
 import { Clutch } from './clutch';
 import { OneEuroFilter } from './oneEuro';
@@ -472,7 +473,11 @@ export class HandsController {
     for (const [side, s] of seen) {
       if (s.edge === 'up' && this.pressed.has(side)) {
         const last = this.lastCell.get(side);
-        if (last) st.releaseAt(last);
+        // soltou com a mira VISÍVEL em cima da lixeira = jogou o que estava na
+        // mão fora (a última célula vale só para soltar normal)
+        const p = this.draw.cursor;
+        if (p && miraOverTrash(p)) st.trash();
+        else if (last) st.releaseAt(last);
         this.pressed.delete(side);
         this.lastCell.delete(side);
       }

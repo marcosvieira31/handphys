@@ -50,10 +50,31 @@ export function clientToCell(
  * o item armado já caía na célula sob o botão, "preso na borda". Fora do
  * navegador (testes em node) nunca está.
  */
-export function overHandButton(clientX: number, clientY: number): boolean {
+export function overHandButton(clientX: number, clientY: number, selector = '[data-hand]'): boolean {
   if (typeof document === 'undefined' || !document.elementFromPoint) return false;
   const el = document.elementFromPoint(clientX, clientY);
-  return !!el && !!el.closest('[data-hand]');
+  return !!el && !!el.closest(selector);
+}
+
+/** O ponto (pixels de janela) está sobre a LIXEIRA da bancada? */
+export function overTrash(clientX: number, clientY: number): boolean {
+  return overHandButton(clientX, clientY, '[data-hand="trash"]');
+}
+
+/**
+ * A MIRA da mão (fração 0..1 da janela, como o controller guarda) está sobre
+ * a lixeira? É o caso da pinça: soltar com a mira em cima dela = jogar o item
+ * fora. Node (testes) nunca tem janela, então devolve false sem tocar em window.
+ */
+export function miraOverTrash(cursor: { x: number; y: number }): boolean {
+  if (typeof document === 'undefined' || typeof window === 'undefined' || !document.elementFromPoint) {
+    return false;
+  }
+  return overHandButton(
+    cursor.x * window.innerWidth,
+    cursor.y * window.innerHeight,
+    '[data-hand="trash"]',
+  );
 }
 
 /** Menor distância do ponto a um segmento, em células. */

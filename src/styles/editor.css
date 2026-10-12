@@ -194,6 +194,27 @@ body.editor-page {
   line-height: 1.2;
 }
 
+/* Lixeira: em CIMA do trilho esquerdo — o topo sempre está na faixa que a mão
+   alcança, enquanto o fundo da bancada é justamente onde a câmera corta.
+   holding = tem algo na mão (agarrado, em arraste ou fio): a lixeira acende
+   convidando a soltar por lá. */
+.rail-trash {
+  margin-bottom: 6px;
+  color: var(--dim);
+}
+
+.rail-trash:hover {
+  color: var(--ink);
+  border-color: var(--err);
+  background: rgba(248, 81, 73, 0.1);
+}
+
+.rail-trash.holding {
+  color: var(--err);
+  border-color: var(--err);
+  background: rgba(248, 81, 73, 0.16);
+}
+
 /* ---------- bancada: a superfície inteira é o quadro ---------- */
 .canvas {
   position: relative;

@@ -101,6 +101,7 @@ describe('semântica única press/move/release (mouse e pinça)', () => {
         wires: [],
       },
       placing: null,
+      carry: null,
       wiring: false,
       draft: null,
       grip: null,
@@ -154,6 +155,64 @@ describe('semântica única press/move/release (mouse e pinça)', () => {
     expect(after.doc.comps.some((c) => c.kind === 'resistor' && c.x === 21 && c.y === 12)).toBe(true);
     expect(after.placing).toBeNull();
     expect(after.carry).toBeNull();
+  });
+
+  it('lixeira: item na mão (grip) é apagado — e o Ctrl+Z traz de volta', () => {
+    const s = useEditor.getState();
+    s.pressAt({ x: 12, y: 10 }); // segura a lâmpada
+    expect(useEditor.getState().grip?.id).toBe('lamp1');
+    useEditor.getState().trash();
+    const after = useEditor.getState();
+    expect(after.doc.comps.find((c) => c.id === 'lamp1')).toBeUndefined();
+    expect(after.doc.comps.find((c) => c.id === 'bat1')).toBeDefined(); // a fonte fica
+    expect(after.grip).toBeNull();
+    expect(after.selection).toBeNull();
+    expect(after.past.length).toBeGreaterThan(0);
+    after.undo();
+    expect(useEditor.getState().doc.comps.find((c) => c.id === 'lamp1')).toBeDefined();
+  });
+
+  it('lixeira: com só a seleção apaga; sem nada selecionado não faz nada', () => {
+    const s = useEditor.getState();
+    s.select({ kind: 'comp', id: 'lamp1' });
+    useEditor.getState().trash();
+    expect(useEditor.getState().doc.comps.find((c) => c.id === 'lamp1')).toBeUndefined();
+    const n = useEditor.getState().doc.comps.length;
+    useEditor.getState().trash(); // nada selecionado: lixeira vazia
+    expect(useEditor.getState().doc.comps.length).toBe(n);
+  });
+
+  it('lixeira: fio na mão é cancelado e item armado só desarma (nada foi colocado)', () => {
+    const s = useEditor.getState();
+    s.pressAt({ x: 5, y: 10 }); // aperto no terminal: fio na mão
+    expect(useEditor.getState().draft).not.toBeNull();
+    useEditor.getState().trash();
+    const a1 = useEditor.getState();
+    expect(a1.draft).toBeNull();
+    expect(a1.doc.wires).toHaveLength(0);
+    s.arm('resistor');
+    s.pressAt({ x: 4, y: 5 }); // pegou o item armado (carry)
+    expect(useEditor.getState().carry).not.toBeNull();
+    useEditor.getState().trash(); // desistiu de posicionar: só desarma
+    const a2 = useEditor.getState();
+    expect(a2.placing).toBeNull();
+    expect(a2.carry).toBeNull();
+    expect(a2.doc.comps.some((c) => c.kind === 'resistor')).toBe(false);
+  });
+
+  it('lixeira: modo fio aberto (com ou sem fio na mão) sai do modo', () => {
+    const s = useEditor.getState();
+    s.armWire(true);
+    s.startDraft({ x: 5, y: 10 });
+    expect(useEditor.getState().draft).not.toBeNull();
+    useEditor.getState().trash();
+    const after = useEditor.getState();
+    expect(after.wiring).toBe(false);
+    expect(after.draft).toBeNull();
+    expect(after.doc.wires).toHaveLength(0);
+    s.armWire(true);
+    useEditor.getState().trash(); // modo fio sem nada na mão: só sai do modo
+    expect(useEditor.getState().wiring).toBe(false);
   });
 });
 

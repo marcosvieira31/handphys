@@ -147,13 +147,27 @@ Feito (refino de uso com as mãos, em três passos com o usuário):
   ([`SceneView.tsx`](../src/editor/SceneView.tsx)). O botão que clica, o quadro não aperta
   por baixo; a soltura continua no `lastCell` (última célula válida), então soltar sobre
   o trilho posiciona no último ponto do quadro.
+- **Lixeira dentro da bancada** (topo do trilho esquerdo — o alto fica sempre na faixa
+  que a mão alcança; o fundo é onde a câmera corta): `trash()` no
+  [`src/editor/store.ts`](../src/editor/store.ts) é o MESMO destino de soltar por lá e de
+  clicar selecionado — apaga o item segurado/selecionado (grip implica seleção), cancela
+  fio na mão, sai do modo fio e desarma item em arraste; Ctrl+Z desfaz. Onde "por lá" é
+  detectado em dois caminhos: no **mouse**, `overTrash(clientX, clientY)` em
+  [`Schematic.tsx`](../src/editor/Schematic.tsx) no `pointerup` (o `capture` passou a
+  incluir `placing`, senão o soltar em cima do botão se perdera no caminho); na **pinça**,
+  `miraOverTrash(draw.cursor)` no passo de soltura do
+  [`controller.ts`](../src/hands/controller.ts) — a mira VISÍVEL do quadro anterior, que
+  continua válida mesmo porque a mira congela sobre o botão (guard do item anterior).
+  Com algo na mão a lixeira ganha a classe `holding` (acende como alvo de soltura).
 - **Alvo de mão**: itens ≥ 46 px de altura; em janela baixa (`max-height: 620px`) o trilho
   esconde os valores impressos e, se ainda não couber, vira uma 2ª coluna
   (`flex-wrap`) — nunca estoura nem rola.
-- Verificado: `tsc` limpo, 162 testes, build ok; no navegador (dev) — clicar no item arma
-  `placing`, apertar PEGA (`carry` + fantasma em `.ghost`), mover leva o fantasma, soltar
-  posiciona na célula da soltura e some o fantasma; `2D/3D`, cores e zoom pelos trilhos,
-  ida e volta 2D↔3D sem erros de console.
+- Verificado: `tsc` limpo, 167 testes (store: apagar por grip/seleção, cancelar fio/modo
+  fio/arrastado; controller: soltar a pinça sobre a lixeira apaga com DOM simulado), build
+  ok; no navegador (dev) — clicar no item arma, apertar PEGA (`carry` + fantasma), levar e
+  soltar NA LIXEIRA apaga; item armado solto lá só desarma; clique na lixeira apaga a
+  seleção; modo fio sai; `holding` acende/apaga; `2D/3D` e zoom pelos trilhos — 0 erros de
+  console.
 
 ## 6. Riscos e mitigações
 

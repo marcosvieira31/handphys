@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useEditor } from '../editor/store';
 import { HandsController, type HandPoint } from './controller';
 import type { FrameHand } from './tracker';
@@ -52,6 +52,7 @@ function resetDoc() {
       wires: [],
     },
     placing: null,
+    carry: null,
     wiring: false,
     draft: null,
     grip: null,
@@ -99,6 +100,36 @@ describe('HandsController sem câmera (ingest)', () => {
     expect(after.doc.wires).toHaveLength(1);
     expect(after.doc.wires[0]).toMatchObject({ from: { x: 5, y: 10 }, to: { x: 11, y: 10 } });
     expect(after.draft).toBeNull();
+  });
+
+  it('soltar com a mira em cima da LIXEIRA apaga o item que estava na mão', () => {
+    const ctl = wireUp();
+    // tudo em cima da tela "é" a lixeira: a soltura enxerga o alvo (o check é
+    // de DOM — em node ele só existe graças a este stub)
+    vi.stubGlobal('window', { innerWidth: 1000, innerHeight: 800 });
+    vi.stubGlobal('document', {
+      elementFromPoint: () => ({ closest: (sel: string) => (sel === '[data-hand="trash"]' ? {} : null) }),
+    });
+    try {
+      let now = 0;
+      const feed = (h: FrameHand, n = 8) => {
+        for (let i = 0; i < n; i++) {
+          now += 33;
+          ctl.ingest([h], 5, now);
+        }
+      };
+      feed(hand('Right', 0.57, 0.6)); // pinça no CORPO da lâmpada (12,10): segura
+      expect(useEditor.getState().grip?.id).toBe('lamp1');
+      feed(hand('Right', 0.72, 0.7534)); // leva para longe
+      feed(hand('Right', 0.45, 0.7867), 12); // abre: solta em cima da lixeira
+      const after = useEditor.getState();
+      expect(after.doc.comps.find((c) => c.id === 'lamp1')).toBeUndefined();
+      expect(after.doc.comps.find((c) => c.id === 'bat1')).toBeDefined(); // a fonte fica
+      expect(after.grip).toBeNull();
+      expect(after.selection).toBeNull();
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 
   it('troca de etiqueta Left/Right no meio do arraste não reinicia o fio', () => {

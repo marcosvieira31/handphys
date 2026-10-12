@@ -8,6 +8,7 @@ import { MirrorToggle } from './MirrorToggle';
 import { Schematic } from './Schematic';
 import { SceneView } from './SceneView';
 import { ShareDialog } from './ShareDialog';
+import { downloadCsv } from './report';
 import { useEditor } from './store';
 import { applyZoom, applyZoomReset } from './zoom';
 
@@ -62,6 +63,16 @@ export function App({ shared = 'none' }: { shared?: 'none' | 'ok' | 'bad' }) {
           ))}
           <ShareDialog />
           <MirrorToggle />
+          <button
+            type="button"
+            className="ghost"
+            onClick={() => downloadCsv(doc, reading)}
+            disabled={!doc.comps.length}
+            title="Baixar o circuito como CSV (abre no Excel/LibreOffice)"
+            data-hand="csv"
+          >
+            CSV
+          </button>
           <button type="button" className="ghost" onClick={clear} data-hand="clear">
             Limpar
           </button>

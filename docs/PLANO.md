@@ -197,6 +197,32 @@ Feito (relato do usuário: "a chave interruptor não está fechando o circuito")
   chave aberta 0 A, clique fecha e a leitura passa a 0,09 A, clique de novo abre; arrastar
   move sem alternar; checkbox do Inspector alterna; 0 erros de console.
 
+### Modo professor — relatório CSV — onde está
+
+Feito (primeira fatia da camada de sala de aula do roadmap; o espelho já existia):
+- **O que é**: botão `CSV` na barra ([`src/editor/App.tsx`](../src/editor/App.tsx)) baixa
+  `handphys-circuito-AAAA-MM-DD.csv` com o circuito montado —
+  [`src/editor/report.ts`](../src/editor/report.ts) monta a tabela com UMA linha por
+  componente: id, tipo, valor + unidade, posição, rotação, estado, tensão, corrente e nós.
+- **Abre direto na planilha da aula**: separador `;`, vírgula decimal, CRLF e BOM UTF-8
+  (`Ω`, `µF` e acentos chegam certos no Excel/LibreOffice pt-BR). Posição em DUAS colunas
+  (`pos_x`/`pos_y`): com vírgula decimal, `4,6` numa coluna só o Excel leria como o
+  número 4,6.
+- **As leituras são as da tela**: `csvReport(doc, readCircuit(doc))` — o mesmo solver do
+  painel. A chave fechada é curto ideal (os dois terminais viram UM nó; o solver não a tem
+  como incógnita): `estado=fechada`, `tensao_V=0`, `corrente_A=0` — igual ao painel; quem
+  conduz aparece nos componentes da série (bat entrega `0,45`, lâmpada `0,45`).
+- **Alcance**: `data-hand="csv"` (a pinça baixa o relatório como qualquer botão da
+  bancada); desativado com o quadro vazio; download 100 % local (Blob + `<a download>`,
+  sem servidor — nada da aula sai do navegador).
+- Verificado: `tsc` limpo, 175 testes (7 novos do relatório: cabeçalho + 12 colunas,
+  0,45 A em vírgula decimal, GND na fonte, chave fechada com os dois nós iguais, chave
+  aberta ⇒ lâmpada 0 mA, µF/mF do capacitor, vazio ⇒ só o cabeçalho), build ok; no
+  navegador (dev) — botão baixa o arquivo com nome e data, bytes iniciais `EF BB BF`
+  (BOM), CSV com as linhas esperadas, 0 erros de console.
+- Pendente do plano: relatório **JSON**; leitura por **nó** (estação de Kirchhoff) se o
+  professor pedir; desafios com verificação automática vêm em seguida.
+
 ## 6. Riscos e mitigações
 
 1. **PCs fracos + MediaPipe** → medir fps no spike; `GPU` delegate com fallback CPU; mouse sempre disponível.

@@ -110,8 +110,10 @@ export function ViewRail() {
   const view = useEditor((s) => s.view);
   const zoom = useEditor((s) => s.zoom);
   const colorByVoltage = useEditor((s) => s.colorByVoltage);
+  const flow = useEditor((s) => s.flow);
   const setView = useEditor((s) => s.setView);
   const setColorByVoltage = useEditor((s) => s.setColorByVoltage);
+  const setFlow = useEditor((s) => s.setFlow);
 
   return (
     <aside className="rail rail-view" role="group" aria-label="Vista, cores e zoom">
@@ -150,6 +152,24 @@ export function ViewRail() {
         </svg>
         <strong>Cores</strong>
         <em>por tensão</em>
+      </button>
+
+      <button
+        type="button"
+        className={flow ? 'rail-item active' : 'rail-item'}
+        onClick={() => setFlow(!flow)}
+        data-hand="flow"
+        title="Corrente elétrica: gotas em movimento nos fios, mais rápidas quanto maior a corrente"
+      >
+        <svg viewBox="-24 -24 48 48" width={26} height={26} aria-hidden>
+          <g stroke="currentColor" strokeWidth={3} strokeLinecap="round">
+            <line x1={-15} y1={-9} x2={-1} y2={-9} />
+            <line x1={-7} y1={0} x2={9} y2={0} />
+            <line x1={-13} y1={9} x2={3} y2={9} />
+          </g>
+        </svg>
+        <strong>Corrente</strong>
+        <em>nos fios</em>
       </button>
 
       <span className="rail-zoom" role="group" aria-label="Zoom">

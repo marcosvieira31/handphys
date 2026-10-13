@@ -223,6 +223,48 @@ Feito (primeira fatia da camada de sala de aula do roadmap; o espelho já existi
 - Pendente do plano: relatório **JSON**; leitura por **nó** (estação de Kirchhoff) se o
   professor pedir; desafios com verificação automática vêm em seguida.
 
+### Corrente animada nos fios — onde está
+
+Feito (efeito visual com interruptor — o aluno vê a corrente ANDAR no esquemático):
+- **O que é**: traços-gota em movimento sobre cada fio por onde corrente passa.
+  A **velocidade é proporcional à corrente**: 450 mA corre em 0,4 s por ciclo, 15 mA
+  anda a ritmo de aula (≈ 3 s) e µA vira cunha (12 s) — `flowDuration(amps)` em
+  [`src/core/flow.ts`](../src/core/flow.ts). O **sentido dos traços é o sentido da
+  corrente** (sinal de cada trecho).
+- **O interruptor é do usuário**: botão **Corrente / nos fios** no trilho direito
+  (depois de *Cores*), `data-hand="flow"` — a pinça liga e desliga. Estado `flow` no
+  store (`default true`), refletido no **espelho** (campo `f` no protocolo, aditivo —
+  sem bump de versão) e na **vista 3D**.
+- **Onde a corrente é calculada**: [`src/core/flow.ts`](../src/core/flow.ts) →
+  `computeFlow(doc, reading)` monta um grafo dos **sub-traços de fio** (cada fio pode
+  ser partido por emenda de terminal no meio — igual o netlist) e distribui as
+  injeções do solver (`reading.comps`, sinal uniforme: `amps > 0` = terminal 0 → 1)
+  por uma **árvore DFS com KCL exata**. A chave fechada entra como **aresta livre**
+  entre os terminais (não como fio) — sem ela a malha quebra e a corrente da série
+  não atravessaria o curto; a chave aberta não injeta nada ⇒ mapa vazio ⇒ nada anima.
+  Regiões desbalanceadas (união mágica de terras) ainda saem corretas por aresta.
+- **Só fios com corrente**: o mapa devolve apenas trechos com `|I| > 1 nA`, e
+  partes consecutivas do **mesmo fio** com a MESMA corrente são agrupadas — um fio
+  reto em série vira UM traço contínuo; um T no meio divide em trechos distintos
+  (0,9 A antes da emenda, 0,45 A depois).
+- **2D (editor + espelho)**: overlay `<polyline class="wire-flow">` por trecho, com
+  `stroke-dasharray` e `stroke-dashoffset` animados em CSS; a duração e a direção
+  vêm no `style` de cada trecho (`animationDirection: reverse` quando o sinal é
+  negativo). Por cima do fio, `pointer-events: none` — o clique continua batendo no
+  fio embaixo.
+- **3D (vista + Cardboard)**: 3 gotas esféricas âmbar emissivas por trecho, andando
+  no **comprimento de arco** (`pointAlong`/`cumLength` em
+  [`src/scene/layout.ts`](../src/scene/layout.ts)) — não aceleram nas curvas;
+  `advanceFlow(circuit)` é chamado a cada quadro nos DOIS laços (desktop e
+  Cardboard) com `dt` interno. O botão do trilho liga e desliga as gotas também no
+  3D (`LabView.update(doc, reading, flow)`).
+- Verificado: `tsc` limpo, **184 testes** (9 novos: 5 do fluxo — série com os 6 fios
+  em +0,45 e sentido da circulação, chave aberta ⇒ mapa vazio, paralelo com T no meio
+  do fio separando 0,9/0,45 nas duas emendas, KCL nas junções, `flowDuration`
+  monotônica e restrita a 0,4–12 s — e 4 das gotas 3D: 3 por trecho, invisível com a
+  animação desligada, distribuição 0/⅓/⅔ no primeiro quadro e avanço de 0,1 s no
+  comprimento de arco), build ok.
+
 ## 6. Riscos e mitigações
 
 1. **PCs fracos + MediaPipe** → medir fps no spike; `GPU` delegate com fallback CPU; mouse sempre disponível.

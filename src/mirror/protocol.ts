@@ -29,6 +29,8 @@ export interface State {
   sel: Selection | null;
   placing: CompKind | null;
   colorByVoltage: boolean;
+  /** Corrente animada nos fios (o mesmo interruptor da tela que conduz). */
+  flow: boolean;
 }
 
 export type Msg =
@@ -64,6 +66,7 @@ export function encodeState(st: State): string {
     s: st.sel ? `${st.sel.kind}:${st.sel.id}` : '',
     a: st.placing ?? '',
     c: st.colorByVoltage ? 1 : 0,
+    f: st.flow ? 1 : 0,
   });
 }
 
@@ -93,6 +96,7 @@ export function decodeMsg(raw: unknown): Msg | null {
     s?: unknown;
     a?: unknown;
     c?: unknown;
+    f?: unknown;
   };
   try {
     m = JSON.parse(raw) as typeof m;
@@ -122,6 +126,7 @@ export function decodeMsg(raw: unknown): Msg | null {
       sel,
       placing: typeof m.a === 'string' && KINDS[m.a] ? (m.a as CompKind) : null,
       colorByVoltage: m.c === 1,
+      flow: m.f === 1,
     },
   };
 }

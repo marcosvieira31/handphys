@@ -1,5 +1,6 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { Reading } from '../core/netlist';
+import { computeFlow, flowDuration } from '../core/flow';
 import {
   nearestTerminal,
   samePt,
@@ -32,8 +33,14 @@ export function Schematic({ reading }: { reading: Reading }) {
   const wiring = useEditor((s) => s.wiring);
   const carry = useEditor((s) => s.carry); // célula em que o item armado está sendo carregado
   const colorByVoltage = useEditor((s) => s.colorByVoltage);
+  const flow = useEditor((s) => s.flow); // corrente animada nos fios (pode desligar)
   const zoom = useEditor((s) => s.zoom);
   const pan = useEditor((s) => s.pan);
+  /** Corrente por trecho de fio: só quando a animação está ligada. */
+  const flowMap = useMemo(
+    () => (flow ? computeFlow(doc, reading) : null),
+    [flow, doc, reading],
+  );
   const [hoverCell, setHoverCell] = useState<Pt | null>(null);
   /** Pontos de dedo ativos e o estado do gesto de pinça no toque (zoom + pan). */
   const pointers = useRef(new Map<number, { x: number; y: number }>());
@@ -173,6 +180,19 @@ export function Schematic({ reading }: { reading: Reading }) {
           strokeLinecap="round"
           strokeLinejoin="round"
         />
+        {/* corrente: gotas em movimento por trecho (velocidade ∝ intensidade;
+            sentido = sinal da corrente; o CSS cuida da animação) */}
+        {(flowMap?.get(w.id) ?? []).map((part, i) => (
+          <polyline
+            key={i}
+            className="wire-flow"
+            points={part.pts.map((p) => `${p.x * CELL},${p.y * CELL}`).join(' ')}
+            style={{
+              animationDuration: `${flowDuration(part.amps)}s`,
+              animationDirection: part.amps < 0 ? 'reverse' : 'normal',
+            }}
+          />
+        ))}
       </g>
     );
   });

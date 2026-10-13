@@ -101,6 +101,7 @@ const estado = (): State => ({
   sel: null,
   placing: null,
   colorByVoltage: false,
+  flow: true,
 });
 
 /** Deixa a rede falsa (que agenda por microtask) terminar de correr. */

@@ -462,6 +462,32 @@ body.editor-page {
   stroke: var(--accent);
 }
 
+/* ---------- corrente animada nos fios (gotas) ----------
+   O traço+vão (4+14) é o período da animação; a duração e a direção vêm em
+   style por trecho — ∝ 1/intensidade e no sentido da corrente. Por cima do
+   fio, sem roubar o clique (pointer-events: none). */
+.schematic g.wire polyline.wire-flow {
+  fill: none;
+  stroke: #f2cc60;
+  stroke-width: 3;
+  stroke-linecap: round;
+  stroke-dasharray: 4 14;
+  animation-name: wire-flow;
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
+  pointer-events: none;
+}
+
+@keyframes wire-flow {
+  from {
+    stroke-dashoffset: 0;
+  }
+  to {
+    /* um período adiante: as gotas andam no sentido da rota do fio */
+    stroke-dashoffset: -18;
+  }
+}
+
 /* ---------- painel de medições ---------- */
 .readings {
   width: 100%;

@@ -8,7 +8,7 @@ import { DwellController } from '../hands/dwell';
 // (__cbReady) só vem após a bancada montar, no fim do arquivo.
 (window as unknown as { __cbBoot?: boolean }).__cbBoot = true;
 import { voltageColor } from '../editor/colors';
-import { applyLayoutReading, buildBoard, buildCircuitGroup, compIdOf, disposeGroup } from '../scene/buildScene';
+import { advanceFlow, applyLayoutReading, buildBoard, buildCircuitGroup, compIdOf, disposeGroup } from '../scene/buildScene';
 import { layoutScene } from '../scene/layout';
 import { decodeDoc, sharePayload } from '../editor/share';
 
@@ -475,6 +475,7 @@ function renderFrame() {
     head.quaternion.setFromEuler(new THREE.Euler(manual.pitch, manual.yaw, 0, 'YXZ'));
   }
   head.updateMatrixWorld();
+  advanceFlow(circuit); // gotas de corrente nos fios (dt interno por quadro)
 
   // fixação por olhar: mantém a mira no componente 3 s e ele é selecionado
   const now = performance.now();

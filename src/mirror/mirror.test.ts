@@ -32,6 +32,7 @@ const estado = (sobrescrever: Partial<State> = {}): State => ({
   sel: { kind: 'comp', id: 'r1' },
   placing: 'resistor',
   colorByVoltage: false,
+  flow: true,
   ...sobrescrever,
 });
 
@@ -57,7 +58,7 @@ describe('protocolo do espelho', () => {
   });
 
   it('aceita os extremos e enxuga o que é option', () => {
-    const st = estado({ view: '3d', zoom: 9, pan: { x: -50, y: 40 }, sel: null, placing: null, colorByVoltage: true });
+    const st = estado({ view: '3d', zoom: 9, pan: { x: -50, y: 40 }, sel: null, placing: null, colorByVoltage: true, flow: false });
     const m = decodeMsg(encodeState(st));
     expect(m && m.kind === 'state' ? m.state : null).toEqual({
       ...st,

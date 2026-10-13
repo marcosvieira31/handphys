@@ -16,6 +16,7 @@ const readState = (): State => {
     sel: s.selection,
     placing: s.placing,
     colorByVoltage: s.colorByVoltage,
+    flow: s.flow,
   };
 };
 

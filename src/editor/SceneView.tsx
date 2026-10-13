@@ -17,6 +17,7 @@ export function SceneView({ reading }: { reading: Reading }) {
   const viewRef = useRef<LabView | null>(null);
   const [ready, setReady] = useState(false);
   const doc = useEditor((s) => s.doc);
+  const flow = useEditor((s) => s.flow); // gotas de corrente nos fios 3D
 
   useEffect(() => {
     let alive = true;
@@ -28,7 +29,7 @@ export function SceneView({ reading }: { reading: Reading }) {
       bindZoomTarget(view); // botões/gestos de zoom passam a mexer a câmera
       setReady(true);
       const s = useEditor.getState();
-      view.update(s.doc, reading);
+      view.update(s.doc, reading, s.flow);
       // mira da pinça no 3D: cursor espelhado (fração da JANELA) => célula sob o dedo
       hands.bindSlot('3d', (p) => {
         const r = canvasRef.current?.getBoundingClientRect();
@@ -54,7 +55,7 @@ export function SceneView({ reading }: { reading: Reading }) {
   }, []);
 
   useEffect(() => {
-    viewRef.current?.update(doc, reading);
+    viewRef.current?.update(doc, reading, flow);
   });
 
   return (

@@ -77,6 +77,7 @@ export function Espelho() {
           selection: s.sel,
           placing: s.placing,
           colorByVoltage: s.colorByVoltage,
+          flow: s.flow,
         });
         visto = Date.now();
         setStatus('ao-vivo');

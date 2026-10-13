@@ -1,5 +1,6 @@
 import type { CircuitDoc, CompKind, Reading } from '../core/netlist';
 import { wireRoute } from '../core/netlist';
+import { computeFlow } from '../core/flow';
 
 /**
  * Grade 2D => mundo 3D, sem three.js (puro e testável no Vitest).
@@ -25,6 +26,38 @@ export function rotToRotY(rot: 0 | 90 | 180 | 270): number {
   return ((-rot * Math.PI) / 180);
 }
 
+/** Cumulativo de comprimento da polilinha (índice i = fim do trecho i). */
+export function cumLength(pts: [number, number, number][]): number[] {
+  const cum = [0];
+  for (let i = 1; i < pts.length; i++) {
+    const [ax, ay, az] = pts[i - 1];
+    const [bx, by, bz] = pts[i];
+    cum.push(cum[i - 1] + Math.hypot(bx - ax, by - ay, bz - az));
+  }
+  return cum;
+}
+
+/**
+ * Ponto a `dist` da polilinha medindo por comprimento de arco (a gota não
+ * acelera nas curvas). `cum` vem de `cumLength`.
+ */
+export function pointAlong(
+  pts: [number, number, number][],
+  cum: number[],
+  dist: number,
+): [number, number, number] {
+  if (pts.length < 2) return pts[0] ?? [0, 0, 0];
+  const total = cum[cum.length - 1];
+  const d = Math.min(Math.max(dist, 0), total);
+  let i = 1;
+  while (i < cum.length - 1 && cum[i] < d) i++;
+  const seg = cum[i] - cum[i - 1];
+  const t = seg > 0 ? (d - cum[i - 1]) / seg : 0;
+  const a = pts[i - 1];
+  const b = pts[i];
+  return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
+}
+
 export interface CompNode {
   id: string;
   kind: CompKind;
@@ -44,6 +77,16 @@ export interface WireNode {
   points: [number, number, number][];
   /** Cor pela tensão do nó (mesma escala do 2D). */
   color: string;
+  /** Trechos COM corrente (gotas que correm pelo fio; ver computeFlow). */
+  parts: WireFlowPart[];
+}
+
+/** Um trecho do fio no mundo 3D, com a corrente que passa por ele. */
+export interface WireFlowPart {
+  /** Pontos no mundo (y=WIRE_Y), na ordem da rota. */
+  points: [number, number, number][];
+  /** Amperes; positivo = no sentido dos pontos. */
+  amps: number;
 }
 
 export interface SceneLayout {
@@ -76,6 +119,7 @@ export function layoutScene(
     };
   });
 
+  const flow = computeFlow(doc, reading);
   const wires: WireNode[] = doc.wires.map((w) => {
     const net = reading.netAt(w.from);
     const volts = net ? (reading.nodes.find((n) => n.net === net)?.volts ?? 0) : 0;
@@ -83,7 +127,14 @@ export function layoutScene(
       const [wx, wz] = cellToWorld(p.x, p.y);
       return [wx, WIRE_Y, wz] as [number, number, number];
     });
-    return { id: w.id, points, color: colorFor(volts, reading.maxVolts) };
+    const parts = (flow.get(w.id) ?? []).map((part) => ({
+      points: part.pts.map((p) => {
+        const [wx, wz] = cellToWorld(p.x, p.y);
+        return [wx, WIRE_Y, wz] as [number, number, number];
+      }),
+      amps: part.amps,
+    }));
+    return { id: w.id, points, color: colorFor(volts, reading.maxVolts), parts };
   });
 
   const lit = comps

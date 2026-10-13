@@ -42,6 +42,8 @@ export interface EditorState {
    *  = alterna a chave) de ARRASTE (solta depois de mover = só posiciona). */
   grip: { id: string; dx: number; dy: number; moved: boolean } | null;
   colorByVoltage: boolean;
+  /** Corrente animada nos fios (traços em movimento; o usuário pode desligar). */
+  flow: boolean;
   /** Vista ativa: o MESMO documento em 2D ou na bancada 3D. */
   view: '2d' | '3d';
   /** Zoom do quadro 2D (1 = cabe tudo, 4 = o teto) e deslocamento do centro. */
@@ -88,6 +90,7 @@ export interface EditorState {
   clear: () => void;
   undo: () => void;
   setColorByVoltage: (on: boolean) => void;
+  setFlow: (on: boolean) => void;
   setView: (v: '2d' | '3d') => void;
   /** Zoom mantendo um ponto do quadro preso na tela (`anchor` nulo = centro). */
   zoomBy: (factor: number, anchor?: Pt | null) => void;
@@ -132,6 +135,7 @@ export const useEditor = create<EditorState>((set, get) => ({
   draft: null,
   grip: null,
   colorByVoltage: true,
+  flow: true,
   view: '2d',
   zoom: 1,
   pan: { x: 0, y: 0 },
@@ -444,6 +448,7 @@ export const useEditor = create<EditorState>((set, get) => ({
     }),
 
   setColorByVoltage: (on) => set({ colorByVoltage: on }),
+  setFlow: (on) => set({ flow: on }),
 
   setView: (v) => set({ view: v, draft: null, grip: null }),
 

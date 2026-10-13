@@ -1,8 +1,17 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import type { CircuitDoc, Reading } from '../core/netlist';
+import { flowDuration } from '../core/flow';
 import { voltageColor } from '../editor/colors';
-import { layoutScene, WORLD, WIRE_Y, type CompNode, type SceneLayout } from './layout';
+import {
+  cumLength,
+  layoutScene,
+  pointAlong,
+  WORLD,
+  WIRE_Y,
+  type CompNode,
+  type SceneLayout,
+} from './layout';
 
 /**
  * Bancada 3D do MESMO documento do esquemático (three.js puro, sem R3F:
@@ -10,7 +19,11 @@ import { layoutScene, WORLD, WIRE_Y, type CompNode, type SceneLayout } from './l
  * Criado sob demanda (import dinâmico) para não pesar a carga inicial.
  */
 export interface LabView {
-  update(doc: CircuitDoc, reading: Reading): void;
+  /**
+   * Sincroniza a cena com o documento/leitura. `flow` liga e desliga as
+   * gotas de corrente nos fios (padrão ligado).
+   */
+  update(doc: CircuitDoc, reading: Reading, flow?: boolean): void;
   /** Cursor normalizado (0..1, já espelhado) => célula da grade sob ele. */
   cellAt(nx: number, ny: number): { x: number; y: number } | null;
   /** Afasta/aproxima a câmera (o MESMO gesto de zoom do quadro 2D). */
@@ -200,9 +213,32 @@ export function buildBoard(): THREE.Group {
   return g;
 }
 
+/** Uma gota:3 esferas por trecho, andando no comprimento de arco. */
+interface BeadPart {
+  nodes: THREE.Object3D[];
+  pts: [number, number, number][];
+  cum: number[];
+  total: number;
+  /** Segundos para percorrer o trecho inteiro (∝ 1/intensidade). */
+  dur: number;
+  amps: number;
+  phase: number;
+}
+
+/** Estado da animação de corrente do grupo (chamado por `advanceFlow`). */
+interface FlowAnim {
+  on: boolean;
+  /** Marca do último quadro (performance.now()/1000). */
+  t: number;
+  group: THREE.Object3D;
+  parts: BeadPart[];
+}
+
 /**
  * Circuito como grupo three (componentes + fios), com userData.compId/wireId
  * para seleção e leitura. Usado pela vista desktop E pelo Cardboard.
+ * Também monta as gotas de corrente (userData.flow) — quem anima é
+ * `advanceFlow`, chamado a cada quadro pelos dois laços de render.
  */
 export function buildCircuitGroup(layout: SceneLayout): THREE.Group {
   const g = new THREE.Group();
@@ -212,7 +248,60 @@ export function buildCircuitGroup(layout: SceneLayout): THREE.Group {
     mesh.userData.wireId = w.id;
     g.add(mesh);
   }
+
+  // gotas de corrente:3 por trecho que tenha corrente
+  const beads = new THREE.Group();
+  const parts: BeadPart[] = [];
+  const geo = new THREE.SphereGeometry(0.085, 8, 8);
+  const beadMat = mat(0xf2cc60, {
+    emissive: 0xffb347,
+    emissiveIntensity: 1.6,
+    roughness: 0.35,
+    metalness: 0,
+  });
+  for (const w of layout.wires) {
+    for (const part of w.parts) {
+      if (Math.abs(part.amps) < 1e-9 || part.points.length < 2) continue;
+      const cum = cumLength(part.points);
+      const total = cum[cum.length - 1];
+      if (total <= 0) continue;
+      // percurso completo mais curto que o ciclo do 2D: a distância já varia
+      const dur = Math.min(10, Math.max(0.6, flowDuration(part.amps) * Math.max(1, total / 3)));
+      const nodes = [0, 1, 2].map(() => {
+        const m = new THREE.Mesh(geo, beadMat);
+        beads.add(m);
+        return m as THREE.Object3D;
+      });
+      parts.push({ nodes, pts: part.points, cum, total, dur, amps: part.amps, phase: 0 });
+    }
+  }
+  g.add(beads);
+  g.userData.flow = { on: true, t: 0, group: beads, parts } satisfies FlowAnim;
   return g;
+}
+
+/**
+ * Anda com as gotas de corrente do grupo (chamar a cada quadro; o dt é
+ * interno para os dois laços — desktop e Cardboard — não precisarem medir).
+ * Com a animação desligada só mantém a invisibilidade.
+ */
+export function advanceFlow(root: THREE.Object3D | null): void {
+  if (!root) return;
+  const f = root.userData.flow as FlowAnim | undefined;
+  if (!f) return;
+  f.group.visible = f.on;
+  if (!f.on) return;
+  const now = performance.now() / 1000;
+  const dt = Math.min(0.1, now - (f.t || now)); // aba escondida não dá salto
+  f.t = now;
+  for (const p of f.parts) {
+    p.phase = (p.phase + dt / p.dur) % 1;
+    for (let i = 0; i < p.nodes.length; i++) {
+      const u = (p.phase + i / p.nodes.length) % 1;
+      const [x, y, z] = pointAlong(p.pts, p.cum, (p.amps < 0 ? 1 - u : u) * p.total);
+      p.nodes[i].position.set(x, y, z);
+    }
+  }
 }
 
 /** Aplica a leitura (cor dos fios, brilho) num grupo existente, sem reconstruir. */
@@ -270,6 +359,7 @@ export function createLabView(canvas: HTMLCanvasElement): LabView {
   scene.add(dyn);
   let lastDoc: CircuitDoc | null = null;
   let layout: SceneLayout | null = null;
+  let circuit: THREE.Group | null = null; // componentes+fios+gotas (disposeGroup o destrói)
 
   // Mira da pinça no 3D: raio do dedo contra a bancada (plano y=0) => célula.
   // Se o raio acerta um componente, mira o CENTRO dele (o imã de terminal/corpo
@@ -311,19 +401,23 @@ export function createLabView(canvas: HTMLCanvasElement): LabView {
   const loop = () => {
     if (dead) return;
     raf = requestAnimationFrame(loop);
+    advanceFlow(circuit); // gotas de corrente andam no ritmo da corrente
     controls.update();
     renderer.render(scene, camera);
   };
   loop();
 
   return {
-    update(doc, reading) {
+    update(doc, reading, flow = true) {
       layout = layoutScene(doc, reading, voltageColor);
       if (doc !== lastDoc) {
         lastDoc = doc;
         disposeGroup(dyn);
-        dyn.add(buildCircuitGroup(layout));
+        circuit = buildCircuitGroup(layout);
+        dyn.add(circuit);
       }
+      const anim = circuit ? (circuit.userData.flow as FlowAnim | undefined) : undefined;
+      if (anim) anim.on = flow;
       // leitura: cor dos fios, brilho das lâmpadas, luz compartilhada
       applyLayoutReading(dyn, layout);
       if (layout.lit.length) {

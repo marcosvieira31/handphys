@@ -1,5 +1,5 @@
 import { useSyncExternalStore } from 'react';
-import { applyZoom } from '../editor/zoom';
+import { applyPan, applyZoom } from '../editor/zoom';
 import { miraOverTrash } from '../editor/coords';
 import { useEditor } from '../editor/store';
 import { Clutch } from './clutch';
@@ -144,6 +144,9 @@ export class HandsController {
   private slotSeq = 0;
   private lastCell = new Map<string, { x: number; y: number }>();
   private pressed = new Set<string>();
+  /** Posição da mira (fração de tela) do quadro anterior quando o aperto-vazio
+   *  virou PAN: em px, porque a célula mudaria sozinha com a vista andando. */
+  private panPrev: { x: number; y: number } | null = null;
   private driver: string | null = null;
   /** Trava de mira da mão piloto (a mira não escorrega quando os dedos convergem). */
   private clutch = new Clutch();
@@ -480,6 +483,7 @@ export class HandsController {
         else if (last) st.releaseAt(last);
         this.pressed.delete(side);
         this.lastCell.delete(side);
+        this.panPrev = null;
       }
     }
 
@@ -519,6 +523,18 @@ export class HandsController {
         if (!this.pressed.has(this.driver)) {
           st.pressAt(cell);
           this.pressed.add(this.driver);
+          // aperto no VAZIO do quadro/bancada => o que vier é pan da vista;
+          // meço em fração de tela (a célula reage ao movimento da vista)
+          this.panPrev = useEditor.getState().panning
+            ? { x: cursorPoint.x, y: cursorPoint.y }
+            : null;
+        } else if (this.panPrev && useEditor.getState().panning && typeof window !== 'undefined') {
+          // PINÇA E PUXA: a vista acompanha a mão (px) — mouse e toque fazem
+          // o mesmo caminho pelo lado deles; componente algum é tocado.
+          const dx = (cursorPoint.x - this.panPrev.x) * window.innerWidth;
+          const dy = (cursorPoint.y - this.panPrev.y) * window.innerHeight;
+          this.panPrev = { x: cursorPoint.x, y: cursorPoint.y };
+          if (dx !== 0 || dy !== 0) applyPan(dx, dy, window.innerWidth);
         } else {
           st.moveAt(cell);
         }

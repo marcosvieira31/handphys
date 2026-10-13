@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import type { Reading } from '../core/netlist';
 import { computeFlow, flowDuration } from '../core/flow';
 import {
+  compAt,
   nearestTerminal,
   samePt,
   terminalCount,
@@ -18,6 +19,7 @@ import {
   clientToBoard,
   clientToCell,
   overTrash,
+  wireAt,
 } from './coords';
 import { formatValue, labelPos, Symbol } from './symbol';
 import { voltageColor } from './colors';
@@ -50,14 +52,18 @@ export function Schematic({ reading }: { reading: Reading }) {
   const pinchFresh = useRef(new Set<number>());
   /** true = esta gesta de toque virou zoom (não pode virar clique ao soltar). */
   const pinchMode = useRef(false);
+  /** Última posição do mouse durante o arraste no vazio (pan da vista, em px). */
+  const panLast = useRef<{ x: number; y: number } | null>(null);
 
   const toCell = (clientX: number, clientY: number): Pt => clientToCell(svgRef.current, clientX, clientY);
 
   const capture = (e: React.PointerEvent) => {
     const st = useEditor.getState();
     // item armado também captura: sem isso, soltar em cima da lixeira chega no
-    // BOTÃO (não no svg) e o arraste morre no caminho.
-    if (st.draft || st.grip || st.placing) (e.target as Element).setPointerCapture?.(e.pointerId);
+    // BOTÃO (não no svg) e o arraste morre no caminho. O aperto-vazio (pan da
+    // vista) idem: o mouse pode sair do quadro no meio do arraste.
+    if (st.draft || st.grip || st.placing || st.panning)
+      (e.target as Element).setPointerCapture?.(e.pointerId);
   };
 
   /** Dois dedos sobre o quadro => zoom pelo afastamento + pan pelo arraste.
@@ -95,6 +101,8 @@ export function Schematic({ reading }: { reading: Reading }) {
       const st = useEditor.getState();
       st.cancelDraft();
       st.releaseGrip();
+      st.stopPan(); // o aperto-vazio de UMA mão vira zoom+pan de duas
+      panLast.current = null;
       pinch.current = null;
       pinchFresh.current.clear();
       pinchMode.current = true;
@@ -102,6 +110,10 @@ export function Schematic({ reading }: { reading: Reading }) {
       return;
     }
     useEditor.getState().pressAt(toCell(e.clientX, e.clientY));
+    // caiu no vazio: o arraste do mouse desloca a vista (o store diz que é pan)
+    panLast.current = useEditor.getState().panning
+      ? { x: e.clientX, y: e.clientY }
+      : null;
     capture(e);
   };
 
@@ -112,9 +124,20 @@ export function Schematic({ reading }: { reading: Reading }) {
       onTouchPinch(e.pointerId);
       return;
     }
+    const st = useEditor.getState();
+    // arraste no VAZIO = pan: em px de tela (a célula reage à vista andando e
+    // o alvo escaparia da mira) — o conteúdo acompanha o mouse.
+    if (!st.modal && st.panning && panLast.current && svgRef.current) {
+      const r = svgRef.current.getBoundingClientRect();
+      const dx = e.clientX - panLast.current.x;
+      const dy = e.clientY - panLast.current.y;
+      panLast.current = { x: e.clientX, y: e.clientY };
+      if (dx !== 0 || dy !== 0) st.panBy(dx, dy, r.width);
+      return;
+    }
     const cell = toCell(e.clientX, e.clientY);
     setHoverCell(cell);
-    useEditor.getState().moveAt(cell);
+    st.moveAt(cell);
   };
 
   const onPointerUp = (e: React.PointerEvent) => {
@@ -123,6 +146,7 @@ export function Schematic({ reading }: { reading: Reading }) {
     pinchFresh.current.clear();
     if (pointers.current.size < 2) pinch.current = null;
     if (pointers.current.size === 0) pinchMode.current = false;
+    panLast.current = null;
     if (eraGesture) return; // o gesto já soltou draft/grip; não vira clique
     const st = useEditor.getState();
     // soltou EM CIMA da lixeira = jogou o que estava na mão fora; caso contrário
@@ -133,6 +157,7 @@ export function Schematic({ reading }: { reading: Reading }) {
 
   const dropPointers = () => {
     pointers.current.clear();
+    panLast.current = null;
     pinch.current = null;
     pinchFresh.current.clear();
     pinchMode.current = false;
@@ -140,9 +165,19 @@ export function Schematic({ reading }: { reading: Reading }) {
 
   const onPointerLeave = () => {
     setHoverCell(null);
+    panLast.current = null;
     const st = useEditor.getState();
     if (!st.draft) st.releaseGrip();
     dropPointers();
+  };
+
+  /** Duplo-clique no VAZIO => circuito no centro do quadro (mantém o zoom). */
+  const onDoubleClick = (e: React.MouseEvent) => {
+    const st = useEditor.getState();
+    if (st.modal || st.placing || st.wiring || st.draft) return;
+    const cell = toCell(e.clientX, e.clientY);
+    if (nearestTerminal(doc, cell, GRAB_DIST) || compAt(doc, cell) || wireAt(doc, cell)) return;
+    st.centerView();
   };
 
   // Roda do mouse (e o zoom do trackpad, que chega como ctrl+wheel): amplia
@@ -292,6 +327,7 @@ export function Schematic({ reading }: { reading: Reading }) {
       onPointerUp={onPointerUp}
       onPointerCancel={dropPointers}
       onPointerLeave={onPointerLeave}
+      onDoubleClick={onDoubleClick}
       onContextMenu={(e) => e.preventDefault()}
     >
       <defs>

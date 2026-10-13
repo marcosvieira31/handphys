@@ -49,6 +49,12 @@ export interface EditorState {
   /** Zoom do quadro 2D (1 = cabe tudo, 4 = o teto) e deslocamento do centro. */
   zoom: number;
   pan: Pt;
+  /**
+   * O último aperto caiu no VAZIO do quadro: o arraste que vem dele desloca a
+   * vista (mouse) ou aciona o pan da pinça no controller — nunca mexe em
+   * componente. `pressAt` sempre reavalia; `releaseAt`/`stopPan` encerram.
+   */
+  panning: boolean;
   seq: number;
   past: CircuitDoc[];
   /**
@@ -96,6 +102,10 @@ export interface EditorState {
   zoomBy: (factor: number, anchor?: Pt | null) => void;
   /** Arraste em px de tela => desloca a vista (o conteúdo acompanha o dedo). */
   panBy: (dxPx: number, dyPx: number, viewportPx: number) => void;
+  /** Encerra o aperto-vazio (chegou 2º dedo do gesto de toque, saiu da cena). */
+  stopPan: () => void;
+  /** Leva o quadro ao centro do workbench mantendo o zoom (duplo-clique no vazio). */
+  centerView: () => void;
   resetView: () => void;
 }
 
@@ -139,6 +149,7 @@ export const useEditor = create<EditorState>((set, get) => ({
   view: '2d',
   zoom: 1,
   pan: { x: 0, y: 0 },
+  panning: false,
   seq: 0,
   past: [],
   modal: false,
@@ -150,7 +161,7 @@ export const useEditor = create<EditorState>((set, get) => ({
     }
     // abrir já larga o que estava na mão (senão o aperto fica preso atrás do
     // cartão e o componente salta sozinho quando o diálogo fecha)
-    set({ modal: true, grip: null, draft: null, placing: null, carry: null, wiring: false });
+    set({ modal: true, grip: null, draft: null, placing: null, carry: null, wiring: false, panning: false });
   },
 
   arm: (kind) => {
@@ -237,6 +248,7 @@ export const useEditor = create<EditorState>((set, get) => ({
   pressAt: (cell) => {
     const s = get();
     if (s.modal) return; // diálogo em cima: a cena não recebe aperto
+    set({ panning: false }); // todo aperto reavalia o que é: vazio vira pan depois
     if (s.placing) {
       // PEGOU o item: o fantasma gruda na mira e só cai no releaseAt — assim
       // a pinça carrega do trilho até onde QUER soltar, sem posicionar no
@@ -269,6 +281,10 @@ export const useEditor = create<EditorState>((set, get) => ({
     }
     const wire = wireAt(s.doc, cell);
     s.select(wire ? { kind: 'wire', id: wire.id } : null);
+    // caiu no VAZIO (sem componente, fio ou terminal por perto): o arraste que
+    // vier daqui desloca a vista — mouse no quadro, pinça das mãos nos dois
+    // cantos. Ninguém mexe em componente sem ter encostado nele.
+    if (!wire) set({ panning: true });
   },
 
   /** Move com aperto: leva o item carregado, o fio em arraste ou o componente segurado. */
@@ -291,6 +307,7 @@ export const useEditor = create<EditorState>((set, get) => ({
   releaseAt: (cell) => {
     const s = get();
     if (s.modal) return;
+    if (s.panning) set({ panning: false }); // soltou: o aperto-vazio terminou
     if (s.placing) {
       s.place(s.placing, cell); // SOLTOU = posiciona onde a mira estava
       return;
@@ -450,13 +467,17 @@ export const useEditor = create<EditorState>((set, get) => ({
   setColorByVoltage: (on) => set({ colorByVoltage: on }),
   setFlow: (on) => set({ flow: on }),
 
-  setView: (v) => set({ view: v, draft: null, grip: null }),
+  setView: (v) => set({ view: v, draft: null, grip: null, panning: false }),
 
   zoomBy: (factor, anchor) =>
     set((s) => zoomAbout({ zoom: s.zoom, pan: s.pan }, factor, anchor ?? null)),
 
   panBy: (dxPx, dyPx, viewportPx) =>
     set((s) => panPx({ zoom: s.zoom, pan: s.pan }, dxPx, dyPx, viewportPx)),
+
+  stopPan: () => set({ panning: false }),
+
+  centerView: () => set({ pan: { x: 0, y: 0 } }), // centro do quadro, zoom fica
 
   resetView: () => set({ zoom: 1, pan: { x: 0, y: 0 } }),
 }));

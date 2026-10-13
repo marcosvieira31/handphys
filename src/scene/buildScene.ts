@@ -28,6 +28,8 @@ export interface LabView {
   cellAt(nx: number, ny: number): { x: number; y: number } | null;
   /** Afasta/aproxima a câmera (o MESMO gesto de zoom do quadro 2D). */
   dolly(factor: number): void;
+  /** Arraste no vazio da bancada => desloca câmera e ALVO juntos (px de tela). */
+  panBy(dxPx: number, dyPx: number, viewportPx: number): void;
   /** Volta a câmera ao enquadro de chegada. */
   resetView(): void;
   dispose(): void;
@@ -36,6 +38,28 @@ export interface LabView {
 /** Enquadro de chegada da bancada: de cima, enxergando a mesa inteira. */
 const HOME_POS = new THREE.Vector3(13, 17, 23);
 const HOME_TARGET = new THREE.Vector3(0, 0, 1);
+
+/**
+ * Pan da bancada em px de tela: câmera e alvo andam JUNTOS no plano da tela
+ * (a órbita fica intacta) e na escala certa — mundo por px depende da
+ * distância até o alvo. O conteúdo acompanha o dedo: dedo p/ a direita
+ * (dx>0) a câmera anda p/ a esquerda, dedo p/ baixo ela sobe.
+ */
+export function panCameraBy(
+  camera: THREE.PerspectiveCamera,
+  target: THREE.Vector3,
+  dxPx: number,
+  dyPx: number,
+  heightPx: number,
+): void {
+  const dist = camera.position.distanceTo(target);
+  const k = (2 * Math.tan((camera.fov * Math.PI) / 360) * dist) / Math.max(1, heightPx);
+  const right = new THREE.Vector3(1, 0, 0).applyQuaternion(camera.quaternion);
+  const up = new THREE.Vector3(0, 1, 0).applyQuaternion(camera.quaternion);
+  const delta = right.multiplyScalar(-dxPx * k).add(up.multiplyScalar(dyPx * k));
+  camera.position.add(delta);
+  target.add(delta);
+}
 
 const METAL = 0x9aa3ad;
 const DARK = 0x1c2128;
@@ -385,6 +409,21 @@ export function createLabView(canvas: HTMLCanvasElement): LabView {
     return { x: Math.round(x), y: Math.round(y) };
   };
 
+  // Duplo-clique no VAZIO da bancada => circuito no centro do enquadramento
+  // (em cima de componente/fio quem decide é o clique normal, que seleciona).
+  const onDblClick = (e: MouseEvent) => {
+    const r = canvas.getBoundingClientRect();
+    if (!r.width || !r.height) return;
+    ndc.set(((e.clientX - r.left) / r.width) * 2 - 1, 1 - ((e.clientY - r.top) / r.height) * 2);
+    ray.setFromCamera(ndc, camera);
+    const hit = ray.intersectObjects(dyn.children, true)[0];
+    if (hit && (compIdOf(hit.object) || hit.object.userData.wireId)) return;
+    camera.position.copy(HOME_POS);
+    controls.target.copy(HOME_TARGET);
+    controls.update();
+  };
+  canvas.addEventListener('dblclick', onDblClick);
+
   const resize = () => {
     const w = canvas.clientWidth || 1;
     const h = canvas.clientHeight || 1;
@@ -442,6 +481,11 @@ export function createLabView(canvas: HTMLCanvasElement): LabView {
       camera.position.copy(controls.target).add(dir.setLength(len));
       controls.update();
     },
+    panBy(dxPx, dyPx, viewportPx) {
+      // arraste no vazio (mouse ou pinça das mãos): a bancada acompanha o dedo
+      panCameraBy(camera, controls.target, dxPx, dyPx, canvas.clientHeight || viewportPx || 1);
+      controls.update();
+    },
     resetView() {
       camera.position.copy(HOME_POS);
       controls.target.copy(HOME_TARGET);
@@ -451,6 +495,7 @@ export function createLabView(canvas: HTMLCanvasElement): LabView {
       dead = true;
       cancelAnimationFrame(raf);
       ro.disconnect();
+      canvas.removeEventListener('dblclick', onDblClick);
       controls.dispose();
       disposeGroup(dyn);
       disposeGroup(scene);

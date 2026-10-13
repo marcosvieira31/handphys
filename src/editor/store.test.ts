@@ -311,3 +311,74 @@ describe('diÃ¡logo em cima (store.modal)', () => {
     expect(useEditor.getState().grip?.id).toBe('lamp1');
   });
 });
+
+describe('aperto no vazio = deslocar a vista (pan)', () => {
+  beforeEach(() => {
+    useEditor.setState({
+      doc: {
+        comps: [{ id: 'bat1', kind: 'vsource', x: 4, y: 10, rot: 0, value: 9 }],
+        wires: [],
+      },
+      draft: null,
+      grip: null,
+      selection: null,
+      placing: null,
+      carry: null,
+      wiring: false,
+      modal: false,
+      panning: false,
+      zoom: 2,
+      pan: { x: 40, y: -25 },
+      seq: 100,
+      past: [],
+    });
+  });
+
+  it('aperto LONGE de tudo marca panning; soltar encerra', () => {
+    useEditor.getState().pressAt({ x: 22, y: 22 });
+    expect(useEditor.getState().panning).toBe(true);
+    expect(useEditor.getState().grip).toBeNull();
+    useEditor.getState().releaseAt({ x: 24, y: 20 });
+    expect(useEditor.getState().panning).toBe(false);
+  });
+
+  it('aperto em componente NAO vira pan (é arraste do componente)', () => {
+    useEditor.getState().pressAt({ x: 4, y: 10 }); // corpo da fonte
+    const st = useEditor.getState();
+    expect(st.panning).toBe(false);
+    expect(st.grip?.id).toBe('bat1');
+  });
+
+  it('aperto no TERMINAL nao vira pan (é o fio na mao)', () => {
+    useEditor.getState().pressAt({ x: 5, y: 10 }); // terminal + da fonte
+    const st = useEditor.getState();
+    expect(st.panning).toBe(false);
+    expect(st.draft).not.toBeNull();
+    useEditor.getState().cancelDraft();
+  });
+
+  it('stopPan corta no meio do arraste (chegou o segundo dedo do toque)', () => {
+    useEditor.getState().pressAt({ x: 22, y: 22 });
+    expect(useEditor.getState().panning).toBe(true);
+    useEditor.getState().stopPan();
+    expect(useEditor.getState().panning).toBe(false);
+  });
+
+  it('centerView leva ao CENTRO do quadro mantendo o zoom', () => {
+    const st = useEditor.getState();
+    expect(st.zoom).toBe(2);
+    st.centerView();
+    const after = useEditor.getState();
+    expect(after.pan).toEqual({ x: 0, y: 0 });
+    expect(after.zoom).toBe(2); // so o enquadramento muda
+  });
+
+  it('moveAt durante o pan nao mexe em componente (o consumidor e quem pan-a)', () => {
+    useEditor.getState().pressAt({ x: 22, y: 22 });
+    const antes = JSON.stringify(useEditor.getState().doc.comps);
+    useEditor.getState().moveAt({ x: 18, y: 16 });
+    expect(JSON.stringify(useEditor.getState().doc.comps)).toBe(antes);
+    expect(useEditor.getState().grip).toBeNull();
+    expect(useEditor.getState().draft).toBeNull();
+  });
+});

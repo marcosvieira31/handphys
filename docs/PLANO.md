@@ -265,6 +265,57 @@ Feito (efeito visual com interruptor — o aluno vê a corrente ANDAR no esquem�
   animação desligada, distribuição 0/⅓/⅔ no primeiro quadro e avanço de 0,1 s no
   comprimento de arco), build ok.
 
+### Pan da vista e centralização (2D + 3D) — onde está
+
+Feito (o circuito reposicionável no workbench, com mouse E pinça):
+
+- **O que é**: arrastar a **área vazia** do quadro desloca a vista — o circuito
+  acompanha o ponteiro (mouse, dedo no toque e **pinça+puxar** das mãos);
+  **duplo-clique no vazio leva o circuito ao centro** mantendo o zoom. Na bancada
+  3D o mesmo: a pinça no vazio desloca a câmera, e o duplo-clique no vazio volta ao
+  **enquadramento de chegada** (câmera e alvo juntos, órbita intacta). Nada disso
+  toca em componente — apertar em componente/fio/terminal continua sendo edição.
+- **Por que em px e não em célula**: a célula da mira é derivada da vista; se o pan
+  medisse células, cada movimento da vista mudaria a célula sob o dedo e a vista
+  correria sozinha (realimentação). O mouse guarda `panLast` em px no
+  [`Schematic.tsx`](../src/editor/Schematic.tsx); a pinça guarda `panPrev` em
+  **fração de tela** no [`controller.ts`](../src/hands/controller.ts) e converte com
+  `innerWidth/innerHeight`.
+- **Onde está o gatilho**: `pressAt` do store reavalia todo aperto — caiu no vazio
+  (sem componente, fio nem terminal por perto) marca **`panning`**; `releaseAt`,
+  `stopPan` (chegada do 2º dedo do toque), `setModal` e `setView` encerram. Com
+  `panning` ligado: o [`Schematic.tsx`](../src/editor/Schematic.tsx) ignora
+  `moveAt` e chama `panBy(dx, dy, largura)` por evento; o controller, enquanto a
+  pinça estiver fechada, chama **`applyPan`** — o MESMO caminho duplo do zoom em
+  [`src/editor/zoom.ts`](../src/editor/zoom.ts): vista 2D → `store.panBy`, vista 3D →
+  `target3d.panBy`. Em componente/fio/terminal o flag nunca liga, então os dois
+  lados caem no `moveAt` normal.
+- **Centralizar**: `centerView` (novo) zera o `pan` **mantendo o zoom** — é o que o
+  duplo-clique dispara quando não encosta em nada (guarda de modal/armado/fio).
+  A tecla `0` e o botão `%` continuam sendo o `resetView` completo (zoom 1 + centro).
+- **3D**: `panCameraBy(camera, alvo, dx, dy, altura)` em
+  [`src/scene/buildScene.ts`](../src/scene/buildScene.ts) anda com câmera e alvo
+  juntos no plano da tela, na escala certa (mundo/px = `2·tan(fov/2)·dist/altura`);
+  `LabView.panBy` é o novo método do `ZoomTarget`. O duplo-clique do canvas só
+  recentraliza se o raio **não** achar componente/fio (`dyn`); bancada e gotas
+  contam como vazio. O pan do mouse já existia no OrbitControls (botão direito) —
+  o que entrou foi o centralizar e o gesto da pinça.
+- **Limite conhecido**: em zoom 1 o quadro inteiro cabe, então `clampCenter` congela
+  o pan em zero (por design — não há o que deslocar; amplie para posicionar).
+
+- Verificado: `tsc` limpo, **196 testes** (12 novos: 6 do store — aperto no vazio
+  vira pan e solta encerra, componente e terminal NÃO viram pan, `stopPan` do 2º
+  dedo, `centerView` mantém o zoom, `moveAt` durante o pan não mexe no doc; 2 do
+  controller — pinça no vazio e puxa desloca a vista sem tocar em componente e
+  abrir a mão solta, pinça no terminal leva o fio e a vista fica parada; 4 do pan
+  3D — câmera+alvo juntos preservando a órbita, sentido do conteúdo acompanhando o
+  dedo, escala proporcional à distância, altura 0 sem NaN), build ok. Validação dev
+  com eventos: arraste no vazio (zoom 2) moveu a vista **exatamente na conta**
+  (dx = 100 px ⇒ Δpan −89,82 = −100·240/267,2), duplo-clique devolveu pan `{0,0}`
+  mantendo zoom 2, arraste sobre componente moveu só o componente (pan intacto),
+  `__lab.panBy` na bancada mudou a mira (15,16)→(8,19) e o duplo-clique no vazio
+  devolveu (15,16), **0 erros de console**.
+
 ## 6. Riscos e mitigações
 
 1. **PCs fracos + MediaPipe** → medir fps no spike; `GPU` delegate com fallback CPU; mouse sempre disponível.

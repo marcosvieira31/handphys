@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useEditor } from '../editor/store';
 import { HandsController, type HandPoint } from './controller';
 import type { FrameHand } from './tracker';
@@ -519,5 +519,53 @@ describe('HandsController sem câmera (ingest)', () => {
     useEditor.setState({ zoom: 1, pan: { x: 0, y: 0 } });
     abrir();
     expect(useEditor.getState().zoom).toBeGreaterThan(1);
+  });
+});
+
+describe('pinca e puxa = pan da vista (controller)', () => {
+  beforeEach(() => {
+    resetDoc();
+    // zoom > 1: em zoom 1 o quadro inteiro cabe e o clamp CENTRALIZA (pan é
+    // no-op por design — só dá para deslocar vista ampliada)
+    useEditor.setState({ zoom: 2, pan: { x: 0, y: 0 }, panning: false });
+    // px de tela em jogo: o pan mede a mira em fracao da janela
+    vi.stubGlobal('window', { innerWidth: 1000, innerHeight: 800 });
+  });
+  afterEach(() => vi.unstubAllGlobals());
+
+  const feed = (ctl: HandsController, h: FrameHand, n = 8, start = { now: 0 }) => {
+    for (let i = 0; i < n; i++) {
+      start.now += 33;
+      ctl.ingest([h], 5, start.now);
+    }
+    return start;
+  };
+
+  it('pinca no VAZIO e puxa: a vista acompanha a mao, sem tocar em componente', () => {
+    const ctl = wireUp();
+    // ponta espelhada (1-0.3, 0.15) => celula (20,4): longe dos comps (4,10)/(12,10)
+    const clk = feed(ctl, hand('Right', 0.3, 0.3, 0.15));
+    expect(useEditor.getState().panning).toBe(true);
+    const comps0 = JSON.stringify(useEditor.getState().doc.comps);
+    // puxa p/ a direita (espelha: tx menor = mira mais p/ a direita)
+    feed(ctl, hand('Right', 0.15, 0.15, 0.25), 8, clk);
+    const pan = useEditor.getState().pan;
+    expect(pan.x).not.toBe(0); // andou (o eixo Y da mira prende na palma: x basta)
+    expect(JSON.stringify(useEditor.getState().doc.comps)).toBe(comps0);
+    expect(useEditor.getState().grip).toBeNull();
+    expect(useEditor.getState().draft).toBeNull();
+    // abrir a mao solta o aperto-vazio
+    feed(ctl, hand('Right', 0.15, 0.45, 0.25), 12, clk);
+    expect(useEditor.getState().panning).toBe(false);
+  });
+
+  it('pinca no TERMINAL: o fio vai na mao, a vista fica parada', () => {
+    const ctl = wireUp();
+    const clk = feed(ctl, hand('Right', 0.8, 0.8334)); // cursor em (5,10): terminal
+    expect(useEditor.getState().panning).toBe(false);
+    expect(useEditor.getState().draft).not.toBeNull();
+    feed(ctl, hand('Right', 0.7, 0.8334), 8, clk); // arrasta o fio p/ a direita
+    expect(useEditor.getState().pan).toEqual({ x: 0, y: 0 }); // nao deslocou a vista
+    expect(useEditor.getState().draft).not.toBeNull();
   });
 });

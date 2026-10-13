@@ -316,6 +316,35 @@ Feito (o circuito reposicionável no workbench, com mouse E pinça):
   `__lab.panBy` na bancada mudou a mira (15,16)→(8,19) e o duplo-clique no vazio
   devolveu (15,16), **0 erros de console**.
 
+### Trilhos ao lado do quadro — onde está
+
+Feito (os itens encostados na bancada, sem esticar o braço):
+
+- **O que é**: os trilhos de ferramentas saíram das **bordas da janela** e viraram
+  **irmãos de flex do próprio quadro** ([`.canvas-view`](../src/styles/editor.css)):
+  componentes à esquerda, vista/cores/zoom à direita, com **gap de 10 px** da
+  borda do quadro — pegar → carregar → soltar é um gesto curto (antes sobravam
+  ~150 px de vão de cada lado e o braço esticava para alcançar o item).
+- **Como o quadrado sobrevive ao flex**: `height: 100%` fixo + shrink achataria o
+  quadro (medido: 448×588). O quadrado passou a sair da **largura disponível**
+  com teto na **altura** — `width: min(100%, 100cqh)` com `height: auto`, em
+  regras escopadas em `.canvas-view > .schematic/.scene-wrap` (o espelho, fora
+  da bancada, fica com a regra antiga). A bancada virou `container-type: size`
+  para o `cqh` existir; o canvas 3D é `absolute inset: 0` e o ResizeObserver do
+  renderer só o preenche.
+- **Bancada estreita**: container < 600 px não cabe trilho AO LADO sem amassar o
+  quadro — a **container query** devolve os trilhos às bordas (o comportamento
+  antigo, sobreposto), e o quadro volta a `min(largura, altura)`.
+- Verificado: `tsc` limpo, **196 testes**, build ok; dev em janela larga: gap
+  esq/dir = 10 px, quadro 2D quadrado (diff 0) e canvas 3D quadrado; janela
+  estreita: fallback sobreposto com quadro quadrado; interação no layout novo —
+  armou Fonte no trilho, soltou na grade (1 comp), aperto em cima **selecionou**
+  (`selection` ligado, `panning` falso) e a lixeira apagou; **0 erros de
+  console** (2 `setPointerCapture` são artefato de evento sintético sem
+  pointerId, não de clique real). Produção (run 38438204449): CSS novo no ar,
+  `container-type: size`, gaps 10/10, quadro 448×448, canvas 3D 448×448, alvo
+  de mão 64×62 com `data-hand`, 0 erros.
+
 ## 6. Riscos e mitigações
 
 1. **PCs fracos + MediaPipe** → medir fps no spike; `GPU` delegate com fallback CPU; mouse sempre disponível.

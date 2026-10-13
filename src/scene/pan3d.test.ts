@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import * as THREE from 'three';
-import { panCameraBy } from './buildScene';
+import { panCameraBy, rollCameraBy } from './buildScene';
 
 /** Câmera olhando para a origem de frente (direita = +X, cima = +Y na tela). */
 function rig(z: number) {
@@ -47,5 +47,49 @@ describe('panCameraBy (bancada 3D)', () => {
   it('altura 0 ou negativa não divide por zero', () => {
     const { camera, target } = rig(10);
     expect(() => panCameraBy(camera, target, 10, 10, 0)).not.toThrow();
+  });
+});
+
+describe('rollCameraBy (giro do eixo Z pela rotação das mãos)', () => {
+  /** Câmera inclinada como a bancada de verdade (offset com X e Y na horizontal). */
+  function rigTilt() {
+    const camera = new THREE.PerspectiveCamera(60, 1, 0.1, 300);
+    camera.position.set(13, 17, 23);
+    const target = new THREE.Vector3(0, 0, 1);
+    camera.lookAt(target);
+    camera.updateMatrixWorld();
+    return { camera, target };
+  }
+
+  it('gira a câmera ao redor do Z do mundo PASSANDO PELO ALVO (distância intacta)', () => {
+    const { camera, target } = rigTilt();
+    const dist = camera.position.distanceTo(target);
+    rollCameraBy(camera, target, Math.PI / 2);
+    expect(camera.position.z).toBeCloseTo(23, 10); // altura não muda
+    expect(camera.position.x).toBeCloseTo(-17, 10); // (13,17) girado 90° => (-17,13)
+    expect(camera.position.y).toBeCloseTo(13, 10);
+    expect(camera.position.distanceTo(target)).toBeCloseTo(dist, 10);
+    expect(target.x).toBe(0); // alvo parado
+    expect(target.y).toBe(0);
+    expect(target.z).toBe(1);
+  });
+
+  it('rad > 0 orbita anti-horário (regra da mão direita): a mão horária leva o conteúdo junto', () => {
+    const { camera, target } = rigTilt();
+    const azimuth = () =>
+      Math.atan2(camera.position.y - target.y, camera.position.x - target.x);
+    const a0 = azimuth();
+    rollCameraBy(camera, target, 0.3);
+    expect(azimuth()).toBeCloseTo(a0 + 0.3, 10);
+  });
+
+  it('giro e contra-giro devolvem a câmera ao enquadramento', () => {
+    const { camera, target } = rigTilt();
+    const antes = camera.position.clone();
+    rollCameraBy(camera, target, 0.7);
+    rollCameraBy(camera, target, -0.7);
+    expect(camera.position.x).toBeCloseTo(antes.x, 10);
+    expect(camera.position.y).toBeCloseTo(antes.y, 10);
+    expect(camera.position.z).toBeCloseTo(antes.z, 10);
   });
 });

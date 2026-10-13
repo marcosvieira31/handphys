@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useEditor } from '../editor/store';
+import { bindZoomTarget } from '../editor/zoom';
 import { HandsController, type HandPoint } from './controller';
 import type { FrameHand } from './tracker';
 
@@ -317,6 +318,132 @@ describe('HandsController sem câmera (ingest)', () => {
     expect(z).toBeGreaterThan(1.5);
     for (let g = 0.6; g >= 0.4; g -= 0.05) feed(pair(g)); // junta
     expect(useEditor.getState().zoom).toBeLessThan(z);
+  });
+
+  describe('duas mãos completo: enquadramento e giro de Z', () => {
+    afterEach(() => {
+      bindZoomTarget(null);
+      useEditor.setState({ view: '2d' });
+      vi.unstubAllGlobals();
+    });
+
+    /** Par de mãos COMPACTAS a `gap` de distância, com o MEIO em `my`. */
+    const pairAt = (gap: number, my: number, mx = 0.5): FrameHand[] => [
+      blob('Right', mx, my - gap / 2),
+      blob('Left', mx, my + gap / 2),
+    ];
+
+    const feeder = (ctl: HandsController) => {
+      let now = 0;
+      return (hs: FrameHand[], n = 3) => {
+        for (let i = 0; i < n; i++) {
+          now += 33;
+          ctl.ingest(hs, 5, now);
+        }
+      };
+    };
+
+    it('o MEIO das mãos posiciona o enquadramento (vertical e horizontal)', () => {
+      const ctl = wireUp();
+      vi.stubGlobal('window', { innerWidth: 1000, innerHeight: 800 });
+      const feed = feeder(ctl);
+      feed(pairAt(0.4, 0.5)); // as duas mãos aparecem
+      for (let g = 0.45; g <= 0.6; g += 0.05) feed(pairAt(g, 0.5)); // afasta => zoom > 1
+      expect(useEditor.getState().zoom).toBeGreaterThan(1);
+      const antes = { ...useEditor.getState().pan };
+      // desce com o MEIO (distância fixa: zoom neutro, só o enquadramento anda)
+      for (let my = 0.55; my <= 0.75; my += 0.05) feed(pairAt(0.6, my));
+      const dep = useEditor.getState().pan;
+      expect(dep.y).toBeLessThan(antes.y); // mãos p/ baixo: a vista olha mais p/ cima
+      expect(dep.x).toBeCloseTo(antes.x, 1); // sem movimento lateral, nada muda em x
+      // e o eixo horizontal: no CRUDO p/ a direita = no ESPPELHO (o que o
+      // usuário vê) p/ a esquerda — o enquadramento anda em x do mesmo jeito
+      const antesX = { ...useEditor.getState().pan };
+      for (let mx = 0.54; mx <= 0.7; mx += 0.04) feed(pairAt(0.6, 0.75, mx));
+      expect(useEditor.getState().pan.x).toBeGreaterThan(antesX.x);
+    });
+
+    it('a ROTAÇÃO das mãos gira o eixo Z na bancada 3D (mão horária leva o conteúdo)', () => {
+      const ctl = wireUp();
+      const rolls: number[] = [];
+      const dollies: number[] = [];
+      const pans: number[] = [];
+      bindZoomTarget({
+        dolly: (f) => dollies.push(f),
+        panBy: (dx) => pans.push(dx),
+        rollBy: (r) => rolls.push(r),
+        resetView: () => {},
+      });
+      useEditor.setState({ view: '3d' });
+      const feed = feeder(ctl);
+      // par girando ao redor do MEIO com distância FIXA (zoom neutro, meio parado):
+      // horário no ESPPELHO (o que o usuário vê) = anti-horário no crudo (x vira 1-x)
+      const R = 0.25;
+      const spin = (alpha: number): FrameHand[] => [
+        blob('Right', 0.5 + R * Math.cos(alpha), 0.5 + R * Math.sin(alpha)),
+        blob('Left', 0.5 - R * Math.cos(alpha), 0.5 - R * Math.sin(alpha)),
+      ];
+      feed(spin(0)); // par aparece parado
+      let alpha = 0;
+      for (let i = 0; i < 12; i++) {
+        alpha -= Math.PI / 18; // 10° por passo (cabe na trava por quadro)
+        feed(spin(alpha), 2);
+      }
+      expect(rolls.length).toBeGreaterThan(0);
+      expect(rolls.every((r) => r > 0)).toBe(true); // mão horária => rad > 0
+      const total = rolls.reduce((s, r) => s + r, 0);
+      expect(total).toBeGreaterThan(1.5); // ≈ 120° = 2,09 rad (a suavização lagging)
+      expect(total).toBeLessThan(2.4);
+      // a distância é fixa na conta crua; o que sobra é o tremor da suavização
+      // (< 1%: nada visível) — nunca zoom de verdade durante o giro
+      expect(dollies.every((f) => Math.abs(f - 1) < 0.01)).toBe(true);
+      expect(pans.length).toBe(0); // meio fixo: enquadramento parado
+
+      // no 2D o gesto continua vivo, mas o esquemático é diagrama e NÃO gira
+      useEditor.setState({ view: '2d', zoom: 2, pan: { x: 0, y: 0 } });
+      rolls.length = 0;
+      for (let i = 0; i < 6; i++) {
+        alpha -= Math.PI / 18;
+        feed(spin(alpha), 2);
+      }
+      expect(rolls.length).toBe(0);
+    });
+
+    it('par trocado no meio do gesto não arremessa (sem salto de π)', () => {
+      const ctl = wireUp();
+      const rolls: number[] = [];
+      bindZoomTarget({
+        dolly: () => {},
+        panBy: () => {},
+        rollBy: (r) => rolls.push(r),
+        resetView: () => {},
+      });
+      useEditor.setState({ view: '3d' });
+      const feed = feeder(ctl);
+      const R = 0.25;
+      const spin = (alpha: number): FrameHand[] => [
+        blob('Right', 0.5 + R * Math.cos(alpha), 0.5 + R * Math.sin(alpha)),
+        blob('Left', 0.5 - R * Math.cos(alpha), 0.5 - R * Math.sin(alpha)),
+      ];
+      feed(spin(0));
+      let alpha = 0;
+      for (let i = 0; i < 4; i++) {
+        alpha -= Math.PI / 18;
+        feed(spin(alpha), 2);
+      }
+      const antes = rolls.length;
+      expect(antes).toBeGreaterThan(0);
+      // uma mão some e outra chega LONGE (> 0,25 = id novo): o par é outro
+      feed([spin(alpha)[0], blob('Left', 0.12, 0.15)], 1);
+      expect(rolls.length).toBe(antes); // o quadro da troca não gira nada
+      // o par novo firma e o gesto continua limpo (sem salto de π)
+      for (let i = 0; i < 3; i++) {
+        alpha -= Math.PI / 18;
+        feed([spin(alpha)[0], blob('Left', 0.12, 0.15)], 2);
+      }
+      expect(rolls.length).toBeGreaterThan(antes); // o gesto recomeça limpo
+      expect(rolls.every((r) => Math.abs(r) <= 0.25)).toBe(true); // nunca π de salto
+    });
   });
 
   it('UMA mão só não mexe no zoom (não é gesto)', () => {

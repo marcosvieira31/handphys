@@ -30,6 +30,8 @@ export interface LabView {
   dolly(factor: number): void;
   /** Arraste no vazio da bancada => desloca câmera e ALVO juntos (px de tela). */
   panBy(dxPx: number, dyPx: number, viewportPx: number): void;
+  /** Giro do eixo Z pela rotação das mãos durante o zoom (mão gira => conteúdo gira). */
+  rollBy(rad: number): void;
   /** Volta a câmera ao enquadro de chegada. */
   resetView(): void;
   dispose(): void;
@@ -59,6 +61,25 @@ export function panCameraBy(
   const delta = right.multiplyScalar(-dxPx * k).add(up.multiplyScalar(dyPx * k));
   camera.position.add(delta);
   target.add(delta);
+}
+
+const AXIS_Z = new THREE.Vector3(0, 0, 1);
+
+/**
+ * Giro do eixo Z da bancada pela ROTAÇÃO das mãos (gesto das duas mãos): a
+ * câmera orbita o eixo vertical PASSANDO PELO ALVO — distância, altura e alvo
+ * intactos, só o azimute muda. Sinal "conteúdo acompanha as mãos": mão girando
+ * no sentido horário de tela (y para baixo) => `rad` > 0 => a câmera orbita
+ * anti-horário por cima (o visto de cima gira horário, junto com a mão).
+ */
+export function rollCameraBy(
+  camera: THREE.PerspectiveCamera,
+  target: THREE.Vector3,
+  rad: number,
+): void {
+  const offset = camera.position.clone().sub(target);
+  offset.applyAxisAngle(AXIS_Z, rad);
+  camera.position.copy(target).add(offset);
 }
 
 const METAL = 0x9aa3ad;
@@ -484,6 +505,11 @@ export function createLabView(canvas: HTMLCanvasElement): LabView {
     panBy(dxPx, dyPx, viewportPx) {
       // arraste no vazio (mouse ou pinça das mãos): a bancada acompanha o dedo
       panCameraBy(camera, controls.target, dxPx, dyPx, canvas.clientHeight || viewportPx || 1);
+      controls.update();
+    },
+    rollBy(rad) {
+      // rotação das mãos durante o gesto de duas mãos: o Z do mundo gira junto
+      rollCameraBy(camera, controls.target, rad);
       controls.update();
     },
     resetView() {

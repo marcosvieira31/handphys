@@ -10,6 +10,8 @@ export interface ZoomTarget {
   dolly(factor: number): void;
   /** Arraste em px => desloca a câmera e o alvo juntos (bancada 3D). */
   panBy(dxPx: number, dyPx: number, viewportPx: number): void;
+  /** Giro do eixo Z pela rotação das mãos (só a bancada 3D gira). */
+  rollBy(rad: number): void;
   resetView(): void;
 }
 
@@ -36,6 +38,16 @@ export function applyPan(dxPx: number, dyPx: number, viewportPx: number): void {
   const st = useEditor.getState();
   if (st.view === '3d' && target3d) target3d.panBy(dxPx, dyPx, viewportPx);
   else st.panBy(dxPx, dyPx, viewportPx);
+}
+
+/**
+ * Giro do eixo Z pela ROTAÇÃO das mãos (gesto das duas mãos): a bancada 3D
+ * orbita o Z do mundo; o esquemático é diagrama e não gira — lá este caminho é
+ * no-op. Mesma rota dupla do zoom e do pan.
+ */
+export function applyRoll(rad: number): void {
+  const st = useEditor.getState();
+  if (st.view === '3d' && target3d) target3d.rollBy(rad);
 }
 
 /** Volta ao enquadro inicial (o quadro inteiro / a câmera de chegada). */

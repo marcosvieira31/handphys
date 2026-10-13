@@ -1,6 +1,6 @@
 import { useSyncExternalStore } from 'react';
-import { applyPan, applyZoom } from '../editor/zoom';
-import { miraOverTrash } from '../editor/coords';
+import { applyPan, applyRoll, applyZoom } from '../editor/zoom';
+import { clientToBoard, miraOverTrash } from '../editor/coords';
 import { useEditor } from '../editor/store';
 import { Clutch } from './clutch';
 import { OneEuroFilter } from './oneEuro';
@@ -137,8 +137,14 @@ export class HandsController {
     string,
     { x: OneEuroFilter[]; y: OneEuroFilter[]; z: OneEuroFilter[] }
   >();
-  /** Distância entre as DUAS mãos do quadro anterior (gesto de zoom). */
-  private spread: number | null = null;
+  /** Estado do gesto das DUAS mãos no quadro anterior: zoom (distância),
+   *  enquadramento (meio) e giro de Z (ângulo da linha entre as mãos). */
+  private spread: {
+    ids: [string, string];
+    dist: number;
+    mid: HandPoint;
+    ang: number;
+  } | null = null;
   /** Identidade estável: o classificador troca Left/Right; o centroide, não. */
   private slots = new Map<string, { x: number; y: number; lastSeen: number }>();
   private slotSeq = 0;
@@ -542,23 +548,49 @@ export class HandsController {
       }
     }
 
-    // 5.5) GESTO DE ZOOM: as DUAS mãos abrindo/juntando (é o "pinça" de toque,
-    // mas com as mãos inteiras). SÓ vale em "Qualquer mão comanda": escolhida
-    // UMA mão, a outra não interage para nada — nem zoom (a mira, a pinça e a
-    // calibração já a ignoram; aqui fecha o último acesso). E continua exigindo
-    // que nenhuma esteja pinçando: quem agarrou algo não muda a vista.
-    const hands2 = [...seen.values()];
-    if (this.filter === 'auto' && seen.size === 2 && pinchedNow.length === 0) {
-      const a = midOf(hands2[0].mir, 0, 9);
-      const b = midOf(hands2[1].mir, 0, 9);
+    // 5.5) GESTO DE DUAS mãos = o "pinça" de toque COMPLETO, com as mãos
+    // inteiras: afastar dá zoom (ancorado no ponto do quadro sob o MEIO das
+    // mãos), deslocar o meio posiciona o enquadramento (vertical e horizontal)
+    // e — SÓ na bancada 3D — girar a linha entre as mãos gira o eixo Z (o
+    // esquemático é diagrama e não gira). SÓ vale em "Qualquer mão comanda":
+    // escolhida UMA mão, a outra não interage para nada — nem zoom (a mira, a
+    // pinça e a calibração já a ignoram; aqui fecha o último acesso). E
+    // continua exigindo que nenhuma esteja pinçando: quem agarrou algo não
+    // muda a vista.
+    const hands2 = [...seen.entries()];
+    if (this.filter === 'auto' && hands2.length === 2 && pinchedNow.length === 0) {
+      const [[idA, ha], [idB, hb]] = hands2;
+      const a = midOf(ha.mir, 0, 9);
+      const b = midOf(hb.mir, 0, 9);
       const dist = Math.hypot(a.x - b.x, a.y - b.y);
-      if (this.spread !== null && this.spread > 0.08 && dist > 0.08) {
+      const mid: HandPoint = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+      const ang = Math.atan2(b.y - a.y, b.x - a.x);
+      const prev = this.spread;
+      // as IDENTIDADES têm de ser as mesmas do quadro anterior: um par trocado
+      // no meio do gesto inverteria a ordem das mãos e daria um salto de π
+      const same = prev !== null && prev.ids[0] === idA && prev.ids[1] === idB;
+      if (same && prev.dist > 0.08 && dist > 0.08) {
         // ganho 1,2: 10% de afastamento ≈ 12% de zoom; trava por quadro para
         // um salto de detecção não arremessar a câmera
-        const f = Math.min(1.05, Math.max(0.95, Math.pow(dist / this.spread, 1.2)));
-        if (Math.abs(f - 1) > 0.003) applyZoom(f);
+        const f = Math.min(1.05, Math.max(0.95, Math.pow(dist / prev.dist, 1.2)));
+        if (Math.abs(f - 1) > 0.003) applyZoom(f, this.boardAt(prev.mid));
+        if (typeof window !== 'undefined') {
+          // o MEIO das mãos anda => o enquadramento anda junto (vertical e
+          // horizontal) — é o que o pinch do toque já fazia com os dedos.
+          // 0,05 px de folga: não é o tremor da suavização nem ponto flutuante
+          const dx = (mid.x - prev.mid.x) * window.innerWidth;
+          const dy = (mid.y - prev.mid.y) * window.innerHeight;
+          if (Math.abs(dx) > 0.05 || Math.abs(dy) > 0.05) applyPan(dx, dy, this.panViewport());
+        }
+        // giro de Z: mão girando no sentido horário de tela (y cresce) =>
+        // orbita anti-horária por cima => o visto de cima gira junto com a mão
+        let dAng = ang - prev.ang;
+        while (dAng > Math.PI) dAng -= 2 * Math.PI;
+        while (dAng < -Math.PI) dAng += 2 * Math.PI;
+        dAng = Math.max(-0.25, Math.min(0.25, dAng)); // trava por quadro
+        if (Math.abs(dAng) > 0.002) applyRoll(dAng);
       }
-      this.spread = dist;
+      this.spread = { ids: [idA, idB], dist, mid, ang };
     } else {
       this.spread = null;
     }
@@ -594,6 +626,29 @@ export class HandsController {
         ? { phase: this.calib.phase, leftMs: Math.max(0, this.calib.until - now) }
         : null,
     });
+  }
+
+  /**
+   * Fração da tela => ponto do quadro (unidades do viewBox): é a âncora do
+   * zoom do gesto das duas mãos — o ponto do quadro sob o MEIO das mãos fica
+   * preso na mão. Sem quadro 2D na tela (bancada 3D) não há âncora: o dolly
+   * não tem, e o enquadramento anda pelo pan e pelo giro.
+   */
+  private boardAt(f: HandPoint): { x: number; y: number } | null {
+    if (typeof document === 'undefined' || typeof window === 'undefined') return null;
+    const el = document.querySelector<SVGSVGElement>('svg.schematic');
+    if (!el) return null;
+    return clientToBoard(el, f.x * window.innerWidth, f.y * window.innerHeight);
+  }
+
+  /** Largura do quadro em px: a referência do pan (sem quadro na tela, a janela). */
+  private panViewport(): number {
+    if (typeof window === 'undefined') return 1;
+    const w =
+      typeof document !== 'undefined'
+        ? document.querySelector('svg.schematic')?.getBoundingClientRect().width
+        : 0;
+    return w && w > 1 ? w : window.innerWidth;
   }
 
   /** Quadro suavizado para a camada desenhar (esqueleto + cursor). */
@@ -772,3 +827,9 @@ export function useHandsStatus(controller: HandsController): HandsStatus {
 
 /** Instância da aplicação (uma câmera por página). */
 export const hands = new HandsController();
+
+if (import.meta.env.DEV && typeof window !== 'undefined') {
+  // gancho de depuração (só dev): alimenta `ingest` com mãos sintéticas sem
+  // câmera — mesmo caminho do tracker, útil para validar gestos no navegador
+  (window as unknown as { __hands?: HandsController }).__hands = hands;
+}

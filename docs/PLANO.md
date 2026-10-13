@@ -345,6 +345,41 @@ Feito (os itens encostados na bancada, sem esticar o braço):
   `container-type: size`, gaps 10/10, quadro 448×448, canvas 3D 448×448, alvo
   de mão 64×62 com `data-hand`, 0 erros.
 
+### Gesto das duas mãos completo (zoom + enquadramento + giro de Z) — onde está
+
+Feito (o gesto de zoom das mãos virou o pinça COMPLETO, como o do toque):
+
+- **O que é**: com as DUAS mãos abertas na tela (seletor em "Qualquer mão
+  comanda"), o gesto faz as três coisas de uma vez — medida do quadro
+  anterior para o atual, na seção 5.5 do
+  [`controller.ts`](../src/hands/controller.ts):
+  1. **afastar/juntar** => zoom (`applyZoom`), **ancorado no ponto do quadro
+     sob o MEIO das mãos** (`boardAt` via `clientToBoard`) — o ponto fica
+     preso na mão, como o pinch do toque já fazia;
+  2. **deslocar o meio** => enquadramento (`applyPan`, em px da janela sobre a
+     largura do quadro) — vertical e horizontal, enquanto se amplia;
+  3. **girar a linha entre as mãos** => eixo Z da bancada 3D: `applyRoll` =>
+     `rollBy` => `rollCameraBy` (novo, em
+     [`src/scene/buildScene.ts`](../src/scene/buildScene.ts)) — a câmera
+     orbita o Z do mundo PASSANDO PELO ALVO: distância, altura e alvo
+     intactos, só o azimute muda. O esquemático é diagrama: lá o giro é
+     no-op.
+- **Travas**: o par tem de ser o MESMO (ids das mãos) — mão trocada no meio
+  do gesto não gira nada naquele quadro (sem salto de π); distância mínima
+  0,08 nos dois quadros; trava por quadro no zoom (±5%) e no giro (±0,25
+  rad); pan com folga de 0,05 px (o tremor da suavização não anda a vista).
+  Seguem as regras de antes: só "Qualquer mão comanda", nenhuma mão pinçando.
+- Verificado: `tsc` limpo, **202 testes** (6 novos: 3 do `rollCameraBy` —
+  órbita pura em Z com distância/alvo intactos, sinal "mão horária leva o
+  conteúdo junto" e contra-giro idêntico; 3 do controller — o meio posiciona
+  o enquadramento nos dois eixos, a rotação gira o Z só no 3D com zoom/pan
+  parados (a soma do giro ≈ ângulo total) e par trocado não arremessa), build
+  ok. Validação dev com `__hands` (gancho novo, só dev, alimenta `ingest` sem
+  câmera): 2D — afastar levou o zoom de 2 para 2,75 com a âncora nas mãos e
+  deslocar o meio andou o viewBox (pan +163,9 / −66,5, os dois eixos); 3D —
+  girar 60° moveu a célula sob o ponto fixo (8,13)→(10,11) e transladar o meio
+  moveu (11,10)→(20,12); **0 erros de console**.
+
 ## 6. Riscos e mitigações
 
 1. **PCs fracos + MediaPipe** → medir fps no spike; `GPU` delegate com fallback CPU; mouse sempre disponível.

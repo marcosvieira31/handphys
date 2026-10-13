@@ -355,6 +355,22 @@ describe('solver ligado ao documento', () => {
   });
 });
 
+/** Gira `steps` vezes (90° cada) o componente `id`, exatamente como o botão Girar. */
+function spin(d: CircuitDoc, id: string, steps: number): CircuitDoc {
+  let cur = d;
+  for (let k = 0; k < steps; k++) {
+    const c = cur.comps.find((x) => x.id === id)!;
+    const before = [terminalPos(c, 0), terminalPos(c, 1)];
+    const rotated: Placed = { ...c, rot: (((c.rot + 90) % 360) as Rot) };
+    cur = reattachWires(
+      { ...cur, comps: cur.comps.map((x) => (x.id === id ? rotated : x)) },
+      rotated,
+      before,
+    );
+  }
+  return cur;
+}
+
 describe('movimento e rotação mantêm os fios', () => {
   it('mover componente arrasta junto os fios encostados', () => {
     const bat = place('vsource', 4, 6, 9);
@@ -390,6 +406,58 @@ describe('movimento e rotação mantêm os fios', () => {
     const moved: Placed = { ...r1, x: 5, y: 9 };
     const after = reattachWires(d, moved, before);
     expect(after.wires[0].from).toEqual({ x: 6, y: 5 });
+  });
+
+  it('girar uma vez (90°) leva a ponta junto com o terminal', () => {
+    const r = place('resistor', 10, 6, 100); // terminais (9,6) e (11,6)
+    const d = doc([r], [wire({ x: 9, y: 6 }, { x: 5, y: 6 })]);
+    const g = spin(d, r.id, 1);
+    expect(g.comps[0].rot).toBe(90);
+    // o terminal 0 foi para cima => a ponta do fio foi junto; a outra ficou
+    expect(g.wires[0].from).toEqual({ x: 10, y: 5 });
+    expect(g.wires[0].to).toEqual({ x: 5, y: 6 });
+  });
+
+  it('girar DUAS vezes devolve o desenho e deixa os terminais invertidos', () => {
+    // o laço da "Lei de Ohm": fonte → resistor → retorno por baixo
+    const bat = place('vsource', 4, 3, 9);
+    const r = place('resistor', 10, 3, 100);
+    const d = doc(
+      [bat, r],
+      [
+        wire({ x: 5, y: 3 }, { x: 9, y: 3 }),
+        wire({ x: 11, y: 3 }, { x: 14, y: 3 }),
+        wire({ x: 14, y: 3 }, { x: 14, y: 8 }),
+        wire({ x: 14, y: 8 }, { x: 3, y: 8 }),
+        wire({ x: 3, y: 8 }, { x: 3, y: 3 }),
+      ],
+    );
+    const g = spin(d, r.id, 2);
+    const r180 = g.comps.find((c) => c.id === r.id)!;
+
+    expect(r180.rot).toBe(180);
+    // o desenho é o MESMO de antes: os fios não trocaram de lado nem fizeram
+    // rodeio embaixo do resistor (a corrente volta a atravessá-lo)
+    expect(g.wires).toEqual(d.wires);
+    expect(wireRoute(g, g.wires[0])).toEqual([
+      { x: 5, y: 3 },
+      { x: 9, y: 3 },
+    ]);
+    // e os terminais é que se inverteram: `a` saiu da esquerda para a direita
+    expect(terminalPos(r180, 0)).toEqual({ x: 11, y: 3 });
+    expect(terminalPos(r180, 1)).toEqual({ x: 9, y: 3 });
+
+    // leitura: mesmo circuito, só que o resistor ficou "ao contrário" na malha
+    expect(readCircuit(g).error).toBeNull();
+    expect(reading(g, 1).amps).toBeCloseTo(-0.09, 9); // era +0,09 antes do giro
+  });
+
+  it('terra gira no próprio lugar e os fios continuam encostados', () => {
+    const g1 = place('ground', 3, 7, 0);
+    const d = doc([g1], [wire({ x: 3, y: 7 }, { x: 3, y: 11 })]);
+    const g = spin(d, g1.id, 1);
+    expect(g.wires).toEqual(d.wires);
+    expect(terminalPos(g.comps[0], 0)).toEqual({ x: 3, y: 7 });
   });
 });
 

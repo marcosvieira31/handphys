@@ -105,6 +105,12 @@ export function samePt(a: Pt, b: Pt): boolean {
   return a.x === b.x && a.y === b.y;
 }
 
+/** Os dois conjuntos de pontos são o mesmo (ordem não importa)? */
+function samePoints(a: Pt[], b: Pt[]): boolean {
+  const has = (p: Pt, list: Pt[]) => list.some((q) => samePt(p, q));
+  return a.every((p) => has(p, b)) && b.every((p) => has(p, a));
+}
+
 export const ptKey = (p: Pt) => `${p.x},${p.y}`;
 
 function add(a: Pt, b: Pt): Pt {
@@ -201,16 +207,16 @@ function simplify(pts: Pt[]): Pt[] {
   return out;
 }
 
-/**
- * Traçado ortogonal de um fio: sai pela direção do terminal, chega pela direção
- * do terminal de destino e faz uma única dobra. Se o destino estiver "atrás" do
- * terminal, contorna pelo lado de fora para não atravessar o próprio corpo.
- * Se o caminho cruzaria terminais ou corpos de OUTROS componentes, desvia por
- * uma faixa paralela livre (até 3 dobras): fio que passa por cima de terminal
- * alheio vira junção fantasma ("curto" sem sentido) — o desvio evita isso.
- * Sem obstáculo, o resultado é bit-idêntico ao traçado de uma dobra só.
- */
-export function wireRoute(doc: CircuitDoc, w: Wire): Pt[] {
+/** Pontas + uma dobra: o traçado "legado" de um fio, sem olhar obstáculos. */
+interface Fold {
+  a: Pt;
+  b: Pt;
+  pa: Pt;
+  pb: Pt;
+  elbow: Pt;
+}
+
+function foldOf(doc: CircuitDoc, w: Wire): Fold {
   const a = w.from;
   const b = w.to;
   const da = exitDir(doc, a, b);
@@ -228,8 +234,11 @@ export function wireRoute(doc: CircuitDoc, w: Wire): Pt[] {
   } else {
     elbow = { x: b.x, y: a.y };
   }
+  return { a, b, pa, pb, elbow };
+}
 
-  // obstáculos: terminais e corpos alheios (nunca as pontas do próprio fio)
+/** Obstáculos: terminais e corpos (nunca as pontas do próprio fio). */
+function blockedOf(doc: CircuitDoc, a: Pt, b: Pt): Set<string> {
   const blocked = new Set<string>();
   for (const c of doc.comps) {
     blocked.add(ptKey({ x: c.x, y: c.y }));
@@ -238,24 +247,50 @@ export function wireRoute(doc: CircuitDoc, w: Wire): Pt[] {
   }
   blocked.delete(ptKey(a));
   blocked.delete(ptKey(b));
+  return blocked;
+}
 
-  /** O miolo (pa..pb) atravessa célula bloqueada? (só o miolo conta) */
-  const crosses = (mid: Pt[]): boolean => {
-    for (let i = 0; i + 1 < mid.length; i++) {
-      const p = mid[i];
-      const q = mid[i + 1];
-      if (p.x === q.x) {
-        for (let y = Math.min(p.y, q.y) + 1; y < Math.max(p.y, q.y); y++) {
-          if (blocked.has(ptKey({ x: p.x, y }))) return true;
-        }
-      } else if (p.y === q.y) {
-        for (let x = Math.min(p.x, q.x) + 1; x < Math.max(p.x, q.x); x++) {
-          if (blocked.has(ptKey({ x, y: p.y }))) return true;
-        }
+/** O miolo (pa..pb) atravessa célula bloqueada? (só o miolo conta) */
+function crossesBlocked(blocked: Set<string>, mid: Pt[]): boolean {
+  for (let i = 0; i + 1 < mid.length; i++) {
+    const p = mid[i];
+    const q = mid[i + 1];
+    if (p.x === q.x) {
+      for (let y = Math.min(p.y, q.y) + 1; y < Math.max(p.y, q.y); y++) {
+        if (blocked.has(ptKey({ x: p.x, y }))) return true;
+      }
+    } else if (p.y === q.y) {
+      for (let x = Math.min(p.x, q.x) + 1; x < Math.max(p.x, q.x); x++) {
+        if (blocked.has(ptKey({ x, y: p.y }))) return true;
       }
     }
-    return false;
-  };
+  }
+  return false;
+}
+
+/**
+ * Esse fio precisa de RODEIO (o traçado de uma dobra só bateria em terminal ou
+ * corpo)? É a medida de "desenho natural" que decide onde cada ponta de fio
+ * encosta quando um componente gira (ver `reattachWires`).
+ */
+function needsDetour(doc: CircuitDoc, w: Wire): boolean {
+  const { a, b, pa, pb, elbow } = foldOf(doc, w);
+  return crossesBlocked(blockedOf(doc, a, b), [pa, elbow, pb]);
+}
+
+/**
+ * Traçado ortogonal de um fio: sai pela direção do terminal, chega pela direção
+ * do terminal de destino e faz uma única dobra. Se o destino estiver "atrás" do
+ * terminal, contorna pelo lado de fora para não atravessar o próprio corpo.
+ * Se o caminho cruzaria terminais ou corpos de OUTROS componentes, desvia por
+ * uma faixa paralela livre (até 3 dobras): fio que passa por cima de terminal
+ * alheio vira junção fantasma ("curto" sem sentido) — o desvio evita isso.
+ * Sem obstáculo, o resultado é bit-idêntico ao traçado de uma dobra só.
+ */
+export function wireRoute(doc: CircuitDoc, w: Wire): Pt[] {
+  const { a, b, pa, pb, elbow } = foldOf(doc, w);
+  const blocked = blockedOf(doc, a, b);
+  const crosses = (mid: Pt[]): boolean => crossesBlocked(blocked, mid);
 
   // candidatos: o traçado legado primeiro (livre => idêntico a antes),
   // depois o outro cotovelo, depois faixas paralelas (por baixo antes:
@@ -734,19 +769,60 @@ export function compAt(doc: CircuitDoc, p: Pt): Placed | null {
 /**
  * Move/gira componente e leva junto os fios encostados nos seus terminais.
  * Se o ponto também pertence a outro componente, o fio fica com ele.
+ *
+ * GIRAR tem uma regra própria (o centro não andou => é giro): os dois
+ * terminais trocam de lugar e a ponta do fio escolhe a célula que NÃO obriga
+ * rodeio — o traçado de uma dobra só precisa bater em corpo/terminal quando a
+ * ponta encosta do lado errado. Assim, girar duas vezes (180°) devolve o
+ * desenho exatamente como estava e os terminais ficam INVERTIDOS (numa fonte o
+ * +/− troca de lado e a corrente inverte; num resistor nada muda). Empate nas
+ * duas montagens => vale a que segue o terminal (comportamento antigo).
+ *
+ * ARRASTAR é o caso normal: o conjunto de terminais anda de lugar, nenhum ponto
+ * antigo continua sendo terminal e a ponta acompanha o seu.
  */
 export function reattachWires(doc: CircuitDoc, moved: Placed, before: Pt[]): CircuitDoc {
   const others = doc.comps.filter((c) => c.id !== moved.id);
-  const wires = doc.wires.map((w) => {
-    let from = w.from;
-    let to = w.to;
-    for (let i = 0; i < before.length; i++) {
-      if (samePt(w.from, before[i]) && exclusiveIn(others, before[i])) from = terminalPos(moved, i as 0 | 1);
-      if (samePt(w.to, before[i]) && exclusiveIn(others, before[i])) to = terminalPos(moved, i as 0 | 1);
-    }
-    return from === w.from && to === w.to ? w : { ...w, from, to };
-  });
-  return { ...doc, wires };
+  const n = terminalCount(moved.kind);
+  const after: Pt[] = [];
+  for (let i = 0; i < n; i++) after.push(terminalPos(moved, i as 0 | 1));
+  if (samePoints(before, after)) return doc; // nada mudou na geometria (terra, 180° avulso)
+
+  /** Novo documento com cada ponta em `before[i]` indo para `destino(i)`. */
+  const reroute = (destino: (i: number) => Pt): CircuitDoc => {
+    const wires = doc.wires.map((w) => {
+      let from = w.from;
+      let to = w.to;
+      for (let i = 0; i < before.length; i++) {
+        if (!exclusiveIn(others, before[i])) continue; // o ponto é do outro
+        const d = destino(i);
+        if (samePt(w.from, before[i])) from = d;
+        if (samePt(w.to, before[i])) to = d;
+      }
+      return from === w.from && to === w.to ? w : { ...w, from, to };
+    });
+    return { ...doc, wires };
+  };
+
+  // o centro de `before` é onde o componente está: igual => ele girou no lugar
+  const cx = before.reduce((s, p) => s + p.x, 0) / before.length;
+  const cy = before.reduce((s, p) => s + p.y, 0) / before.length;
+  const girou = cx === moved.x && cy === moved.y;
+  const porIndice = reroute((i) => after[i] ?? after[0]);
+  if (!girou || before.length !== 2 || after.length !== 2) return porIndice;
+
+  const afetadas = new Set(
+    doc.wires
+      .filter((w) => before.some((p) => exclusiveIn(others, p) && (samePt(w.from, p) || samePt(w.to, p))))
+      .map((w) => w.id)
+  );
+  const trocado = reroute((i) => after[1 - i]);
+  const custo = (cand: CircuitDoc): number => {
+    let rodeios = 0;
+    for (const w of cand.wires) if (afetadas.has(w.id) && needsDetour(doc, w)) rodeios++;
+    return rodeios;
+  };
+  return custo(trocado) < custo(porIndice) ? trocado : porIndice;
 }
 
 function exclusiveIn(comps: Placed[], p: Pt): boolean {

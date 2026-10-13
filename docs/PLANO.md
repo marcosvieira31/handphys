@@ -441,6 +441,48 @@ Feito (o enquadramento virou ÚNICO das duas vistas):
   montagem fresca = bancada inteira (zoom 1); `resetView` devolveu (1,0)
   nos dois lados; **0 erros de console**.
 
+### Girar sem rasgar o desenho (giro de 180°) — onde está
+
+Feito (girar duas vezes mantém o traçado e inverte os terminais):
+
+- **O problema**: a ponta de fio acompanhava SEMPRE o mesmo terminal
+  (`reattachWires` mapeava `before[i] → terminalPos(novo, i)`). No primeiro
+  giro isso é certo (o terminal foi para cima e o fio vai junto), mas no
+  segundo os dois terminais voltam para a horizontal TROCADOS de lugar: os
+  fios acabavam trocados de lado e os dois precisavam contornar o corpo do
+  resistor — e os dois escolhiam a MESMA faixa (a linha y=4 do laço da Lei
+  de Ohm), de modo que a corrente animada corria por baixo do componente,
+  como se ele não estivesse no caminho. Era exatamente a "outra estrutura
+  de caminho" que não passava pelo resistor.
+- **O que é**: `reattachWires` ([`src/core/netlist.ts`](../src/core/netlist.ts))
+  separa **girar** de **arrastar** pelo centro: se o centro de `before` é o
+  próprio componente, ele girou no lugar — e aí a ponta escolhe, entre as
+  duas montagens possíveis (seguir o terminal ou trocar os dois), a que
+  **não obriga rodeio** (`needsDetour`: o traçado de uma dobra só bateria
+  em corpo/terminal). Empate => vale a montagem de sempre (seguir o
+  terminal), que é o que mantém o comportamento antigo nos giros de 90°.
+  Quando o centro anda de lugar (arrasto) a escolha não entra: continua o
+  arrasto rígido de sempre, e é por isso que arrastar nunca religa um fio
+  no terminal errado.
+- **Resultado**: 1 giro (90°) = a ponta vai junto com o terminal como
+  antes; 2 giros (180°) = o traçado volta **idêntico ao original** (fios
+  retos, sem rodeio) e quem se inverte são os **terminais** — o resistor é
+  simétrico e nada muda nele, mas numa fonte o +/− troca de lado e a
+  corrente inverte (a leitura do resistor foi de +0,09 A para −0,09 A);
+  4 giros devolvem o documento original. O terra (1 terminal) continua
+  girando no próprio lugar sem mexer em nada (`samePoints`).
+- Para saber se é giro sem guardar estado: o centro dos terminais de
+  `before` **é** a posição do componente — igual à nova => girou; mudou =>
+  arrastou.
+- Verificado: `tsc` limpo, **215 testes** (3 novos em
+  [`src/core/netlist.test.ts`](../src/core/netlist.test.ts): giro de 90°,
+  dois giros com a leitura invertida, terra), build ok. Validação dev
+  (`__ed.store`, laço da Lei de Ohm): 1 giro levou `w1`→(10,2) e
+  `w2`→(10,4); 2 giros devolveram os 5 fios **IDÊNTICOS** aos originais e
+  o SVG ficou reto (`80,48 144,48` e `176,48 224,48`), com os 5 fios
+  animando corrente; 4 giros = documento original byte a byte; `undo`
+  volta ao estado anterior; **`__ed.log` vazio**.
+
 ## 6. Riscos e mitigações
 
 1. **PCs fracos + MediaPipe** → medir fps no spike; `GPU` delegate com fallback CPU; mouse sempre disponível.

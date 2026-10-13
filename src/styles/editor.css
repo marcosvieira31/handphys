@@ -121,17 +121,19 @@ body.editor-page {
   color: var(--dim);
 }
 
-/* ---------- trilhos: as ferramentas DENTRO da bancada ----------
-   Componentes à esquerda, vista/cores/zoom à direita, sobre a superfície do
-   quadro — nada embaixo e nada fora: o limite INFERIOR da câmera é o mais
-   perto (descer o braço perde o rastreio do hand tracking justamente onde o
-   item está) e agora pegar → carregar → soltar é UM gesto só. Alvos grandes:
-   a pinça "clica" num [data-hand] como um clique. */
+/* ---------- trilhos: os itens AO LADO do quadro ----------
+   Componentes à esquerda, vista/cores/zoom à direita, colados na borda do
+   PRÓPRIO quadro (irmãos de flex, não presos na janela): pegar → carregar →
+   soltar é UM gesto curto, sem esticar o braço pelo vão que existia entre o
+   canto da tela e a bancada. Nada embaixo e nada fora: o limite INFERIOR da
+   câmera é o mais perto (descer o braço perde o rastreio do hand tracking
+   justamente onde o item está). Alvos grandes: a pinça "clica" num [data-hand]
+   como um clique. Em bancada ESTREITA (container query) eles voltam a sobrepor
+   as bordas — aí o quadro não teria folga e encolheria demais. */
 .rail {
-  position: absolute;
-  top: 50%;
-  transform: translateY(-50%);
-  z-index: 6;
+  position: static; /* irmão do quadro dentro do flex da bancada */
+  z-index: 6; /* no fallback de sobreposição, fica por cima do quadro */
+  flex: none; /* não encolhe: alvo de mão preservado */
   display: flex;
   flex-direction: column;
   flex-wrap: wrap; /* janela baixa: vira uma 2ª coluna em vez de estourar */
@@ -147,11 +149,29 @@ body.editor-page {
 }
 
 .rail-items {
-  left: 6px;
+  order: -1; /* antes do quadro = coluna da esquerda */
 }
 
 .rail-view {
-  right: 6px;
+  order: 1; /* depois do quadro = coluna da direita */
+}
+
+/* bancada estreita (container < 600 px): não cabe trilho AO LADO sem amassar
+   o quadro — voltam a flutuar sobre as bordas, como antes. */
+@container (max-width: 600px) {
+  .rail {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+  }
+
+  .rail-items {
+    left: 6px;
+  }
+
+  .rail-view {
+    right: 6px;
+  }
 }
 
 .rail-item {
@@ -225,9 +245,11 @@ body.editor-page {
 }
 
 /* A bancada ocupa toda a área de trabalho (o quadrado do esquemático é a
- * grade em cima dela) e os trilhos ficam absolutos POR CIMA dela — por isso
- * "dentro da workbench": pegar o item e carregar até a grade é um gesto curto
- * e contínuo. `overflow: hidden` prende os trilhos na bancada. */
+ * grade em cima dela) e os trilhos são os IRMÃOS do quadro, encostados na
+ * borda dele (gap de 10 px): alcançar o item não exige esticar o braço pelo
+ * vão da janela. `container-type` dá a medida da bancada para a query que
+ * devolve os trilhos às bordas quando não cabe espaço ao lado. `overflow:
+ * hidden` prende os trilhos na bancada. */
 .canvas-view {
   position: relative;
   flex: 1;
@@ -238,6 +260,10 @@ body.editor-page {
   display: flex;
   align-items: center;
   justify-content: center;
+  gap: 10px;
+  /* size (não só inline): libera cqh — o teto de ALTURA do quadrado ao lado
+   * dos trilhos. A altura da bancada vem do grid (nunca do conteúdo). */
+  container-type: size;
   overflow: hidden;
 }
 
@@ -251,6 +277,19 @@ body.editor-page {
   touch-action: none;
 }
 
+/* Na bancada do EDITOR o quadrado sai da LARGURA disponível, com teto na
+ * ALTURA (cqh da bancada): no flex com os trilhos ao lado, `height:100%`
+ * fixo + shrink achataria o quadro. Assim ele encolhe RETO (lado igual) e,
+ * sem trilho ao lado (bancada estreita), calcula o mesmo min(larg, alt) de
+ * antes. O espelho fica fora da bancada e segue a regra antiga. */
+.canvas-view > .schematic,
+.canvas-view > .scene-wrap {
+  width: min(100%, 100cqh);
+  height: auto;
+  flex: 0 1 auto;
+  min-width: 0;
+}
+
 .scene-wrap {
   position: relative;
   aspect-ratio: 1 / 1;
@@ -259,6 +298,8 @@ body.editor-page {
 }
 
 .scene3d {
+  position: absolute; /* o quadrado sai da largura; o canvas só preenche */
+  inset: 0;
   width: 100%;
   height: 100%;
   display: block;

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { readCircuit } from '../core/netlist';
+import { readCircuit, wireRoute } from '../core/netlist';
 import { EXAMPLES } from './examples';
 
 /** Exemplos quebrados já morderam (Série × paralelo em curto): todos resolvem. */
@@ -22,5 +22,23 @@ describe('exemplos do editor/Cardboard', () => {
     expect(out.diagnostics.join(' ')).not.toMatch(/curto/i);
     expect(Math.abs(out.comps[0].amps)).toBeCloseTo(0.27, 6);
     for (const r of out.comps.slice(1)) expect(Math.abs(r.amps)).toBeCloseTo(0.09, 6);
+  });
+
+  it('Paralelo: retorno contorna por baixo, sem cortar o banco', () => {
+    const doc = EXAMPLES[2].doc;
+    // o retorno desce pelo fim do trilho direito, volta pela base e sobe até o −
+    const volta = doc.wires.find((w) => w.id === 'w12')!;
+    expect(wireRoute(doc, volta)).toEqual([
+      { x: 15, y: 9 },
+      { x: 2, y: 9 },
+      { x: 2, y: 4 },
+      { x: 3, y: 4 },
+    ]);
+    // nenhum fio passa pelas fileiras vazias (y=3 e y=5) DENTRO do banco, entre
+    // os trilhos: era ali que o retorno se espremia entre r2 e r3 e o desenho
+    // virava um nó. (O trilho direito em x=15 atravessa y=3/5 de propósito.)
+    for (const w of doc.wires)
+      for (const p of wireRoute(doc, w))
+        if (p.x >= 9 && p.x <= 14) expect([3, 5]).not.toContain(p.y);
   });
 });

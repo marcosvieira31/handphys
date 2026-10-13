@@ -49,8 +49,11 @@ export const EXAMPLES: { name: string; doc: CircuitDoc }[] = [
         { id: 'r2', kind: 'resistor', x: 11, y: 4, rot: 0, value: 100 },
         { id: 'r3', kind: 'resistor', x: 11, y: 6, rot: 0, value: 100 },
       ],
-      // banco em paralelo: trilho do meio (+) => topos, fundos => trilho direito => retorno.
-      // (Sem o trilho esquerdo antigo: ele amarrava o + ao − e dava curto de verdade.)
+      // Escada (o desenho clássico do bancinho): o + alimenta um trilho à esquerda
+      // que ramifica nas três entradas; um trilho à direita coleta as três saídas;
+      // e o retorno contorna por baixo do banco até o − da fonte. Assim o caminho
+      // de corrente fecha num laço legível, sem se embutir no trilho direito nem
+      // passar pela fileira do meio (antes o retorno cortava entre r2 e r3).
       wires: [
         { id: 'w1', from: { x: 5, y: 4 }, to: { x: 8, y: 4 } },
         { id: 'w2', from: { x: 8, y: 4 }, to: { x: 8, y: 2 } },
@@ -62,7 +65,8 @@ export const EXAMPLES: { name: string; doc: CircuitDoc }[] = [
         { id: 'w8', from: { x: 12, y: 4 }, to: { x: 15, y: 4 } },
         { id: 'w9', from: { x: 12, y: 6 }, to: { x: 15, y: 6 } },
         { id: 'w10', from: { x: 15, y: 2 }, to: { x: 15, y: 6 } },
-        { id: 'w11', from: { x: 15, y: 4 }, to: { x: 3, y: 4 } },
+        { id: 'w11', from: { x: 15, y: 6 }, to: { x: 15, y: 9 } },
+        { id: 'w12', from: { x: 15, y: 9 }, to: { x: 3, y: 4 } },
       ],
     },
   },

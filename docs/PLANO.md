@@ -483,6 +483,40 @@ Feito (girar duas vezes mantém o traçado e inverte os terminais):
   animando corrente; 4 giros = documento original byte a byte; `undo`
   volta ao estado anterior; **`__ed.log` vazio**.
 
+### Paralelo em escada (retorno contornando por baixo) — onde está
+
+- O que mudou: só o **exemplo** "Paralelo" em
+  [`src/editor/examples.ts`](../src/editor/examples.ts) — mesma topologia,
+  mesmas leituras (270 mA no total, 90 mA por ramo, sem curto), outro
+  traçado.
+- Antes: o retorno saía do **meio** do trilho direito (`w11` de (15,4) a
+  (3,4)) e voltava em linha reta até o − da fonte. Essa reta atravessava o
+  banco inteiro, o [`wireRoute`](../src/core/netlist.ts) marcava o traçado
+  como bloqueado (corpo e terminais de r2 no caminho) e desviava por uma
+  **fileira vazia** — a do meio. Resultado: o retorno se espremia entre r2
+  e r3, parecia passar por dentro dos resistores, e os potenciais ficavam
+  ilegíveis (um mesmo fio exibindo duas tensões na tela).
+- Agora: escada clássica. O **+ alimenta um trilho à esquerda** (x=8) que
+  ramifica nas três entradas; um **trilho à direita** (x=15) coleta as três
+  saídas; e o retorno **desce pelo fim desse trilho** (`w11`, (15,6)→(15,9)),
+  **contorna por baixo do banco** (`w12`, y=9, abaixo do r3 em y=6) e
+  **sobe pela esquerda até o −** — entrando no terminal pela lateral, que é
+  a direção de saída dele (rot 0). Um laço fechado, um caminho de corrente
+  por fio, sem cruzar o banco.
+- Cor por tensão: o lado do + fica laranja (9 V) e o trilho/retorno fica
+  cinza (GND, 0 V) — as duas metades do laço se distinguem à mostra.
+- Travado por teste em
+  [`src/editor/examples.test.ts`](../src/editor/examples.test.ts): o
+  retorno tem de sair exatamente `[(15,9),(2,9),(2,4),(3,4)]`, e **nenhum
+  fio pode passar pelas fileiras vazias (y=3 e y=5) dentro do banco** (x de
+  9 a 14) — a regressão que o teste impede é exatamente o espremimento no
+  meio.
+- Verificado: `tsc` limpo, **216 testes**, build ok. No dev
+  (`__ed.store`, aba do editor): SVG do retorno
+  `240,144 32,144 32,64 48,64` (desce, contorna, sobe, entra no −), 12
+  fios com trecho de corrente, painel `bat1 270 mA GND → N1` e
+  `r1/r2/r3 90 mA N1 → GND`, **`__ed.log` vazio**.
+
 ## 6. Riscos e mitigações
 
 1. **PCs fracos + MediaPipe** → medir fps no spike; `GPU` delegate com fallback CPU; mouse sempre disponível.

@@ -3,7 +3,7 @@ import type { Reading } from '../core/netlist';
 import { hands } from '../hands/controller';
 import { overHandButton } from './coords';
 import { useEditor } from './store';
-import { bindZoomTarget } from './zoom';
+import { applyFrameFrom2D, bindZoomTarget } from './zoom';
 import type { LabView } from '../scene/buildScene';
 
 /**
@@ -11,6 +11,9 @@ import type { LabView } from '../scene/buildScene';
  * dinâmico (fora do bundle inicial) e a cena espelha o store a cada mudança.
  * Mouse orbita/edita; a pinça da webcam mira no plano da bancada (raycast) e
  * usa as MESMAS ações do store (aperta/move/solta) — funciona igual ao 2D.
+ * O enquadramento é ÚNICO das duas vistas: ao montar a câmera herda centro e
+ * zoom do quadro 2D, e a cada movimento ela escreve de volta (setFraming) —
+ * alternar 2D↔3D nunca reposiciona o que o professor estava olhando.
  */
 export function SceneView({ reading }: { reading: Reading }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -24,9 +27,13 @@ export function SceneView({ reading }: { reading: Reading }) {
     (async () => {
       const { createLabView } = await import('../scene/buildScene');
       if (!alive || !canvasRef.current) return;
-      const view = createLabView(canvasRef.current);
+      const view = createLabView(canvasRef.current, (center, zoom) =>
+        // a câmera anda => escreve o enquadramento de volta no quadro 2D
+        useEditor.getState().setFraming(center, zoom),
+      );
       viewRef.current = view;
       bindZoomTarget(view); // botões/gestos de zoom passam a mexer a câmera
+      applyFrameFrom2D(); // e a câmera herda o enquadramento do quadro 2D
       setReady(true);
       const s = useEditor.getState();
       view.update(s.doc, reading, s.flow);

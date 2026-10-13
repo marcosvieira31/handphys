@@ -372,6 +372,7 @@ describe('HandsController sem câmera (ingest)', () => {
         dolly: (f) => dollies.push(f),
         panBy: (dx) => pans.push(dx),
         rollBy: (r) => rolls.push(r),
+        frameTo: () => {},
         resetView: () => {},
       });
       useEditor.setState({ view: '3d' });
@@ -416,6 +417,7 @@ describe('HandsController sem câmera (ingest)', () => {
         dolly: () => {},
         panBy: () => {},
         rollBy: (r) => rolls.push(r),
+        frameTo: () => {},
         resetView: () => {},
       });
       useEditor.setState({ view: '3d' });

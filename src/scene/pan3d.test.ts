@@ -1,6 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import * as THREE from 'three';
-import { panCameraBy, rollCameraBy } from './buildScene';
+import {
+  boardToWorld,
+  distForZoom,
+  HOME_DIST,
+  panCameraBy,
+  rollCameraBy,
+  worldToBoard,
+  zoomForDist,
+} from './buildScene';
 
 /** Câmera olhando para a origem de frente (direita = +X, cima = +Y na tela). */
 function rig(z: number) {
@@ -50,8 +58,8 @@ describe('panCameraBy (bancada 3D)', () => {
   });
 });
 
-describe('rollCameraBy (giro do eixo Z pela rotação das mãos)', () => {
-  /** Câmera inclinada como a bancada de verdade (offset com X e Y na horizontal). */
+describe('rollCameraBy (giro da bancada pela rotação das mãos)', () => {
+  /** Câmera inclinada como a bancada de verdade (o enquadro de chegada). */
   function rigTilt() {
     const camera = new THREE.PerspectiveCamera(60, 1, 0.1, 300);
     camera.position.set(13, 17, 23);
@@ -61,23 +69,23 @@ describe('rollCameraBy (giro do eixo Z pela rotação das mãos)', () => {
     return { camera, target };
   }
 
-  it('gira a câmera ao redor do Z do mundo PASSANDO PELO ALVO (distância intacta)', () => {
+  it('orbita o eixo VERTICAL pelo alvo: altura (y), distância e alvo intactos', () => {
     const { camera, target } = rigTilt();
     const dist = camera.position.distanceTo(target);
     rollCameraBy(camera, target, Math.PI / 2);
-    expect(camera.position.z).toBeCloseTo(23, 10); // altura não muda
-    expect(camera.position.x).toBeCloseTo(-17, 10); // (13,17) girado 90° => (-17,13)
-    expect(camera.position.y).toBeCloseTo(13, 10);
+    expect(camera.position.y).toBeCloseTo(17, 10); // altura não muda (eixo vertical!)
+    expect(camera.position.x).toBeCloseTo(22, 10); // (x,z)=(13,22) girado 90° => (22,-13)
+    expect(camera.position.z).toBeCloseTo(-12, 10); // alvo em z=1: -13+1
     expect(camera.position.distanceTo(target)).toBeCloseTo(dist, 10);
     expect(target.x).toBe(0); // alvo parado
     expect(target.y).toBe(0);
     expect(target.z).toBe(1);
   });
 
-  it('rad > 0 orbita anti-horário (regra da mão direita): a mão horária leva o conteúdo junto', () => {
+  it('rad > 0 orbita anti-horário por cima (vista de cima): a mão horária leva o conteúdo', () => {
     const { camera, target } = rigTilt();
-    const azimuth = () =>
-      Math.atan2(camera.position.y - target.y, camera.position.x - target.x);
+    // azimute no plano da bancada (XZ) do deslocamento câmera→alvo
+    const azimuth = () => Math.atan2(camera.position.x - target.x, camera.position.z - target.z);
     const a0 = azimuth();
     rollCameraBy(camera, target, 0.3);
     expect(azimuth()).toBeCloseTo(a0 + 0.3, 10);
@@ -91,5 +99,40 @@ describe('rollCameraBy (giro do eixo Z pela rotação das mãos)', () => {
     expect(camera.position.x).toBeCloseTo(antes.x, 10);
     expect(camera.position.y).toBeCloseTo(antes.y, 10);
     expect(camera.position.z).toBeCloseTo(antes.z, 10);
+  });
+});
+
+describe('enquadramento único 2D↔3D (mapeamento quadro ↔ bancada)', () => {
+  it('centro do quadro = centro da bancada; extremos batem na borda da mesa', () => {
+    expect(boardToWorld({ x: 240, y: 240 })).toEqual([0, 0]);
+    expect(boardToWorld({ x: 0, y: 0 })).toEqual([-15, -15]);
+    expect(boardToWorld({ x: 480, y: 480 })).toEqual([15, 15]);
+  });
+
+  it('worldToBoard é o inverso exato (ida e volta sem deriva)', () => {
+    for (const b of [
+      { x: 240, y: 240 },
+      { x: 80, y: 320 },
+      { x: 0, y: 480 },
+      { x: 123.4, y: 456.7 },
+    ]) {
+      const [wx, wz] = boardToWorld(b);
+      const back = worldToBoard(wx, wz);
+      expect(back.x).toBeCloseTo(b.x, 10);
+      expect(back.y).toBeCloseTo(b.y, 10);
+    }
+  });
+
+  it('zoom 1 = a distância de chegada (bancada inteira); ida e volta sem deriva', () => {
+    expect(zoomForDist(HOME_DIST)).toBe(1);
+    for (const z of [1, 1.5, 2, 3.5]) {
+      expect(zoomForDist(distForZoom(z))).toBeCloseTo(z, 10);
+    }
+  });
+
+  it('zoom 2D preso em [1,4]: distâncias extremas da câmera não reinterpretem a vista', () => {
+    expect(zoomForDist(80)).toBe(1); // mais longe que a chegada => "cabe tudo"
+    expect(zoomForDist(2)).toBe(4); // perto demais => o teto do quadro
+    expect(distForZoom(4)).toBeLessThan(8); // o teto da 2D equivale a bem perto
   });
 });

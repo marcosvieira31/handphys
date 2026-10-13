@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { BOARD, centerOf, panPx, viewBoxOf, zoomAbout, ZOOM_MAX, ZOOM_MIN, type View } from './zoomMath';
+import { BOARD, centerOf, frameAt, panPx, viewBoxOf, zoomAbout, ZOOM_MAX, ZOOM_MIN, type View } from './zoomMath';
 
 const vp = 900; // largura do quadro na tela, em px
 const origem = (): View => ({ zoom: 1, pan: { x: 0, y: 0 } });
@@ -75,5 +75,33 @@ describe('zoom do quadro (zoomMath)', () => {
     const vb = viewBoxOf(v);
     expect(vb.x).toBeGreaterThanOrEqual(-0.0001);
     expect(vb.x + vb.w).toBeLessThanOrEqual(BOARD + 0.0001);
+  });
+});
+
+describe('frameAt (a bancada 3D escrevendo de volta no quadro)', () => {
+  it('enquadra o centro pedido no zoom pedido (inverso de derivar a vista)', () => {
+    const v = frameAt({ x: 120, y: 300 }, 2);
+    expect(v.zoom).toBe(2);
+    expect(centerOf(v)).toEqual({ x: 120, y: 300 });
+    expect(viewBoxOf(v).w).toBe(BOARD / 2);
+  });
+
+  it('respeita os MESMOS clamps da vista: zoom fora do intervalo e centro fora da tela', () => {
+    expect(frameAt({ x: 240, y: 240 }, 0.1).zoom).toBe(ZOOM_MIN);
+    expect(frameAt({ x: 240, y: 240 }, 99).zoom).toBe(ZOOM_MAX);
+    // no zoom 1 o quadro inteiro já está na tela: o centro fica preso no meio
+    expect(centerOf(frameAt({ x: 40, y: 440 }, 1))).toEqual({ x: 240, y: 240 });
+    // no zoom 2 o viewBox não escapa do quadro
+    const vb = viewBoxOf(frameAt({ x: 0, y: 480 }, 2));
+    expect(vb.x).toBeGreaterThanOrEqual(-0.0001);
+    expect(vb.y + vb.h).toBeLessThanOrEqual(BOARD + 0.0001);
+  });
+
+  it('ida e volta sem deriva: enquadrar o que a vista já mostra devolve a mesma vista', () => {
+    const v: View = { zoom: 2.5, pan: { x: 60, y: -40 } };
+    const back = frameAt(centerOf(v), v.zoom);
+    expect(back.zoom).toBe(v.zoom);
+    expect(centerOf(back).x).toBeCloseTo(centerOf(v).x, 10);
+    expect(centerOf(back).y).toBeCloseTo(centerOf(v).y, 10);
   });
 });

@@ -59,3 +59,15 @@ export function panPx(v: View, dxPx: number, dyPx: number, viewportPx: number): 
   const c1 = clampCenter({ x: c.x - dxPx * k, y: c.y - dyPx * k }, vb.w);
   return { zoom: v.zoom, pan: { x: c1.x - BOARD / 2, y: c1.y - BOARD / 2 } };
 }
+
+/**
+ * Enquadra o quadro num CENTRO (unidades do quadro) e ZOOM dados — o caminho
+ * INVERSO de derivar a vista: é como a bancada 3D escreve de volta no quadro
+ * o que a câmera está olhando. Passa pelos MESMOS clamps da vista, então o
+ * resultado é sempre um estado 2D legítimo (nunca escapa da tela).
+ */
+export function frameAt(center: Pt, zoom: number): View {
+  const z = clampZoom(zoom);
+  const c = clampCenter(center, BOARD / z);
+  return { zoom: z, pan: { x: c.x - BOARD / 2, y: c.y - BOARD / 2 } };
+}

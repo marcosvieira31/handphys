@@ -342,14 +342,14 @@ describe('aperto no vazio = deslocar a vista (pan)', () => {
     expect(useEditor.getState().panning).toBe(false);
   });
 
-  it('aperto em componente NAO vira pan (� arraste do componente)', () => {
+  it('aperto em componente NAO vira pan (� arraste do componente)', () => {
     useEditor.getState().pressAt({ x: 4, y: 10 }); // corpo da fonte
     const st = useEditor.getState();
     expect(st.panning).toBe(false);
     expect(st.grip?.id).toBe('bat1');
   });
 
-  it('aperto no TERMINAL nao vira pan (� o fio na mao)', () => {
+  it('aperto no TERMINAL nao vira pan (� o fio na mao)', () => {
     useEditor.getState().pressAt({ x: 5, y: 10 }); // terminal + da fonte
     const st = useEditor.getState();
     expect(st.panning).toBe(false);
@@ -380,5 +380,37 @@ describe('aperto no vazio = deslocar a vista (pan)', () => {
     expect(JSON.stringify(useEditor.getState().doc.comps)).toBe(antes);
     expect(useEditor.getState().grip).toBeNull();
     expect(useEditor.getState().draft).toBeNull();
+  });
+});
+
+describe('bancada 3D escrevendo o enquadramento de volta (store.setFraming)', () => {
+  beforeEach(() => {
+    useEditor.setState({ zoom: 2, pan: { x: 0, y: 0 }, panning: false });
+  });
+
+  it('a câmera enquadra centro e zoom pedidos (o enquadramento é único)', () => {
+    useEditor.getState().setFraming({ x: 300, y: 200 }, 3);
+    const st = useEditor.getState();
+    expect(st.zoom).toBe(3);
+    expect(st.pan).toEqual({ x: 300 - 240, y: 200 - 240 }); // centro é o meio + pan
+  });
+
+  it('passa pelos MESMOS clamps da vista: zoom no teto e centro preso na tela', () => {
+    useEditor.getState().setFraming({ x: 240, y: 240 }, 99);
+    expect(useEditor.getState().zoom).toBe(4);
+    useEditor.getState().setFraming({ x: 0, y: 0 }, 1);
+    const st = useEditor.getState();
+    expect(st.zoom).toBe(1);
+    expect(st.pan).toEqual({ x: 0, y: 0 }); // zoom 1: o quadro cabe todo, centro travado
+  });
+
+  it('ida e volta sem deriva: enquadrar o que o quadro já mostra devolve a mesma vista', () => {
+    useEditor.setState({ zoom: 2.5, pan: { x: 60, y: -40 } });
+    const st = useEditor.getState();
+    useEditor.getState().setFraming({ x: 240 + st.pan.x, y: 240 + st.pan.y }, st.zoom);
+    const dep = useEditor.getState();
+    expect(dep.zoom).toBe(2.5);
+    expect(dep.pan.x).toBeCloseTo(60, 10);
+    expect(dep.pan.y).toBeCloseTo(-40, 10);
   });
 });

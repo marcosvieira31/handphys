@@ -1,8 +1,10 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import type { CircuitDoc, Reading } from '../core/netlist';
+import type { CircuitDoc, Pt, Reading } from '../core/netlist';
 import { flowDuration } from '../core/flow';
 import { voltageColor } from '../editor/colors';
+import { CELL } from '../editor/coords';
+import { clampZoom } from '../editor/zoomMath';
 import {
   cumLength,
   layoutScene,
@@ -30,9 +32,15 @@ export interface LabView {
   dolly(factor: number): void;
   /** Arraste no vazio da bancada => desloca câmera e ALVO juntos (px de tela). */
   panBy(dxPx: number, dyPx: number, viewportPx: number): void;
-  /** Giro do eixo Z pela rotação das mãos durante o zoom (mão gira => conteúdo gira). */
+  /** Giro da bancada pela rotação das mãos (eixo vertical = o Z "para fora" do quadro 2D). */
   rollBy(rad: number): void;
-  /** Volta a câmera ao enquadro de chegada. */
+  /**
+   * Enquadra num CENTRO do quadro 2D (unidades do quadro) e ZOOM dados: a
+   * câmera herda o enquadramento ao trocar de vista (o enquadramento é único
+   * para as duas vistas). Os ângulos da órbita são os últimos guardados.
+   */
+  frameTo(center: Pt, zoom: number): void;
+  /** Volta a câmera ao enquadro de chegada (ângulos inclusive). */
   resetView(): void;
   dispose(): void;
 }
@@ -40,6 +48,46 @@ export interface LabView {
 /** Enquadro de chegada da bancada: de cima, enxergando a mesa inteira. */
 const HOME_POS = new THREE.Vector3(13, 17, 23);
 const HOME_TARGET = new THREE.Vector3(0, 0, 1);
+/** Metade do mundo (grade de 30 células centrada na origem): célula 0 => −14,5. */
+const HALF = (WORLD - 1) / 2;
+/** Distância câmera→alvo na chegada: o "zoom 1" (bancada inteira) da vista 3D. */
+export const HOME_DIST = HOME_POS.distanceTo(HOME_TARGET);
+/** Órbita de chegada (azimute/polar da THREE.Spherical): o "de que lado" inicial. */
+const HOME_SPH = new THREE.Spherical().setFromVector3(HOME_POS.clone().sub(HOME_TARGET));
+
+/**
+ * Ângulos da órbita (azimute e polar) que a vista 2D não guarda: são o "de
+ * que lado o professor está olhando" a bancada. Sobrevivem ao desmontar a
+ * cena (trocar 2D↔3D) — sem isso a câmera voltava ao enquadro fixo de chegada
+ * toda vez que a vista 3D entrava de novo. Centro e distância NÃO ficam aqui:
+ * esses vêm do quadro 2D, que é o enquadramento ÚNICO das duas vistas.
+ */
+let orbit: { theta: number; phi: number } | null = null;
+
+/**
+ * Centro do quadro 2D (unidades do viewBox: célula k = [16k, 16k+16)) => plano
+ * da bancada (x do mundo, z do mundo). Ancora no CENTRO da célula — o mesmo
+ * que `cellToWorld` leva a k−14,5 — então o centro do quadro (240) é o centro
+ * da bancada (0) e as bordas batem nos extremos da mesa.
+ */
+export function boardToWorld(b: Pt): [number, number] {
+  return [(b.x - CELL / 2) / CELL - HALF, (b.y - CELL / 2) / CELL - HALF];
+}
+
+/** Plano da bancada => centro do quadro 2D (inverso exato de boardToWorld). */
+export function worldToBoard(wx: number, wz: number): Pt {
+  return { x: (wx + HALF) * CELL + CELL / 2, y: (wz + HALF) * CELL + CELL / 2 };
+}
+
+/** Zoom 2D equivalente à distância da câmera (1 = bancada inteira = chegada). */
+export function zoomForDist(dist: number): number {
+  return clampZoom(HOME_DIST / Math.max(0.05, dist));
+}
+
+/** Distância da câmera para enquadrar um zoom 2D (inverso, ancorado no alvo). */
+export function distForZoom(zoom: number): number {
+  return HOME_DIST / clampZoom(zoom);
+}
 
 /**
  * Pan da bancada em px de tela: câmera e alvo andam JUNTOS no plano da tela
@@ -63,14 +111,17 @@ export function panCameraBy(
   target.add(delta);
 }
 
-const AXIS_Z = new THREE.Vector3(0, 0, 1);
+const AXIS_UP = new THREE.Vector3(0, 1, 0);
 
 /**
- * Giro do eixo Z da bancada pela ROTAÇÃO das mãos (gesto das duas mãos): a
- * câmera orbita o eixo vertical PASSANDO PELO ALVO — distância, altura e alvo
- * intactos, só o azimute muda. Sinal "conteúdo acompanha as mãos": mão girando
- * no sentido horário de tela (y para baixo) => `rad` > 0 => a câmera orbita
- * anti-horário por cima (o visto de cima gira horário, junto com a mão).
+ * Giro da bancada pela ROTAÇÃO das mãos (gesto das duas mãos): a câmera
+ * orbita o eixo VERTICAL passando pelo alvo — distância, altura (y) e alvo
+ * intactos, só o azimute muda, como um prato giratório. O "eixo Z" que o
+ * professor gira com as mãos é o eixo FORA DO PLANO do quadro 2D, que na
+ * bancada deitada (mundo Y-em-cima) é o Y. Sinal "conteúdo acompanha as
+ * mãos": mão girando no sentido horário de tela (y para baixo) => `rad` > 0
+ * => a câmera orbita anti-horário por cima (o visto de cima gira horário,
+ * junto com a mão).
  */
 export function rollCameraBy(
   camera: THREE.PerspectiveCamera,
@@ -78,7 +129,7 @@ export function rollCameraBy(
   rad: number,
 ): void {
   const offset = camera.position.clone().sub(target);
-  offset.applyAxisAngle(AXIS_Z, rad);
+  offset.applyAxisAngle(AXIS_UP, rad);
   camera.position.copy(target).add(offset);
 }
 
@@ -375,7 +426,10 @@ export function compIdOf(obj: THREE.Object3D): string {
   return '';
 }
 
-export function createLabView(canvas: HTMLCanvasElement): LabView {
+export function createLabView(
+  canvas: HTMLCanvasElement,
+  onFraming?: (center: Pt, zoom: number) => void,
+): LabView {
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
   const scene = new THREE.Scene();
@@ -390,6 +444,21 @@ export function createLabView(canvas: HTMLCanvasElement): LabView {
   controls.minDistance = 8;
   controls.maxDistance = 80;
   controls.maxPolarAngle = 1.45;
+
+  // O enquadramento é ÚNICO das duas vistas: a câmera escreve de volta no
+  // quadro 2D o que está olhando (centro do alvo + zoom pela distância), e os
+  // ângulos da órbita ficam em `orbit` (guardados ao desmontar). OrbitControls
+  // só dispara 'change' quando a câmera anda de fato — e o PRIMEIRO update
+  // sempre "anda" (lastPosition começa zerado), então até o primeiro frameTo a
+  // câmera está só na chegada: isso é detalhe de montagem, não o que o
+  // professor pediu olhar, e não pode estourar o enquadramento do quadro 2D.
+  let primed = false;
+  const syncFraming = () => {
+    if (!primed) return;
+    const b = worldToBoard(controls.target.x, controls.target.z);
+    onFraming?.(b, zoomForDist(camera.position.distanceTo(controls.target)));
+  };
+  controls.addEventListener('change', syncFraming);
 
   scene.add(new THREE.HemisphereLight(0xdfe8ff, 0x1a1d22, 0.9));
   const sun = new THREE.DirectionalLight(0xffffff, 1.6);
@@ -413,7 +482,6 @@ export function createLabView(canvas: HTMLCanvasElement): LabView {
   const ndc = new THREE.Vector2();
   const plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
   const hitPoint = new THREE.Vector3();
-  const HALF = (WORLD - 1) / 2;
   const cellAt = (nx: number, ny: number): { x: number; y: number } | null => {
     ndc.set(nx * 2 - 1, 1 - ny * 2);
     ray.setFromCamera(ndc, camera);
@@ -508,11 +576,27 @@ export function createLabView(canvas: HTMLCanvasElement): LabView {
       controls.update();
     },
     rollBy(rad) {
-      // rotação das mãos durante o gesto de duas mãos: o Z do mundo gira junto
+      // rotação das mãos: orbita o eixo VERTICAL pelo alvo (o Z do quadro 2D)
       rollCameraBy(camera, controls.target, rad);
       controls.update();
     },
+    frameTo(center, zoom) {
+      // trocou para a bancada 3D: a câmera herda o enquadramento do quadro 2D
+      // (centro sob o alvo, distância do zoom) e mantém os ângulos da órbita
+      primed = true; // a partir daqui a câmera reporta o enquadramento ao quadro
+      const [wx, wz] = boardToWorld(center);
+      controls.target.set(wx, 0, wz);
+      const sph = new THREE.Spherical(
+        THREE.MathUtils.clamp(distForZoom(zoom), controls.minDistance, controls.maxDistance),
+        orbit?.phi ?? HOME_SPH.phi,
+        orbit?.theta ?? HOME_SPH.theta,
+      );
+      camera.position.copy(controls.target).add(new THREE.Vector3().setFromSpherical(sph));
+      controls.update();
+    },
     resetView() {
+      orbit = null; // o enquadro de chegada devolve o "de que lado" também
+      primed = true;
       camera.position.copy(HOME_POS);
       controls.target.copy(HOME_TARGET);
       controls.update();
@@ -522,6 +606,13 @@ export function createLabView(canvas: HTMLCanvasElement): LabView {
       cancelAnimationFrame(raf);
       ro.disconnect();
       canvas.removeEventListener('dblclick', onDblClick);
+      controls.removeEventListener('change', syncFraming);
+      // guarda os ângulos da órbita: a próxima vista 3D volta a olhar de onde
+      // o professor ficou, não do enquadro fixo de chegada
+      const sph = new THREE.Spherical().setFromVector3(
+        camera.position.clone().sub(controls.target),
+      );
+      orbit = { theta: sph.theta, phi: sph.phi };
       controls.dispose();
       disposeGroup(dyn);
       disposeGroup(scene);

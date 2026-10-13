@@ -14,7 +14,7 @@ import {
   type Wire,
 } from '../core/netlist';
 import { GRAB_DIST, SNAP_DIST, WIRE_GRAB, wireAt } from './coords';
-import { zoomAbout, panPx } from './zoomMath';
+import { frameAt, zoomAbout, panPx } from './zoomMath';
 
 const LIMIT = 30; // células de 0..29 — o quadro tem borda, nada sai da grade
 
@@ -102,6 +102,12 @@ export interface EditorState {
   zoomBy: (factor: number, anchor?: Pt | null) => void;
   /** Arraste em px de tela => desloca a vista (o conteúdo acompanha o dedo). */
   panBy: (dxPx: number, dyPx: number, viewportPx: number) => void;
+  /**
+   * A bancada 3D escreve de volta o enquadramento da câmera (centro do alvo +
+   * zoom pela distância): o enquadramento é ÚNICO das duas vistas — trocar de
+   * vista nunca reposiciona o que o professor estava olhando.
+   */
+  setFraming: (center: Pt, zoom: number) => void;
   /** Encerra o aperto-vazio (chegou 2º dedo do gesto de toque, saiu da cena). */
   stopPan: () => void;
   /** Leva o quadro ao centro do workbench mantendo o zoom (duplo-clique no vazio). */
@@ -474,6 +480,8 @@ export const useEditor = create<EditorState>((set, get) => ({
 
   panBy: (dxPx, dyPx, viewportPx) =>
     set((s) => panPx({ zoom: s.zoom, pan: s.pan }, dxPx, dyPx, viewportPx)),
+
+  setFraming: (center, zoom) => set(() => frameAt(center, zoom)),
 
   stopPan: () => set({ panning: false }),
 

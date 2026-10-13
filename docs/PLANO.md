@@ -361,9 +361,10 @@ Feito (o gesto de zoom das mãos virou o pinça COMPLETO, como o do toque):
   3. **girar a linha entre as mãos** => eixo Z da bancada 3D: `applyRoll` =>
      `rollBy` => `rollCameraBy` (novo, em
      [`src/scene/buildScene.ts`](../src/scene/buildScene.ts)) — a câmera
-     orbita o Z do mundo PASSANDO PELO ALVO: distância, altura e alvo
+     orbita o eixo VERTICAL passando pelo alvo: distância, altura e alvo
      intactos, só o azimute muda. O esquemático é diagrama: lá o giro é
-     no-op.
+     no-op. (O eixo foi corrigido na fase seguinte — ver "Enquadramento
+     coerente 2D↔3D": orbitava o Z horizontal da cena.)
 - **Travas**: o par tem de ser o MESMO (ids das mãos) — mão trocada no meio
   do gesto não gira nada naquele quadro (sem salto de π); distância mínima
   0,08 nos dois quadros; trava por quadro no zoom (±5%) e no giro (±0,25
@@ -379,6 +380,66 @@ Feito (o gesto de zoom das mãos virou o pinça COMPLETO, como o do toque):
   deslocar o meio andou o viewBox (pan +163,9 / −66,5, os dois eixos); 3D —
   girar 60° moveu a célula sob o ponto fixo (8,13)→(10,11) e transladar o meio
   moveu (11,10)→(20,12); **0 erros de console**.
+
+### Enquadramento coerente 2D↔3D (a câmera nunca se perde na troca) — onde está
+
+Feito (o enquadramento virou ÚNICO das duas vistas):
+
+- **O que é**: trocar `2D ⇄ 3D` nunca mais reposiciona o que o professor
+  estava olhando. O enquadramento (O QUÊ está enquadrado: centro + escala)
+  tem fonte de verdade única — o `zoom`/`pan` do store — e a bancada 3D o
+  segue:
+  - **2D → 3D**: a câmera herda o enquadramento do quadro ao montar
+    (`applyFrameFrom2D` em [`src/editor/zoom.ts`](../src/editor/zoom.ts) →
+    `frameTo`): o alvo cai no centro do viewBox sobre a bancada
+    (`boardToWorld`, centro do quadro = centro da mesa) e a distância sai do
+    zoom (`distForZoom`: zoom 1 = a distância de chegada, bancada inteira).
+  - **no 3D / 3D → 2D**: a câmera escreve DE VOLTA no quadro a cada
+    movimento (listener `'change'` do OrbitControls → `setFraming` →
+    `frameAt`, com os MESMOS clamps da vista) — a roda do mouse, o dolly, o
+    pan do botão direito, o arraste da pinça no vazio e o gesto das duas
+    mãos atualizam o quadro 2D em tempo real; voltar ao 2D mostra exatamente
+    o que a câmera estava vendo.
+  - **só o 3D tem os ÂNGULOS**: azimute e elevação da órbita são exclusivos
+    da bancada e sobrevivem ao desmontar a cena (guardados no módulo no
+    `dispose`) — antes, toda entrada em 3D voltava à câmera fixa de chegada.
+    `resetView` (botão `enquadrar`/tecla `0`/duplo-clique) devolve enquadro
+    E ângulos, e o quadro 2D acompanha.
+- **Correção do eixo do giro das duas mãos**: `rollCameraBy` orbitava o **Z
+  do mundo**, que nesta cena (Y-em-cima, bancada deitada no plano XZ) é um
+  eixo HORIZONTAL — a "altura intacta" que o doc prometia não valia (a
+  câmera balançava em altura e azimute ao mesmo tempo). Passou a orbitar o
+  **eixo VERTICAL** (`AXIS_UP`): o "Z" que o professor gira com as mãos é o
+  eixo fora do plano do quadro 2D, que na bancada deitada é o Y — prato
+  giratório de verdade: distância, altura e alvo intactos, só o azimute
+  muda, e o sinal "mão horária leva o conteúdo" segue valendo (na vista
+  elevada, conteúdo girando +θ ao redor do vertical = imagem horária na
+  tela).
+- **Trava de montagem**: o primeiro `update()` do OrbitControls SEMPRE
+  dispara `'change'` (`lastPosition` começa zerado) — sem o gate `primed`
+  essa escrita de chegada estourava o enquadramento do quadro ANTES de o
+  `frameTo` rodar; agora a câmera só reporta enquadramento depois do
+  primeiro `frameTo`/`resetView`.
+- **Limites**: o quadro 2D só representa zoom 1..4 — dolly além do teto
+  (`zoomForDist` clampa) mostra o quadro no teto ao voltar, e mais longe que
+  a chegada vira "cabe tudo"; o pan em zoom 1 é travado por design (o mesmo
+  clamp de sempre).
+- Verificado: `tsc` limpo, **212 testes** (10 novos: 4 de mapeamento
+  quadro↔bancada e ida-e-volta zoom/distância em
+  [`pan3d.test.ts`](../src/scene/pan3d.test.ts)
+  (`boardToWorld`/`worldToBoard`/`zoomForDist`/`distForZoom`) + 3 do
+  `rollCameraBy` reescritos no eixo vertical; 3 de `frameAt` em
+  [`zoomMath.test.ts`](../src/editor/zoomMath.test.ts); 3 de `setFraming`
+  na store), build ok. Validação dev (`__lab`/`__ed`): 2D→3D com zoom
+  2/pan (60,−40) => a célula sob o centro da tela virou (18,12) = o centro
+  do viewBox; roda do mouse no 3D => zoom 1→1,13 escrito no quadro; `panBy`
+  andou a vista (pan 60→29,5) e o viewBox 2D ao trocar bateu exato
+  (189,48 / 117,97 / 160); giro de 0,6 rad moveu o ponto sob (0,05;0,5) de
+  (13,12)→(13,14) = a rotação vertical esperada, e o contra-giro devolveu
+  (13,12) EXATO; ida e volta 2D⇄3D com a câmera girada manteve o ponto
+  (13,14), o centro (16,12) e a store idênticos (ângulos persistidos);
+  montagem fresca = bancada inteira (zoom 1); `resetView` devolveu (1,0)
+  nos dois lados; **0 erros de console**.
 
 ## 6. Riscos e mitigações
 

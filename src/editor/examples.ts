@@ -37,7 +37,11 @@ export const EXAMPLES: { name: string; doc: CircuitDoc }[] = [
       comps: [
         { id: 'bat1', kind: 'vsource', x: 4, y: 2, rot: 0, value: 9 },
         { id: 'r1', kind: 'resistor', x: 12, y: 2, rot: 0, value: 100 },
-        { id: 'r2', kind: 'resistor', x: 12, y: 7, rot: 0, value: 100 },
+        // Girado 180°: na malha em série a corrente entra pelo lado direito do
+        // r2, então sem o giro a leitura sai "−4,50 V | −45 mA" e atrapalha a
+        // aula. O resistor é simétrico — o desenho fica idêntico e as duas
+        // leituras passam a ser positivas (4,50 V | 45 mA).
+        { id: 'r2', kind: 'resistor', x: 12, y: 7, rot: 180, value: 100 },
       ],
       // Mesma linguagem do "Paralelo": tudo em retas. O nó do meio (entre r1 e
       // r2) ganha um trilho à direita — lugar natural para pendurar um voltímetro

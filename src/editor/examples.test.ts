@@ -42,6 +42,30 @@ describe('exemplos do editor/Cardboard', () => {
         if (p.x >= 9 && p.x <= 14) expect([3, 5]).not.toContain(p.y);
   });
 
+  it('Divisor: r2 girado 180° — desenho intacto, leituras todas positivas', () => {
+    const doc = EXAMPLES[1].doc;
+    expect(doc.comps.find((c) => c.id === 'r2')?.rot).toBe(180);
+    // girar o r2 NÃO mexe no desenho: as 7 retas continuam encostando nos
+    // mesmos terminais (o resistor é simétrico, só os terminais trocam de lado)
+    expect(doc.wires.map((w) => wireRoute(doc, w))).toEqual([
+      [{ x: 5, y: 2 }, { x: 11, y: 2 }],
+      [{ x: 13, y: 2 }, { x: 15, y: 2 }],
+      [{ x: 15, y: 2 }, { x: 15, y: 7 }],
+      [{ x: 15, y: 7 }, { x: 13, y: 7 }],
+      [{ x: 11, y: 7 }, { x: 2, y: 7 }],
+      [{ x: 2, y: 7 }, { x: 2, y: 2 }],
+      [{ x: 2, y: 2 }, { x: 3, y: 2 }],
+    ]);
+    // e a corrente entra pelo lado direito do r2, então as três leituras saem
+    // positivas (antes o r2 lia "−4,50 V | −45 mA", que confunde a turma)
+    const out = readCircuit(doc);
+    expect(out.error).toBeNull();
+    for (const c of out.comps) {
+      expect(c.volts).toBeGreaterThan(0);
+      expect(c.amps).toBeGreaterThan(0);
+    }
+  });
+
   it('todo exemplo é feito de retas: sem degrau de 1 célula longe de um terminal', () => {
     for (const ex of EXAMPLES) {
       const terminais = new Set<string>();

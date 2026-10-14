@@ -549,6 +549,27 @@ Feito (girar duas vezes mantém o traçado e inverte os terminais):
   15,7 13,7 / 11,7 2,7 / 2,7 2,2 / 2,2 3,2` — e o painel confere
   (Divisor `r1 4,50 V 45 mA N1 → N2`, `N2 4,50 V`), **`__ed.log` vazio**.
 
+### Divisor com leituras todas positivas — onde está
+
+- O problema: na malha em série a corrente entra pelo lado **direito** do
+  r2, então ele lia **`−4,50 V | −45 mA`** enquanto o r1 lia `+4,50 V`. O
+  sinal negativo não é erro nenhum — é a orientação do terminal `a` —, mas
+  no meio da explicação ele pede uma pausa que não ajuda a turma.
+- A saída: como o símbolo do resistor é **simétrico**, o `r2` foi colocado
+  com `rot: 180` (o `terminal 0` passa para a direita). O desenho fica
+  **idêntico** — terminais continuam em (11,7) e (13,7) — e as leituras
+  saem positivas: `r1 4,50 V | 45 mA N1 → N2` e `r2 4,50 V | 45 mA
+  N2 → GND`.
+- Travado por teste em
+  [`src/editor/examples.test.ts`](../src/editor/examples.test.ts) dos dois
+  lados: a **geometria renderizada** (`wireRoute` das 7 retas, byte a byte)
+  e `volts > 0 && amps > 0` nos três componentes — girar o r2 não pode
+  mover fio nenhum, e nenhuma leitura pode voltar a sair negativa.
+- Verificado: `tsc` limpo, **218 testes**, build ok. No dev: `g.symbol` do
+  r2 em `translate(192 112) rotate(180)`, as 7 retas iguais às de antes, e
+  o painel `r1 4,50 45 mA N1 → N2 / r2 4,50 45 mA N2 → GND`, **`__ed.log`
+  vazio**.
+
 ## 6. Riscos e mitigações
 
 1. **PCs fracos + MediaPipe** → medir fps no spike; `GPU` delegate com fallback CPU; mouse sempre disponível.

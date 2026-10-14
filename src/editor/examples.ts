@@ -1,11 +1,18 @@
 import type { CircuitDoc } from '../core/netlist';
 
+// Laço fechado e reto (fonte → carga → volta por baixo). Cada fio é UMA reta:
+// é o mesmo padrão da escada do "Paralelo" — o retorno desce pelo trilho, corre
+// pela base, sobe pela coluna da esquerda (x=2) e entra no − pela lateral, que é
+// o lado para onde o terminal aponta. Declarar o retorno torto (em x=3, por
+// exemplo) faz o roteador inserir um degrau de 1 célula para respeitar a saída
+// do terminal — daí a base e a subida já nascerem alinhadas em x=2.
 const LOOP = (y: number) => [
   { from: { x: 5, y }, to: { x: 9, y } },
   { from: { x: 11, y }, to: { x: 14, y } },
   { from: { x: 14, y }, to: { x: 14, y: y + 5 } },
-  { from: { x: 14, y: y + 5 }, to: { x: 3, y: y + 5 } },
-  { from: { x: 3, y: y + 5 }, to: { x: 3, y } },
+  { from: { x: 14, y: y + 5 }, to: { x: 2, y: y + 5 } },
+  { from: { x: 2, y: y + 5 }, to: { x: 2, y } },
+  { from: { x: 2, y }, to: { x: 3, y } },
 ];
 
 /**
@@ -32,11 +39,17 @@ export const EXAMPLES: { name: string; doc: CircuitDoc }[] = [
         { id: 'r1', kind: 'resistor', x: 12, y: 2, rot: 0, value: 100 },
         { id: 'r2', kind: 'resistor', x: 12, y: 7, rot: 0, value: 100 },
       ],
+      // Mesma linguagem do "Paralelo": tudo em retas. O nó do meio (entre r1 e
+      // r2) ganha um trilho à direita — lugar natural para pendurar um voltímetro
+      // — e o retorno desce pela base e sobe pela coluna da esquerda até o −.
       wires: [
         { id: 'w1', from: { x: 5, y: 2 }, to: { x: 11, y: 2 } },
-        { id: 'w2', from: { x: 13, y: 2 }, to: { x: 13, y: 7 } },
-        { id: 'w3', from: { x: 11, y: 7 }, to: { x: 3, y: 7 } },
-        { id: 'w4', from: { x: 3, y: 7 }, to: { x: 3, y: 2 } },
+        { id: 'w2', from: { x: 13, y: 2 }, to: { x: 15, y: 2 } },
+        { id: 'w3', from: { x: 15, y: 2 }, to: { x: 15, y: 7 } },
+        { id: 'w4', from: { x: 15, y: 7 }, to: { x: 13, y: 7 } },
+        { id: 'w5', from: { x: 11, y: 7 }, to: { x: 2, y: 7 } },
+        { id: 'w6', from: { x: 2, y: 7 }, to: { x: 2, y: 2 } },
+        { id: 'w7', from: { x: 2, y: 2 }, to: { x: 3, y: 2 } },
       ],
     },
   },

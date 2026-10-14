@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { readCircuit, wireRoute } from '../core/netlist';
+import { readCircuit, terminalPos, wireRoute } from '../core/netlist';
 import { EXAMPLES } from './examples';
 
 /** Exemplos quebrados já morderam (Série × paralelo em curto): todos resolvem. */
@@ -40,5 +40,31 @@ describe('exemplos do editor/Cardboard', () => {
     for (const w of doc.wires)
       for (const p of wireRoute(doc, w))
         if (p.x >= 9 && p.x <= 14) expect([3, 5]).not.toContain(p.y);
+  });
+
+  it('todo exemplo é feito de retas: sem degrau de 1 célula longe de um terminal', () => {
+    for (const ex of EXAMPLES) {
+      const terminais = new Set<string>();
+      for (const c of ex.doc.comps)
+        for (const i of [0, 1] as const) {
+          const p = terminalPos(c, i);
+          terminais.add(`${p.x},${p.y}`);
+        }
+      for (const w of ex.doc.wires) {
+        const pts = wireRoute(ex.doc, w);
+        for (let i = 0; i < pts.length - 1; i++) {
+          const a = pts[i];
+          const b = pts[i + 1];
+          if (Math.abs(a.x - b.x) + Math.abs(a.y - b.y) !== 1) continue;
+          // O único degrau admitido é a entrada de 1 célula no terminal (o fio
+          // entra no lado para onde o terminal aponta). Um degrau no meio de
+          // uma reta é o roteador corrigindo um fio declarado torto.
+          expect(
+            terminais.has(`${a.x},${a.y}`) || terminais.has(`${b.x},${b.y}`),
+            `${ex.name}: degrau de 1 célula em ${a.x},${a.y} - ${b.x},${b.y}`,
+          ).toBe(true);
+        }
+      }
+    }
   });
 });

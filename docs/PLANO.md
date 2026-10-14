@@ -517,6 +517,38 @@ Feito (girar duas vezes mantém o traçado e inverte os terminais):
   fios com trecho de corrente, painel `bat1 270 mA GND → N1` e
   `r1/r2/r3 90 mA N1 → GND`, **`__ed.log` vazio**.
 
+### O mesmo padrão nos outros dois exemplos — onde está
+
+- O padrão da escada era só do Paralelo; o **Divisor** e a **Lei de Ohm**
+  ainda eram declarados tortos. O roteador então insere **degraus de 1
+  célula** para respeitar a saída dos terminais:
+  - Divisor, fio do meio: `(13,2)→(13,7)` saía...
+
+    `13,2 → 14,2 → 14,7 → 13,7`
+
+    ...e o retorno `(3,7)→(3,2)` fazia o espelho disso do lado esquerdo
+    (`3,7 → 2,7 → 2,2 → 3,2`).
+  - Lei de Ohm: o retorno era declarado em x=3 mas corria em x=2
+    (`3,8 → 2,8 → 2,3 → 3,3`) — mesmo degrau, uma coluna fora.
+- Agora os três falam a mesma língua: o **nó do meio do Divisor** ganha um
+  **trilho à direita** (x=15 — lugar natural para pendurar um voltímetro) e
+  o retorno desce pela **base** e sobe pela **coluna da esquerda (x=2)**,
+  entrando no − pela lateral; a Lei de Ohm usa o mesmo desenho (o helper
+  `LOOP` passou de 5 para 6 retas). Nenhum fio tem degrau longe do terminal.
+- Nenhuma leitura mudou: Lei de Ohm 90 mA; Divisor 45 mA com 4,5 V no nó do
+  meio; Paralelo 270 mA (90 mA por ramo).
+- Travado por teste em
+  [`src/editor/examples.test.ts`](../src/editor/examples.test.ts): percorre
+  **todos** os exemplos e exige que **todo trecho de 1 célula esteja
+  encostado num terminal** — um degrau no meio de uma reta é a assinatura
+  de um fio declarado torto. (A entrada de 1 célula no terminal é admitida:
+  é o fio entrando no lado para onde o terminal aponta.)
+- Verificado: `tsc` limpo, **217 testes**, build ok. No dev, os traçados
+  saem retos — Lei de Ohm `5,3 9,3 / 11,3 14,3 / 14,3 14,8 / 14,8 2,8 /
+  2,8 2,3 / 2,3 3,3`; Divisor `5,2 11,2 / 13,2 15,2 / 15,2 15,7 /
+  15,7 13,7 / 11,7 2,7 / 2,7 2,2 / 2,2 3,2` — e o painel confere
+  (Divisor `r1 4,50 V 45 mA N1 → N2`, `N2 4,50 V`), **`__ed.log` vazio**.
+
 ## 6. Riscos e mitigações
 
 1. **PCs fracos + MediaPipe** → medir fps no spike; `GPU` delegate com fallback CPU; mouse sempre disponível.

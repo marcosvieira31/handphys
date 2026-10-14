@@ -129,6 +129,16 @@ describe('desafios com verificação automática', () => {
     expect(dica('serie', EXAMPLES[1].doc)).toContain('2 resistores');
   });
 
+  it('Série com um resistor girado 180° aprova (o sinal não quebra o desafio)', () => {
+    const girado: CircuitDoc = {
+      ...COM_SERIE,
+      comps: COM_SERIE.comps.map((c) => (c.id === 'r2' ? { ...c, rot: 180 as const } : c)),
+    };
+    const r2 = readCircuit(girado).comps.find((c) => c.id === 'r2');
+    expect(r2!.amps).toBeLessThan(0); // leitura negativa: terminal a→b inverteu
+    expect(ok('serie', girado)).toBe(true);
+  });
+
   it('Lâmpada: acesa aprova; a lei de Ohm diz que falta a lâmpada', () => {
     expect(ok('lampada', COM_LAMPADA)).toBe(true);
     expect(dica('lampada', EXAMPLES[0].doc)).toContain('lâmpada');

@@ -140,9 +140,12 @@ export const CHALLENGES: Challenge[] = [
       const conduzindo = rs.filter((c) => Math.abs(c.amps) > TOL_A);
       if (!conduzindo.length)
         return 'Nenhum resistor está vendo corrente — feche o circuito (fonte, fios e volta).';
-      // Em série a corrente é a mesma nos três; em paralelo seria o mesmo PAR DE
-      // NÓS. Os dois juntos (mesma corrente + pares distintos) é a série.
-      const iguais = maiorGrupo(conduzindo, (c) => c.amps.toFixed(5));
+      // Em série a corrente é a MESMA nos três; em paralelo seria o mesmo PAR DE
+      // NÓS. Os dois juntos (mesma corrente + pares distintos) é a série. O
+      // agrupo pelo MÓDULO: um resistor girado 180° lê negativo e continua vendo
+      // a mesma corrente física — só o terminal a→b inverteu (mesma coisa do r2
+      // do Divisor, que passou a girar 180° para a leitura sair positiva).
+      const iguais = maiorGrupo(conduzindo, (c) => Math.abs(c.amps).toFixed(5));
       if (iguais.length < 3)
         return `Só ${quantos(iguais.length, 'resistor', 'resistores')} estão vendo a mesma corrente — em série os três têm de ver a mesma.`;
       if (porPar(iguais).length < 3)

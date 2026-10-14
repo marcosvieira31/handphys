@@ -1,6 +1,6 @@
 # Plano — Laboratório Virtual de Física (Circuitos) em Realidade Mista
 
-> Status: **Fase 0–3a concluídas — Fase 4 em execução (share, espelho ao vivo, CSV, corrente animada, desafios e a estação de Kirchhoff: nós + malhas)**
+> Status: **Fase 0–4 concluídas — share por URL/QR, espelho ao vivo, CSV + JSON, corrente animada, desafios com verificação automática, estação de Kirchhoff (nós + malhas) e questão na tela. Próximo: responsividade mobile (editor + espelho) e, depois, Fase 5 (piloto com turma). Validação do WebRTC em duas máquinas reais pendente (a automação bloqueia ICE); iOS ainda não medido**
 > Objetivo: evolução contínua (sem data de entrega marcada), uso real em sala de aula.
 
 ---
@@ -220,8 +220,9 @@ Feito (primeira fatia da camada de sala de aula do roadmap; o espelho já existi
   aberta ⇒ lâmpada 0 mA, µF/mF do capacitor, vazio ⇒ só o cabeçalho), build ok; no
   navegador (dev) — botão baixa o arquivo com nome e data, bytes iniciais `EF BB BF`
   (BOM), CSV com as linhas esperadas, 0 erros de console.
-- Pendente do plano: relatório **JSON**. (Leitura por **nó**, malhas de
-  Kirchhoff e desafios com verificação automática: feitos, nas seções próprias.)
+- Pendente do plano: relatório **JSON** — feito, na seção própria abaixo.
+  (Leitura por **nó**, malhas de Kirchhoff e desafios com verificação
+  automática: feitos, nas seções próprias.)
 
 ### Corrente animada nos fios — onde está
 
@@ -708,6 +709,56 @@ Feito (girar duas vezes mantém o traçado e inverte os terminais):
   (fonte + um resistor cada); e no espelho de outra aba, `ao vivo`, com as
   duas seções em letra de projeção e a faixa "Desafio: Malha de três /
   conseguiu ✓".
+
+### Questão na tela + relatório JSON — onde está
+
+Feito (fim da camada de sala de aula do roadmap — o que faltava do Fase 4):
+
+**Questão na tela (modo professor)**
+- **O que é**: campo **Questão da aula** no painel, antes dos desafios
+  ([`src/editor/Inspector.tsx`](../src/editor/Inspector.tsx) — `maxLength` =
+  `QUESTAO_MAX`, alvo de 46 px como os trilhos). A pergunta viaja pelo fio do
+  espelho (campo `q`, aditivo como `k`/`f` — sem bump de versão) e vira um
+  cartão no TOPO da projeção em letra `clamp(20px, 2.6vh, 30px)`: a turma lê do
+  fundo da sala.
+- **Regra do cartão**: com questão escrita ⇒ ela (rótulo "Questão da aula");
+  vazia com desafio ativo ⇒ o **enunciado** do desafio (rótulo "Desafio"); sem
+  as duas ⇒ nada. O rodapé do espelho ficou com **título + veredito** só — o
+  enunciado saiu de lá para não duplicar o que subiu para o topo.
+- **O fio não confia em quem manda**: `textoLivre()`
+  ([`src/mirror/protocol.ts`](../src/mirror/protocol.ts)) transforma o que
+  chega em UMA linha limpa — o que não é string vira `''`, controle vira
+  espaço, espaço vira espaço, `.trim()` e corte em `QUESTAO_MAX` (200). Número
+  manda pergunta vazia, cola de terminal com quebra de linha não quebra o
+  cartão e pergunta gigante não derruba a projeção.
+- **Veredito continua puro**: a questão não tem conferência (é enunciado, não
+  tarefa); quem confere continua sendo o `check(doc, reading)` do desafio,
+  recalculado em cada tela.
+
+**Relatório JSON**
+- **O que é**: botão **JSON** na barra ([`src/editor/App.tsx`](../src/editor/App.tsx)),
+  irmão do CSV (mesmo desenho: desativado com o quadro vazio, `data-hand="json"`,
+  download 100 % local por Blob), baixa `handphys-circuito-AAAA-MM-DD.json`.
+- **Mesmo dado, forma de máquina**: `jsonReport(doc, reading, desafio)`
+  ([`src/editor/report.ts`](../src/editor/report.ts)) devolve `schema` assinado
+  e `geradoEm`; a **montagem crua** (`circuito.componentes` + `circuito.fios` —
+  reconstrói o circuito inteiro, coisa que o CSV não faz, sem fios); uma
+  `leitura` por componente (valor em **SI puro**, sem prefixo de etiqueta —
+  capacitor em `F` —, tensão, corrente e os dois nós; chave com
+  `estado: fechada|aberta`); `nos` com GND primeiro; `desafio` (id, título,
+  `ok` e dica quando reprovado — o MESMO `check` do painel, recalculado na
+  hora); e `erros.solver` + `diagnosticos`.
+- **Número de máquina**: ponto decimal e arredondamento em 9 casas só para tirar
+  a poeira do float (`4.50000000001 ⇒ 4.5`); vírgula decimal é conversão de
+  planilha, não de JSON.
+- Verificado: `tsc` limpo, **254 testes** (1 novo do fio da questão — ida e
+  volta, número vira `''`, cola vira UMA linha cortada em `QUESTAO_MAX` — e 7
+  novos do JSON — assinatura + fios cruos, 9 V/0,45 A em SI, GND primeiro,
+  chave fechada/aberta, capacitor em `F`, veredito do desafio, vazio válido),
+  build ok. No dev: pergunta escrita no painel aparece no cartão do espelho de
+  outra aba (`ao vivo`); apagada ⇒ cartão vira "Desafio" com o enunciado e o
+  rodapé fica `Desafio: Divisor de tensão / conseguiu ✓`, sem duplicar; o JSON
+  do Divisor abre com `N2 = 4.5 V`, `r2 = 100 Ω / 45 mA` e 7 fios.
 
 ## 6. Riscos e mitigações
 

@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import type { CompKind, Placed, Reading } from '../core/netlist';
+import { QUESTAO_MAX } from '../mirror/protocol';
 import { CHALLENGES, challengeById, evaluateChallenge } from './challenges';
 import { formatAmps, formatValue } from './symbol';
 import { HandsPanel } from './HandsPanel';
@@ -49,6 +50,8 @@ export function Inspector({ reading }: { reading: Reading }) {
   const canUndo = useEditor((s) => s.past.length > 0);
   const challengeId = useEditor((s) => s.challenge);
   const setChallenge = useEditor((s) => s.setChallenge);
+  const questao = useEditor((s) => s.questao);
+  const setQuestao = useEditor((s) => s.setQuestao);
   const { rotate, removeSelected, setValue, toggleSwitch, undo } = useEditor();
   const selected = selection?.kind === 'comp' ? doc.comps.find((c) => c.id === selection.id) : null;
   const ch = challengeById(challengeId);
@@ -62,6 +65,23 @@ export function Inspector({ reading }: { reading: Reading }) {
           Desfazer
         </button>
       </header>
+
+      <section className="questao">
+        <h3>Questão da aula</h3>
+        <input
+          type="text"
+          className="questao-in"
+          data-hand="questao"
+          placeholder="ex.: Quanto mede a corrente em r2?"
+          value={questao}
+          maxLength={QUESTAO_MAX}
+          onChange={(e) => setQuestao(e.target.value)}
+        />
+        <p className="hint">
+          Aparece em letra grande na projeção (espelho). Vazia ⇒ a projeção mostra o
+          enunciado do desafio ativo.
+        </p>
+      </section>
 
       <section className={statuso?.ok ? 'challenge ok' : 'challenge'}>
         <h3>Desafio</h3>

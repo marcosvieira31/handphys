@@ -51,6 +51,13 @@ export interface EditorState {
    * mesma tarefa e o mesmo veredito.
    */
   challenge: string | null;
+  /**
+   * Questão da aula escrita pelo professor (modo professor): texto livre que
+   * viaja pelo fio do espelho e aparece em letra grande na projeção. Vazia ⇒
+   * a projeção mostra o enunciado do desafio ativo (e sem desafio, não mostra
+   * nada). Não é tarefa com veredito — só o enunciado, para a turma ler.
+   */
+  questao: string;
   /** Vista ativa: o MESMO documento em 2D ou na bancada 3D. */
   view: '2d' | '3d';
   /** Zoom do quadro 2D (1 = cabe tudo, 4 = o teto) e deslocamento do centro. */
@@ -106,6 +113,8 @@ export interface EditorState {
   setFlow: (on: boolean) => void;
   /** Abre um desafio (`null` desliga). Só escolhe — quem avalia é o `check`. */
   setChallenge: (id: string | null) => void;
+  /** Escreve a questão da aula (`''` limpa). O corte para o fio é do protocolo. */
+  setQuestao: (q: string) => void;
   setView: (v: '2d' | '3d') => void;
   /** Zoom mantendo um ponto do quadro preso na tela (`anchor` nulo = centro). */
   zoomBy: (factor: number, anchor?: Pt | null) => void;
@@ -162,6 +171,7 @@ export const useEditor = create<EditorState>((set, get) => ({
   colorByVoltage: true,
   flow: true,
   challenge: null,
+  questao: '',
   view: '2d',
   zoom: 1,
   pan: { x: 0, y: 0 },
@@ -483,6 +493,7 @@ export const useEditor = create<EditorState>((set, get) => ({
   setColorByVoltage: (on) => set({ colorByVoltage: on }),
   setFlow: (on) => set({ flow: on }),
   setChallenge: (id) => set({ challenge: id }),
+  setQuestao: (q) => set({ questao: q }),
 
   setView: (v) => set({ view: v, draft: null, grip: null, panning: false }),
 

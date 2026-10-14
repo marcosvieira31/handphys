@@ -60,6 +60,38 @@ body.espelho-page {
   background: var(--err);
 }
 
+/* cartão de QUESTÃO no topo: a turma lê do fundo da sala — a pergunta que o
+   professor escreveu no editor, ou (vazia) o enunciado do desafio ativo */
+.espelho-questao {
+  flex: none;
+  display: flex;
+  align-items: baseline;
+  gap: 6px 14px;
+  margin: 12px 16px 0;
+  padding: 12px 16px;
+  background: #12171e;
+  border: 1px solid var(--line);
+  border-left: 4px solid var(--hot);
+  border-radius: 10px;
+}
+
+.espelho-questao-rot {
+  flex: none;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--hot);
+}
+
+.espelho-questao-txt {
+  margin: 0;
+  font-size: clamp(20px, 2.6vh, 30px);
+  font-weight: 600;
+  line-height: 1.35;
+  color: var(--ink);
+}
+
 /* quadro grande, no mesmo enquadamento de quem conduz */
 .espelho-board {
   position: relative;

@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import { readCircuit } from '../core/netlist';
+import { challengeById, evaluateChallenge } from './challenges';
 import { EXAMPLES } from './examples';
 import { HandsLayer } from './HandsLayer';
 import { Inspector } from './Inspector';
@@ -8,7 +9,7 @@ import { MirrorToggle } from './MirrorToggle';
 import { Schematic } from './Schematic';
 import { SceneView } from './SceneView';
 import { ShareDialog } from './ShareDialog';
-import { downloadCsv } from './report';
+import { downloadCsv, downloadJson, type DesafioRel } from './report';
 import { useEditor } from './store';
 import { applyZoom, applyZoomReset } from './zoom';
 
@@ -16,8 +17,17 @@ import { applyZoom, applyZoomReset } from './zoom';
 export function App({ shared = 'none' }: { shared?: 'none' | 'ok' | 'bad' }) {
   const doc = useEditor((s) => s.doc);
   const view = useEditor((s) => s.view);
+  const challengeId = useEditor((s) => s.challenge);
   const { clear, load, undo, rotate, removeSelected, setView } = useEditor();
   const reading = readCircuit(doc);
+  // Veredito do desafio no relatório JSON: recalculado AQUI, do mesmo jeito que
+  // no painel e no espelho (o `check` é puro) — o arquivo registra a tarefa.
+  const ch = challengeById(challengeId);
+  const statuso = ch ? evaluateChallenge(ch, doc, reading) : null;
+  const desafioRel: DesafioRel | null =
+    ch && statuso
+      ? { id: ch.id, titulo: ch.titulo, ok: statuso.ok, dica: statuso.ok ? null : statuso.dica }
+      : null;
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -72,6 +82,16 @@ export function App({ shared = 'none' }: { shared?: 'none' | 'ok' | 'bad' }) {
             data-hand="csv"
           >
             CSV
+          </button>
+          <button
+            type="button"
+            className="ghost"
+            onClick={() => downloadJson(doc, reading, desafioRel)}
+            disabled={!doc.comps.length}
+            title="Baixar o relatório JSON (montagem + leituras + veredito do desafio)"
+            data-hand="json"
+          >
+            JSON
           </button>
           <button type="button" className="ghost" onClick={clear} data-hand="clear">
             Limpar

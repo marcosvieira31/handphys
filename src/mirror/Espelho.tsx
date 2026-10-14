@@ -51,6 +51,7 @@ export function Espelho() {
   const placing = useEditor((s) => s.placing);
   const zoom = useEditor((s) => s.zoom);
   const challengeId = useEditor((s) => s.challenge);
+  const questao = useEditor((s) => s.questao);
   const [status, setStatus] = useState<'esperando' | 'ao-vivo' | 'parado'>('esperando');
   const [statusRede, setStatusRede] = useState<StatusSala | null>(null);
   const reading = readCircuit(doc);
@@ -87,6 +88,7 @@ export function Espelho() {
           colorByVoltage: s.colorByVoltage,
           flow: s.flow,
           challenge: s.challenge,
+          questao: s.questao,
         });
         visto = Date.now();
         setStatus('ao-vivo');
@@ -153,6 +155,13 @@ export function Espelho() {
         </span>
       </header>
 
+      {(questao || ch) && (
+        <div className="espelho-questao">
+          <span className="espelho-questao-rot">{questao ? 'Questão da aula' : 'Desafio'}</span>
+          <p className="espelho-questao-txt">{questao || ch?.enunciado}</p>
+        </div>
+      )}
+
       <main className="espelho-board">
         <Schematic reading={reading} />
       </main>
@@ -161,7 +170,6 @@ export function Espelho() {
         {ch && statuso && (
           <div className={statuso.ok ? 'espelho-desafio ok' : 'espelho-desafio'}>
             <strong>Desafio: {ch.titulo}</strong>
-            <span className="espelho-desafio-enun">{ch.enunciado}</span>
             <span className="espelho-desafio-ver">
               {statuso.ok ? 'conseguiu ✓' : statuso.dica}
             </span>

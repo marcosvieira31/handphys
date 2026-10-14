@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { EXAMPLES } from '../editor/examples';
 import type { MirrorChannel } from './channel';
 import { MirrorFollower } from './follower';
-import { BYE, decodeMsg, encodeState, helloMsg, newWatcherId, type State } from './protocol';
+import { BYE, decodeMsg, encodeState, helloMsg, newWatcherId, QUESTAO_MAX, type State } from './protocol';
 import { MirrorTransmitter } from './transmitter';
 
 /** Par de canais que se falam (o BroadcastChannel de verdade não manda p/ si). */
@@ -34,6 +34,7 @@ const estado = (sobrescrever: Partial<State> = {}): State => ({
   colorByVoltage: false,
   flow: true,
   challenge: null,
+  questao: '',
   ...sobrescrever,
 });
 
@@ -79,6 +80,24 @@ describe('protocolo do espelho', () => {
     // fio não confiável: o outro lado só aceita id que ELE conhece
     const ruim = decodeMsg(encodeState(estado({ challenge: 'x' })));
     expect(ruim && ruim.kind === 'state' ? ruim.state.challenge : null).toBe(null);
+  });
+
+  it('questão da aula viaja pelo fio; texto longo ou podre é enxugado', () => {
+    const frase = 'Quanto mede a corrente em r2?';
+    const ok = decodeMsg(encodeState(estado({ questao: frase })));
+    expect(ok && ok.kind === 'state' ? ok.state.questao : null).toBe(frase);
+
+    // fio não confiável: número não vira texto — vira pergunta vazia
+    const numero = JSON.stringify({ ...JSON.parse(encodeState(estado())), q: 42 });
+    const mNum = decodeMsg(numero);
+    expect(mNum && mNum.kind === 'state' ? mNum.state.questao : null).toBe('');
+
+    // cola de terminal (quebra de linha, tab, espacejamento) vira UMA linha
+    // limpa e cortada no teto — a projeção nunca recebe lixo do canal
+    const cola = decodeMsg(encodeState(estado({ questao: `  linha1\n\tlinha2 ${'x'.repeat(500)}  ` })));
+    const txt = cola && cola.kind === 'state' ? cola.state.questao : '';
+    expect(txt.startsWith('linha1 linha2 ')).toBe(true);
+    expect(txt).toHaveLength(QUESTAO_MAX);
   });
 
   it('lixo no canal vira null, nunca erro na tela', () => {

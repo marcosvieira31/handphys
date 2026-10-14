@@ -21,6 +21,13 @@ import type { Selection } from '../editor/store';
 export const CHANNEL_NAME = 'handphys.espelho';
 export const MIRROR_VERSION = 1;
 
+/**
+ * Corte da questão da aula no FIO: o editor limita o `<input>` pelo mesmo
+ * número, mas quem decodifica não confia em quem manda — texto longo demais é
+ * enxugado aqui, nunca rejeitado (uma pergunta gigante não derruba a tela).
+ */
+export const QUESTAO_MAX = 200;
+
 /** Estado da tela que conduz, o que o espelho aplica inteiro. */
 export interface State {
   doc: CircuitDoc;
@@ -39,6 +46,12 @@ export interface State {
    * discordar da do professor.
    */
   challenge: string | null;
+  /**
+   * Questão da aula do professor (`''` = nenhuma): texto livre, SEM veredito.
+   * A projeção mostra ela em letra grande; vazia, mostra o enunciado do
+   * desafio. Viaja inteira no fio e é enxugada em `QUESTAO_MAX` na leitura.
+   */
+  questao: string;
 }
 
 export type Msg =
@@ -76,6 +89,7 @@ export function encodeState(st: State): string {
     c: st.colorByVoltage ? 1 : 0,
     f: st.flow ? 1 : 0,
     k: st.challenge ?? '',
+    q: st.questao,
   });
 }
 
@@ -86,6 +100,20 @@ export function newWatcherId(): string {
 
 const num = (n: unknown, min: number, max: number, fallback: number): number =>
   typeof n === 'number' && Number.isFinite(n) ? Math.min(max, Math.max(min, n)) : fallback;
+
+/**
+ * Texto livre do fio => uma linha limpa e curta: controle vira espaço (cola de
+ * terminal não quebra a projeção), espaço vira espaço e o resto é cortado em
+ * `QUESTAO_MAX`. Qualquer coisa que não seja string vira `''`.
+ */
+function textoLivre(v: unknown): string {
+  if (typeof v !== 'string') return '';
+  return v
+    .replace(/[\x00-\x1F\x7F]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, QUESTAO_MAX);
+}
 
 /**
  * Lê uma mensagem do espelho. Entrada podre (outra versão, JSON quebrado,
@@ -107,6 +135,7 @@ export function decodeMsg(raw: unknown): Msg | null {
     c?: unknown;
     f?: unknown;
     k?: unknown;
+    q?: unknown;
   };
   try {
     m = JSON.parse(raw) as typeof m;
@@ -139,6 +168,7 @@ export function decodeMsg(raw: unknown): Msg | null {
       flow: m.f === 1,
       // Fio não confiável: só id que existe aqui vira desafio (fora isso, nada).
       challenge: typeof m.k === 'string' && CHALLENGE_IDS.has(m.k) ? m.k : null,
+      questao: textoLivre(m.q),
     },
   };
 }

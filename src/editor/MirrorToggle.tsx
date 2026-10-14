@@ -18,6 +18,7 @@ const readState = (): State => {
     colorByVoltage: s.colorByVoltage,
     flow: s.flow,
     challenge: s.challenge,
+    questao: s.questao,
   };
 };
 

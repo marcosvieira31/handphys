@@ -920,6 +920,44 @@ button:disabled {
   border-color: var(--err);
 }
 
+/* ---------- questão da aula (modo professor) ----------
+   Texto livre que o professor digita e que vai em LETRA GRANDE na projeção
+   (espelho). Não tem veredito: é o enunciado que a turma lê enquanto monta —
+   quando vazia, a projeção cai no enunciado do desafio ativo. */
+.questao {
+  margin: 0 0 12px;
+  padding: 10px;
+  background: #12171e;
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--hot);
+  border-radius: 8px;
+}
+
+.questao h3 {
+  margin: 0 0 8px;
+}
+
+.questao-in {
+  width: 100%;
+  box-sizing: border-box;
+  min-height: 46px; /* alvo de mão, como os trilhos */
+  padding: 6px 10px;
+  background: #0a0d12;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  color: var(--ink);
+  font: inherit;
+}
+
+.questao-in:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.questao .hint {
+  margin: 8px 0 0;
+}
+
 /* ---------- desafio com verificação automática ----------
    O aluno lê a tarefa e o veredito JUNTO das medições: é o mesmo número que
    ele está olhando (90 mA) que aprova ou reprov a bancada. Alvos de mão: cada

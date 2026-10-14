@@ -85,6 +85,7 @@ describe('desafios com verificação automática', () => {
       'paralelo',
       'serie',
       'juncao',
+      'malha',
       'chave',
     ]);
     expect(new Set(CHALLENGES.map((c) => c.id)).size).toBe(CHALLENGES.length);
@@ -143,8 +144,23 @@ describe('desafios com verificação automática', () => {
   it('Nó de Kirchhoff: o Paralelo é junção de 4 ramos; a série só tem nós de 2', () => {
     expect(ok('juncao', EXAMPLES[2].doc)).toBe(true);
     expect(ok('juncao', COM_SERIE)).toBe(false);
-    expect(dica('juncao', COM_SERIE)).toBe('O nó mais cheio tem 2 ramos — a 1ª lei de Kirchhoff quer um nó com 3 ramos.');
+    expect(dica('juncao', COM_SERIE)).toBe(
+      'O nó mais cheio tem 2 ramos — a 1ª lei de Kirchhoff quer um nó com 3 ramos.',
+    );
     expect(ok('juncao', EXAMPLES[0].doc)).toBe(false);
+  });
+
+  it('Malha de três: o Divisor aprova (3 elementos); laço de 2 reprova', () => {
+    expect(ok('malha', EXAMPLES[1].doc)).toBe(true); // fonte + r1 + r2
+    expect(ok('malha', EXAMPLES[0].doc)).toBe(false); // lei de ohm: fonte + r1
+    expect(dica('malha', EXAMPLES[0].doc)).toBe(
+      'Sua volta maior tem 2 elementos — a 2ª lei quer 3: fonte + dois no mesmo laço.',
+    );
+    expect(ok('malha', EXAMPLES[2].doc)).toBe(false); // paralelo: toda volta tem 2
+    expect(dica('malha', { comps: [], wires: [] })).toContain('laço fechado');
+    expect(dica('malha', { comps: [{ id: 'r1', kind: 'resistor', x: 4, y: 3, rot: 0, value: 100 }], wires: [] })).toContain(
+      'Sem laço fechado',
+    );
   });
 
   it('Lâmpada: acesa aprova; a lei de Ohm diz que falta a lâmpada', () => {

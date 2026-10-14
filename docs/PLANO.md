@@ -1,6 +1,6 @@
 # Plano — Laboratório Virtual de Física (Circuitos) em Realidade Mista
 
-> Status: **Fase 0–3a concluídas — Fase 4 em execução (share, espelho ao vivo, CSV, corrente animada, desafios e a estação de Kirchhoff)**
+> Status: **Fase 0–3a concluídas — Fase 4 em execução (share, espelho ao vivo, CSV, corrente animada, desafios e a estação de Kirchhoff: nós + malhas)**
 > Objetivo: evolução contínua (sem data de entrega marcada), uso real em sala de aula.
 
 ---
@@ -220,8 +220,8 @@ Feito (primeira fatia da camada de sala de aula do roadmap; o espelho já existi
   aberta ⇒ lâmpada 0 mA, µF/mF do capacitor, vazio ⇒ só o cabeçalho), build ok; no
   navegador (dev) — botão baixa o arquivo com nome e data, bytes iniciais `EF BB BF`
   (BOM), CSV com as linhas esperadas, 0 erros de console.
-- Pendente do plano: relatório **JSON**; leitura por **nó** (estação de Kirchhoff) se o
-  professor pedir; desafios com verificação automática vêm em seguida.
+- Pendente do plano: relatório **JSON**. (Leitura por **nó**, malhas de
+  Kirchhoff e desafios com verificação automática: feitos, nas seções próprias.)
 
 ### Corrente animada nos fios — onde está
 
@@ -628,7 +628,8 @@ Feito (girar duas vezes mantém o traçado e inverte os terminais):
 - O problema: a bancada dizia a tensão de cada nó (`Tensão dos nós`) e a
   corrente de cada componente, mas **a 1ª lei de Kirchhoff não aparecia em
   lugar nenhum** — o aluno não conseguia conferir, num nó, o que entra menos o
-  que sai. (A estação 3 do escopo é "nós e malhas": os **nós** entraram agora.)
+  que sai. (A estação 3 do escopo é "nós e malhas": os **nós** entraram aqui;
+  as **malhas**, na seção seguinte.)
 - O que é: [`src/core/kirchhoff.ts`](../src/core/kirchhoff.ts) → `porNo(reading)`
   reorganiza a MESMA leitura do solver por nó: para cada junção, os **ramos**
   com o **sentido relativo àquele nó** — `entra`/`sai`, e o mesmo ramo é "sai"
@@ -659,8 +660,54 @@ Feito (girar duas vezes mantém o traçado e inverte os terminais):
   `GND | entram 270 mA · saem 270 mA · Σ 0 mA` com `bat1 Fonte sai 270 mA` e
   os três `entra 90 mA` (Σ em verde); no espelho de outra aba, a MESMA tabela
   em 16 px com o desafio "conseguiu ✓"; e duas fontes ideais em conflito ⇒
-  seção some, vermelho do erro no lugar. Pendência natural da estação:
-  a **2ª lei (malhas)**.
+  seção some, vermelho do erro no lugar. A **2ª lei (malhas)** entrou logo na
+  seção seguinte.
+
+### Estação de Kirchhoff — 2ª lei (malhas) — onde está
+
+- O problema: a 1ª lei mostrava a corrente entrando e saindo de cada nó, mas
+  a **2ª lei não tinha por onde ser lida** — sem um percurso escrito o aluno
+  não conseguia "andar" no laço somando tensões. (Estação 3 do escopo:
+  "nós **e malhas**" — as malhas faltavam.)
+- O que é: `malhas(reading)` (no MESMO
+  [`src/core/kirchhoff.ts`](../src/core/kirchhoff.ts)) monta a **base de
+  malhas independentes**: uma volta para cada aresta que não entrou na árvore
+  de ligação — isso é **E − V + C** de grafos, a MESMA base de voltas
+  independentes que a análise de malhas usa na escola (o número de voltas
+  independentes, não todas as que o desenho deixa imaginar).
+- Cada volta sai de **`GND`** quando passa por ele, e o sentido é escolhido
+  para atravessar a fonte **do − para o +** (o jeito do livro começar a
+  conta). Daí a leitura: `bat1 Fonte +9.00 V sobe`, `r1 Resistor −4.50 V cai`
+  — **o mesmo número da tabela de leituras** (|V(a) − V(b)| não muda quando os
+  terminais trocam de lado), com o sinal da volta em cima. O percurso aparece
+  escrito: `GND → N1 → N2 → GND`.
+- Assim como a 1ª lei, o `Σ` é zero **por construção** (o solver acha tensões
+  de nó; volta fechada fecha por definição) — ler e conferir é o trabalho da
+  estação. Caso de aula travado por teste: **chave aberta** — a volta existe,
+  a tensão inteira (`−9.00 V`) fica na chave e o resistor parado lê `0.00 V`,
+  **nem sobe nem cai** (o mesmo cuidado do ramo de 0 mA: parado não tem lado).
+- Fora da conta: ramo curto não vira volta (derrubado pelo solver), laço
+  aberto não tem volta, e `reading.error` ⇒ lista vazia (o aviso vermelho já
+  está em cima).
+- Onde aparece: a MESMA [`src/editor/Kirchhoff.tsx`](../src/editor/Kirchhoff.tsx)
+  — a seção "Kirchhoff — tensão nas malhas" entra logo depois da de nós, no
+  painel e na projeção do `Espelho`, calculada das duas partes sobre o
+  `reading` local (nada novo viaja pelo fio).
+- Junto entrou o **8º desafio — "Malha de três"**: uma volta com **3
+  elementos** (a fonte + dois no mesmo laço). O Divisor aprova; a Lei de Ohm e
+  o Paralelo reprovam com "Sua volta maior tem 2 elementos — a 2ª lei quer 3:
+  fonte + dois no mesmo laço."
+- Verificado: `tsc` limpo, **246 testes** (6 novos em
+  [`src/core/kirchhoff.test.ts`](../src/core/kirchhoff.test.ts) — partida em
+  GND, série dividindo 9 = 4,5 + 4,5, paralelo com **3 − 2 + 1 = 2** voltas
+  independentes, chave aberta, ramo curto, sem laço e sem solução —, 1 da
+  varredura dos exemplos — as independentes são **1, 1 e 3** — e 1 do desafio),
+  build ok. No dev: o Divisor mostra `Volta 1 · 3 elementos` com `Σ 0.00 V` em
+  verde, `bat1 +9.00 V sobe / r1 −4.50 V cai / r2 −4.50 V cai` e percurso
+  `GND → N1 → N2 → GND`; o Paralelo mostra **3 voltas** `GND → N1 → GND`
+  (fonte + um resistor cada); e no espelho de outra aba, `ao vivo`, com as
+  duas seções em letra de projeção e a faixa "Desafio: Malha de três /
+  conseguiu ✓".
 
 ## 6. Riscos e mitigações
 

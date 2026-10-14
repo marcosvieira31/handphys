@@ -652,6 +652,68 @@ body.editor-page {
   color: var(--ink);
 }
 
+/* ---------- 2ª lei de Kirchhoff: a volta (malha) e a tensão em cada trecho --
+   Cada volta é um bloquinho: em cima a conta (Σ, verde quando fecha), o
+   percurso escrito em nós (GND → N1 → GND) e os elementos com o sinal que a
+   volta dá para cada um — sobe na fonte, cai nas cargas. */
+.kirchhoff .malhas {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 12px;
+}
+
+.kirchhoff .malha {
+  padding: 6px 8px;
+  background: #12171e;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+}
+
+.kirchhoff .malha-topo {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.kirchhoff .percurso {
+  margin: 0 0 4px;
+  font-size: 11px;
+  color: var(--dim);
+}
+
+.kirchhoff .passos {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.kirchhoff .passos li {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  color: var(--dim);
+}
+
+.kirchhoff .dv {
+  white-space: nowrap;
+  color: var(--ink);
+}
+
+/* parado (0 V) não sobe nem cai — o mesmo cuidado do ramo de 0 mA na 1ª lei */
+.kirchhoff .dv.parado {
+  color: var(--dim);
+}
+
 code,
 kbd {
   font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;

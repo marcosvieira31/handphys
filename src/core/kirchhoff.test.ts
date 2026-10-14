@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { KCL_TOL, fechaConta, porNo } from './kirchhoff';
+import { KCL_TOL, fechaConta, malhas, porNo } from './kirchhoff';
 import { readCircuit, type CircuitDoc } from './netlist';
 
 /** Laço fonte → carga → volta por baixo, como os exemplos (só retas). */
@@ -54,6 +54,46 @@ const R_CURTO: CircuitDoc = {
     { id: 'w6', from: { x: 18, y: 8 }, to: { x: 2, y: 8 } },
     { id: 'w7', from: { x: 2, y: 8 }, to: { x: 2, y: 3 } },
     { id: 'w8', from: { x: 2, y: 3 }, to: { x: 3, y: 3 } },
+  ],
+};
+
+/** Duas cargas em paralelo sobre a fonte: o grafo vira multigrafo. */
+const COM_PARALELO: CircuitDoc = {
+  comps: [
+    { id: 'bat1', kind: 'vsource', x: 4, y: 3, rot: 0, value: 9 },
+    { id: 'r1', kind: 'resistor', x: 10, y: 1, rot: 0, value: 100 },
+    { id: 'r2', kind: 'resistor', x: 10, y: 5, rot: 0, value: 100 },
+  ],
+  wires: [
+    { id: 'w1', from: { x: 5, y: 3 }, to: { x: 5, y: 1 } },
+    { id: 'w2', from: { x: 5, y: 1 }, to: { x: 9, y: 1 } },
+    { id: 'w3', from: { x: 5, y: 3 }, to: { x: 5, y: 5 } },
+    { id: 'w4', from: { x: 5, y: 5 }, to: { x: 9, y: 5 } },
+    { id: 'w5', from: { x: 11, y: 1 }, to: { x: 13, y: 1 } },
+    { id: 'w6', from: { x: 11, y: 5 }, to: { x: 13, y: 5 } },
+    { id: 'w7', from: { x: 13, y: 1 }, to: { x: 13, y: 5 } },
+    { id: 'w8', from: { x: 13, y: 5 }, to: { x: 13, y: 8 } },
+    { id: 'w9', from: { x: 13, y: 8 }, to: { x: 2, y: 8 } },
+    { id: 'w10', from: { x: 2, y: 8 }, to: { x: 2, y: 3 } },
+    { id: 'w11', from: { x: 2, y: 3 }, to: { x: 3, y: 3 } },
+  ],
+};
+
+/** Duas cargas em série: uma única volta de três elementos. */
+const SERIE: CircuitDoc = {
+  comps: [
+    { id: 'bat1', kind: 'vsource', x: 4, y: 3, rot: 0, value: 9 },
+    { id: 'r1', kind: 'resistor', x: 10, y: 3, rot: 0, value: 100 },
+    { id: 'r2', kind: 'resistor', x: 16, y: 3, rot: 0, value: 100 },
+  ],
+  wires: [
+    { id: 'w1', from: { x: 5, y: 3 }, to: { x: 9, y: 3 } },
+    { id: 'w2', from: { x: 11, y: 3 }, to: { x: 15, y: 3 } },
+    { id: 'w3', from: { x: 17, y: 3 }, to: { x: 22, y: 3 } },
+    { id: 'w4', from: { x: 22, y: 3 }, to: { x: 22, y: 8 } },
+    { id: 'w5', from: { x: 22, y: 8 }, to: { x: 2, y: 8 } },
+    { id: 'w6', from: { x: 2, y: 8 }, to: { x: 2, y: 3 } },
+    { id: 'w7', from: { x: 2, y: 3 }, to: { x: 3, y: 3 } },
   ],
 };
 
@@ -125,5 +165,72 @@ describe('leitura de Kirchhoff por nó', () => {
     expect(fechaConta(1e-16)).toBe(true);
     expect(fechaConta(KCL_TOL)).toBe(true);
     expect(fechaConta(0.001)).toBe(false);
+  });
+});
+
+describe('2ª lei — malhas', () => {
+  it('volta sai do GND, sobe a EMF na fonte e cai inteira no resistor', () => {
+    const ms = malhas(readCircuit(COM_LACO));
+    expect(ms).toHaveLength(1);
+    const m = ms[0];
+    expect(m.passos.map((p) => `${p.id}:${p.de}→${p.para}`)).toEqual([
+      'bat1:GND→N1',
+      'r1:N1→GND',
+    ]);
+    expect(m.passos[0].dv).toBeCloseTo(9, 9); // sobe a tensão da fonte
+    expect(m.passos[1].dv).toBeCloseTo(-9, 9); // e cai inteira no resistor
+    expect(fechaConta(m.soma)).toBe(true);
+  });
+
+  it('série: uma volta só, com a tensão se repartindo (9 = 4,5 + 4,5)', () => {
+    const ms = malhas(readCircuit(SERIE));
+    expect(ms).toHaveLength(1);
+    const m = ms[0];
+    expect(m.passos.map((p) => p.id)).toEqual(['bat1', 'r1', 'r2']);
+    expect(m.passos.map((p) => p.de)).toEqual(['GND', 'N1', 'N2']);
+    expect(m.passos.map((p) => p.para)).toEqual(['N1', 'N2', 'GND']);
+    expect(m.passos[0].dv).toBeCloseTo(9, 9);
+    expect(m.passos[1].dv).toBeCloseTo(-4.5, 9);
+    expect(m.passos[2].dv).toBeCloseTo(-4.5, 9);
+    expect(fechaConta(m.soma)).toBe(true);
+  });
+
+  it('paralelo: E − V + C = 3 − 2 + 1 = duas voltas independentes, fonte + carga cada', () => {
+    const ms = malhas(readCircuit(COM_PARALELO));
+    expect(ms.map((m) => m.passos.map((p) => p.id))).toEqual([
+      ['bat1', 'r1'],
+      ['bat1', 'r2'],
+    ]);
+    for (const m of ms) {
+      expect(m.passos[0].de).toBe('GND'); // toda volta começa em GND
+      expect(fechaConta(m.soma)).toBe(true);
+    }
+  });
+
+  it('chave aberta: a volta existe, a tensão inteira fica na chave e o resistor parado', () => {
+    const ms = malhas(readCircuit(LACO_ABERTO));
+    expect(ms).toHaveLength(1);
+    expect(ms[0].passos.map((p) => p.id)).toEqual(['bat1', 'sw1', 'r1']);
+    expect(ms[0].passos[1].dv).toBeCloseTo(-9, 9); // chave aberta segura os 9 V
+    expect(ms[0].passos[2].dv).toBeCloseTo(0, 9); // resistor não vê nada
+    expect(fechaConta(ms[0].soma)).toBe(true);
+  });
+
+  it('ramo curto não vira volta (derrubado pelo solver)', () => {
+    const ms = malhas(readCircuit(R_CURTO));
+    expect(ms).toHaveLength(1);
+    expect(ms[0].passos.map((p) => p.id)).toEqual(['bat1', 'r2']);
+    expect(fechaConta(ms[0].soma)).toBe(true);
+  });
+
+  it('sem laço fechado não há volta; sem solução também não', () => {
+    const solto: CircuitDoc = {
+      comps: [{ id: 'r1', kind: 'resistor', x: 10, y: 3, rot: 0, value: 100 }],
+      wires: [],
+    };
+    expect(malhas(readCircuit(solto))).toEqual([]);
+    const out = readCircuit(CONFLITO);
+    expect(out.error).toMatch(/singular/i);
+    expect(malhas(out)).toEqual([]);
   });
 });

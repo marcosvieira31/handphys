@@ -1,4 +1,4 @@
-import { porNo } from '../core/kirchhoff';
+import { malhas, porNo } from '../core/kirchhoff';
 import type { CircuitDoc, CompReading, Reading } from '../core/netlist';
 
 /**
@@ -171,6 +171,27 @@ export const CHALLENGES: Challenge[] = [
         'ramo',
         'ramos',
       )} — a 1ª lei de Kirchhoff quer um nó com 3 ramos.`;
+    },
+  },
+  {
+    id: 'malha',
+    titulo: 'Malha de três',
+    enunciado:
+      'Feche uma volta com TRÊS elementos — fonte + dois no mesmo laço — e veja as tensões somarem zero.',
+    check: (doc, r) => {
+      if (r.error) return r.error;
+      const voltas = malhas(r);
+      if (voltas.some((m) => m.passos.length >= 3)) return null;
+      if (!doc.comps.length)
+        return 'Monte a fonte e dois componentes — depois ligue tudo num laço fechado.';
+      if (!voltas.length)
+        return 'Sem laço fechado: ligue os terminais para a corrente ter por onde voltar.';
+      const maior = Math.max(...voltas.map((m) => m.passos.length));
+      return `Sua volta maior tem ${quantos(
+        maior,
+        'elemento',
+        'elementos',
+      )} — a 2ª lei quer 3: fonte + dois no mesmo laço.`;
     },
   },
   {

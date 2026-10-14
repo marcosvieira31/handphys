@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { fechaConta, porNo } from '../core/kirchhoff';
+import { fechaConta, malhas, porNo } from '../core/kirchhoff';
 import { readCircuit, terminalPos, wireRoute } from '../core/netlist';
 import { EXAMPLES } from './examples';
 
@@ -112,5 +112,20 @@ describe('exemplos do editor/Cardboard', () => {
     expect(gnd.entram).toBeCloseTo(0.27, 9); // os três ramos de 90 mA
     expect(gnd.saem).toBeCloseTo(0.27, 9); // a fonte entregando os 270 mA
     expect(gnd.ramos.filter((r) => r.sentido === 'entra')).toHaveLength(3);
+  });
+
+  it('2ª lei: toda volta de exemplo fecha a tensão — e as independentes são 1, 1 e 3', () => {
+    const contagens: number[] = [];
+    for (const ex of EXAMPLES) {
+      const out = readCircuit(ex.doc);
+      const ms = malhas(out);
+      expect(ms.length, ex.name).toBeGreaterThan(0);
+      for (const m of ms) {
+        expect(fechaConta(m.soma), `${ex.name} · volta`).toBe(true);
+        expect(m.passos[0].de, `${ex.name} · partida`).toBe(out.gnd);
+      }
+      contagens.push(ms.length);
+    }
+    expect(contagens).toEqual([1, 1, 3]);
   });
 });

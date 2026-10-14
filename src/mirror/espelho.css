@@ -161,6 +161,24 @@ body.espelho-page {
   font-size: 14px;
 }
 
+.espelho-read .kirchhoff .malhas {
+  font-size: 16px;
+  gap: 6px;
+}
+
+.espelho-read .kirchhoff .malha {
+  padding: 8px 12px;
+}
+
+.espelho-read .kirchhoff .percurso {
+  font-size: 15px;
+  margin-bottom: 6px;
+}
+
+.espelho-read .kirchhoff .passos li {
+  font-size: 15px;
+}
+
 .readings.big {
   font-size: 20px;
 }

@@ -587,6 +587,71 @@ body.editor-page {
   justify-content: space-between;
 }
 
+/* ---------- 1ª lei de Kirchhoff: a conta por nó, para o aluno LER ----------
+   Cada nó é um bloquinho: em cima a soma (entram − saem = Σ, em verde quando
+   fecha), embaixo os ramos com o sentido relativo àquele nó. */
+.kirchhoff .nos {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 12px;
+}
+
+.kirchhoff .nos > li {
+  padding: 6px 8px;
+  background: #12171e;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+}
+
+.kirchhoff .no-topo {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.kirchhoff .soma {
+  font-size: 11px;
+  color: var(--dim);
+}
+
+.kirchhoff .soma.ok {
+  color: #3fb950;
+  font-weight: 600;
+}
+
+.kirchhoff .soma.ruim {
+  color: var(--err);
+  font-weight: 600;
+}
+
+.kirchhoff .ramos {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.kirchhoff .ramos li {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  color: var(--dim);
+}
+
+.kirchhoff .ramo-lado {
+  white-space: nowrap;
+  color: var(--ink);
+}
+
 code,
 kbd {
   font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;

@@ -3,6 +3,7 @@ import type { CompKind, Placed, Reading } from '../core/netlist';
 import { CHALLENGES, challengeById, evaluateChallenge } from './challenges';
 import { formatAmps, formatValue } from './symbol';
 import { HandsPanel } from './HandsPanel';
+import { Kirchhoff } from './Kirchhoff';
 import { useEditor } from './store';
 
 const KIND_LABEL: Record<CompKind, string> = {
@@ -152,6 +153,8 @@ export function Inspector({ reading }: { reading: Reading }) {
           </ul>
         </section>
       )}
+
+      <Kirchhoff reading={reading} />
 
       {selected && (
         <section className="editor-box">

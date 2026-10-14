@@ -123,6 +123,44 @@ body.espelho-page {
   color: #3fb950;
 }
 
+/* a mesma tabela de Kirchhoff do painel, em letra de projeção: a turma lê a
+   conta (Σ = 0) junto com as leituras V/I, sem ninguém ter de gritar o nó */
+.espelho-read .kirchhoff {
+  margin-top: 16px;
+}
+
+.espelho-read .kirchhoff h3 {
+  margin: 0 0 8px;
+  font-size: 17px;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.espelho-read .kirchhoff .nos {
+  font-size: 16px;
+  gap: 6px;
+}
+
+.espelho-read .kirchhoff .nos > li {
+  padding: 8px 12px;
+}
+
+.espelho-read .kirchhoff .no-topo {
+  margin-bottom: 6px;
+}
+
+.espelho-read .kirchhoff .soma {
+  font-size: 15px;
+}
+
+.espelho-read .kirchhoff .ramos li {
+  font-size: 15px;
+}
+
+.espelho-read .kirchhoff .hint {
+  font-size: 14px;
+}
+
 .readings.big {
   font-size: 20px;
 }

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { readCircuit, type CompKind } from '../core/netlist';
 import { challengeById, evaluateChallenge } from '../editor/challenges';
+import { Kirchhoff } from '../editor/Kirchhoff';
 import { formatAmps, formatValue } from '../editor/symbol';
 import { Schematic } from '../editor/Schematic';
 import { useEditor } from '../editor/store';
@@ -197,6 +198,7 @@ export function Espelho() {
             </tbody>
           </table>
         )}
+        <Kirchhoff reading={reading} />
       </footer>
     </div>
   );

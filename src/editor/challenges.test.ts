@@ -84,6 +84,7 @@ describe('desafios com verificação automática', () => {
       'divisor',
       'paralelo',
       'serie',
+      'juncao',
       'chave',
     ]);
     expect(new Set(CHALLENGES.map((c) => c.id)).size).toBe(CHALLENGES.length);
@@ -137,6 +138,13 @@ describe('desafios com verificação automática', () => {
     const r2 = readCircuit(girado).comps.find((c) => c.id === 'r2');
     expect(r2!.amps).toBeLessThan(0); // leitura negativa: terminal a→b inverteu
     expect(ok('serie', girado)).toBe(true);
+  });
+
+  it('Nó de Kirchhoff: o Paralelo é junção de 4 ramos; a série só tem nós de 2', () => {
+    expect(ok('juncao', EXAMPLES[2].doc)).toBe(true);
+    expect(ok('juncao', COM_SERIE)).toBe(false);
+    expect(dica('juncao', COM_SERIE)).toBe('O nó mais cheio tem 2 ramos — a 1ª lei de Kirchhoff quer um nó com 3 ramos.');
+    expect(ok('juncao', EXAMPLES[0].doc)).toBe(false);
   });
 
   it('Lâmpada: acesa aprova; a lei de Ohm diz que falta a lâmpada', () => {

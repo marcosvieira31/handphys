@@ -1,3 +1,4 @@
+import { porNo } from '../core/kirchhoff';
 import type { CircuitDoc, CompReading, Reading } from '../core/netlist';
 
 /**
@@ -151,6 +152,25 @@ export const CHALLENGES: Challenge[] = [
       if (porPar(iguais).length < 3)
         return 'Esses três compartilham nós: estão em paralelo, não em série.';
       return null;
+    },
+  },
+  {
+    id: 'juncao',
+    titulo: 'Nó de Kirchhoff',
+    enunciado:
+      'Ache um nó onde TRÊS caminhos se encontram — um nó com três ramos, como numa derivação.',
+    check: (doc, r) => {
+      if (r.error) return r.error;
+      const nos = porNo(r);
+      if (nos.some((n) => n.ramos.length >= 3)) return null;
+      if (!doc.comps.length)
+        return 'Monte a fonte e ligue dois componentes — o nó de Kirchhoff é onde os caminhos se encontram.';
+      const maior = Math.max(0, ...nos.map((n) => n.ramos.length));
+      return `O nó mais cheio tem ${quantos(
+        maior,
+        'ramo',
+        'ramos',
+      )} — a 1ª lei de Kirchhoff quer um nó com 3 ramos.`;
     },
   },
   {

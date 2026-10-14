@@ -1,6 +1,6 @@
 # Plano — Laboratório Virtual de Física (Circuitos) em Realidade Mista
 
-> Status: **Fase 0–3a concluídas — Fase 4 em execução (share por URL + QR, espelho ao vivo, CSV, corrente animada e desafios com verificação automática)**
+> Status: **Fase 0–3a concluídas — Fase 4 em execução (share, espelho ao vivo, CSV, corrente animada, desafios e a estação de Kirchhoff)**
 > Objetivo: evolução contínua (sem data de entrega marcada), uso real em sala de aula.
 
 ---
@@ -622,6 +622,45 @@ Feito (girar duas vezes mantém o traçado e inverte os terminais):
   em paralelo, não em série." E de ponta a ponta no espelho (`Espelhar` +
   `mirror.html` em outra aba, `ao vivo`): a faixa "Desafio: Lei de Ohm /
   conseguiu ✓" aparece com o **mesmo** veredito calculado do outro lado.
+
+### Estação de Kirchhoff — leitura por nó — onde está
+
+- O problema: a bancada dizia a tensão de cada nó (`Tensão dos nós`) e a
+  corrente de cada componente, mas **a 1ª lei de Kirchhoff não aparecia em
+  lugar nenhum** — o aluno não conseguia conferir, num nó, o que entra menos o
+  que sai. (A estação 3 do escopo é "nós e malhas": os **nós** entraram agora.)
+- O que é: [`src/core/kirchhoff.ts`](../src/core/kirchhoff.ts) → `porNo(reading)`
+  reorganiza a MESMA leitura do solver por nó: para cada junção, os **ramos**
+  com o **sentido relativo àquele nó** — `entra`/`sai`, e o mesmo ramo é "sai"
+  num nó e "entra" no outro, porque a corrente anda de `netA` para `netB`
+  quando `amps > 0` —, e a conta `Σ(entram) − Σ(saem)`.
+- A lei vale **por construção** (é o que o solver impõe para achar o circuito),
+  então o valor da estação é **ler e confirmar**, não descobrir. Por isso o Σ
+  nunca vem "errado": ele flutua em ~1e-16 por ponto flutuante (`KCL_TOL`
+  cobre), nunca um defeito a corrigir — e a seção fica verde.
+- Detalhes de modelo travados por teste: **ramo parado (0 mA) não ganha lado**
+  (dizer "entra 0 mA" ensinaria errado — é `sentido: null`); **resistor curto
+  não infla a junção** (derrubado pelo solver, não vira dois ramos); **um ramo
+  só não é nó de Kirchhoff** (a lei ali vale sozinha, não há junção para
+  conferir); e **sem solução não há conta** — `reading.error` ⇒ lista vazia,
+  com o aviso vermelho já em cima.
+- Onde aparece: [`src/editor/Kirchhoff.tsx`](../src/editor/Kirchhoff.tsx) é a
+  MESMA tabela no painel (logo depois de "Tensão dos nós") e no rodapé do
+  `Espelho` (letra de projeção, 16 px) — as duas rodam `porNo` sobre o
+  `reading` local, então nada novo viaja pelo fio e elas não têm como
+  discordar.
+- Junto entrou o **7º desafio — "Nó de Kirchhoff"**: achar um nó com **3
+  ramos**. O Paralelo aprova de cara (dois nós de 4 ramos); a série reprova
+  com "O nó mais cheio tem 2 ramos — a 1ª lei de Kirchhoff quer um nó com
+  3 ramos."
+- Verificado: `tsc` limpo, **238 testes** (6 novos em
+  [`src/core/kirchhoff.test.ts`](../src/core/kirchhoff.test.ts), 2 da varredura
+  dos exemplos, 1 do desafio), build ok. No dev, com o Paralelo carregado:
+  `GND | entram 270 mA · saem 270 mA · Σ 0 mA` com `bat1 Fonte sai 270 mA` e
+  os três `entra 90 mA` (Σ em verde); no espelho de outra aba, a MESMA tabela
+  em 16 px com o desafio "conseguiu ✓"; e duas fontes ideais em conflito ⇒
+  seção some, vermelho do erro no lugar. Pendência natural da estação:
+  a **2ª lei (malhas)**.
 
 ## 6. Riscos e mitigações
 

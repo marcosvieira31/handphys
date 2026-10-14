@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { fechaConta, porNo } from '../core/kirchhoff';
 import { readCircuit, terminalPos, wireRoute } from '../core/netlist';
 import { EXAMPLES } from './examples';
 
@@ -90,5 +91,26 @@ describe('exemplos do editor/Cardboard', () => {
         }
       }
     }
+  });
+
+  it('todo exemplo fecha a conta de Kirchhoff em todo nó', () => {
+    for (const ex of EXAMPLES) {
+      const nos = porNo(readCircuit(ex.doc));
+      expect(nos.length, ex.name).toBeGreaterThan(0);
+      for (const n of nos) {
+        expect(n.ramos.length, `${ex.name} · nó ${n.net}`).toBeGreaterThanOrEqual(2);
+        expect(fechaConta(n.soma), `${ex.name} · nó ${n.net}`).toBe(true);
+      }
+    }
+  });
+
+  it('o Paralelo é a junção de 4 ramos: 270 mA entram, 270 mA saem', () => {
+    const nos = porNo(readCircuit(EXAMPLES[2].doc));
+    expect(nos).toHaveLength(2); // só o nó do + e o do −
+    expect(nos.every((n) => n.ramos.length === 4)).toBe(true);
+    const gnd = nos.find((n) => n.net === 'GND')!;
+    expect(gnd.entram).toBeCloseTo(0.27, 9); // os três ramos de 90 mA
+    expect(gnd.saem).toBeCloseTo(0.27, 9); // a fonte entregando os 270 mA
+    expect(gnd.ramos.filter((r) => r.sentido === 'entra')).toHaveLength(3);
   });
 });

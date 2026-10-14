@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import type { CompKind, Placed, Reading } from '../core/netlist';
+import { CHALLENGES, challengeById, evaluateChallenge } from './challenges';
 import { formatAmps, formatValue } from './symbol';
 import { HandsPanel } from './HandsPanel';
 import { useEditor } from './store';
@@ -45,8 +46,12 @@ export function Inspector({ reading }: { reading: Reading }) {
   const doc = useEditor((s) => s.doc);
   const selection = useEditor((s) => s.selection);
   const canUndo = useEditor((s) => s.past.length > 0);
+  const challengeId = useEditor((s) => s.challenge);
+  const setChallenge = useEditor((s) => s.setChallenge);
   const { rotate, removeSelected, setValue, toggleSwitch, undo } = useEditor();
   const selected = selection?.kind === 'comp' ? doc.comps.find((c) => c.id === selection.id) : null;
+  const ch = challengeById(challengeId);
+  const statuso = ch ? evaluateChallenge(ch, doc, reading) : null;
 
   return (
     <aside className="inspector">
@@ -56,6 +61,35 @@ export function Inspector({ reading }: { reading: Reading }) {
           Desfazer
         </button>
       </header>
+
+      <section className={statuso?.ok ? 'challenge ok' : 'challenge'}>
+        <h3>Desafio</h3>
+        <div className="challenge-pick">
+          {CHALLENGES.map((c) => (
+            <button
+              key={c.id}
+              type="button"
+              className={c.id === challengeId ? 'ghost active' : 'ghost'}
+              data-hand={`challenge:${c.id}`}
+              title={c.enunciado}
+              aria-pressed={c.id === challengeId}
+              onClick={() => setChallenge(c.id === challengeId ? null : c.id)}
+            >
+              {c.titulo}
+            </button>
+          ))}
+        </div>
+        {ch && statuso ? (
+          <>
+            <p className="enunciado">{ch.enunciado}</p>
+            <p className={statuso.ok ? 'veredito ok' : 'veredito'}>
+              {statuso.ok ? 'Circuito aprovado ✓' : statuso.dica}
+            </p>
+          </>
+        ) : (
+          <p className="hint">Escolha uma tarefa: a conferência é automática e ao vivo.</p>
+        )}
+      </section>
 
       {reading.error && <p className="notice error">{reading.error}</p>}
       {reading.diagnostics.length > 0 && (

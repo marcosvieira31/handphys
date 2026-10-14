@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { readCircuit, type CompKind } from '../core/netlist';
+import { challengeById, evaluateChallenge } from '../editor/challenges';
 import { formatAmps, formatValue } from '../editor/symbol';
 import { Schematic } from '../editor/Schematic';
 import { useEditor } from '../editor/store';
@@ -48,9 +49,15 @@ export function Espelho() {
   const view = useEditor((s) => s.view);
   const placing = useEditor((s) => s.placing);
   const zoom = useEditor((s) => s.zoom);
+  const challengeId = useEditor((s) => s.challenge);
   const [status, setStatus] = useState<'esperando' | 'ao-vivo' | 'parado'>('esperando');
   const [statusRede, setStatusRede] = useState<StatusSala | null>(null);
   const reading = readCircuit(doc);
+  // O mesmo `check` da tela que monta: mesma tarefa e o MESMO veredito aqui,
+  // recalculado em cima do próprio doc — não viaja pelo fio, então não há como
+  // a projeção discordar da bancada.
+  const ch = challengeById(challengeId);
+  const statuso = ch ? evaluateChallenge(ch, doc, reading) : null;
 
   // Gancho de depuração (só em dev): a automação lê o estado da sala e o log
   // de eventos — em aula ninguém tem o console aberto.
@@ -78,6 +85,7 @@ export function Espelho() {
           placing: s.placing,
           colorByVoltage: s.colorByVoltage,
           flow: s.flow,
+          challenge: s.challenge,
         });
         visto = Date.now();
         setStatus('ao-vivo');
@@ -149,6 +157,15 @@ export function Espelho() {
       </main>
 
       <footer className="espelho-read">
+        {ch && statuso && (
+          <div className={statuso.ok ? 'espelho-desafio ok' : 'espelho-desafio'}>
+            <strong>Desafio: {ch.titulo}</strong>
+            <span className="espelho-desafio-enun">{ch.enunciado}</span>
+            <span className="espelho-desafio-ver">
+              {statuso.ok ? 'conseguiu ✓' : statuso.dica}
+            </span>
+          </div>
+        )}
         {reading.error ? (
           <p className="notice error">{reading.error}</p>
         ) : reading.comps.length === 0 ? (

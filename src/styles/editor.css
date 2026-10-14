@@ -792,3 +792,55 @@ button:disabled {
   color: var(--err);
   border-color: var(--err);
 }
+
+/* ---------- desafio com verificação automática ----------
+   O aluno lê a tarefa e o veredito JUNTO das medições: é o mesmo número que
+   ele está olhando (90 mA) que aprova ou reprov a bancada. Alvos de mão: cada
+   botão de tarefa tem 46 px de altura, como os trilhos. */
+.challenge {
+  margin: 0 0 12px;
+  padding: 10px;
+  background: #12171e;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.challenge.ok {
+  border-color: #3fb950;
+}
+
+.challenge h3 {
+  margin: 0 0 8px;
+}
+
+.challenge-pick {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+
+.challenge-pick button {
+  min-height: 46px;
+  padding: 4px 6px;
+  font-size: 12px;
+  line-height: 1.25;
+}
+
+.challenge .enunciado {
+  margin: 8px 0 0;
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--ink);
+}
+
+.challenge .veredito {
+  margin: 6px 0 0;
+  font-size: 12.5px;
+  line-height: 1.4;
+  color: var(--dim);
+}
+
+.challenge .veredito.ok {
+  color: #3fb950;
+  font-weight: 600;
+}

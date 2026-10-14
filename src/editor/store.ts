@@ -44,6 +44,13 @@ export interface EditorState {
   colorByVoltage: boolean;
   /** Corrente animada nos fios (traços em movimento; o usuário pode desligar). */
   flow: boolean;
+  /**
+   * Desafio em cima da bancada (ver `challenges.ts`): id na lista, `null` =
+   * nenhuma. A verificação é pura (só doc + leitura), então este campo é apenas
+   * "qual desafio está aberto" — ele acompanha o espelho para a turma ver a
+   * mesma tarefa e o mesmo veredito.
+   */
+  challenge: string | null;
   /** Vista ativa: o MESMO documento em 2D ou na bancada 3D. */
   view: '2d' | '3d';
   /** Zoom do quadro 2D (1 = cabe tudo, 4 = o teto) e deslocamento do centro. */
@@ -97,6 +104,8 @@ export interface EditorState {
   undo: () => void;
   setColorByVoltage: (on: boolean) => void;
   setFlow: (on: boolean) => void;
+  /** Abre um desafio (`null` desliga). Só escolhe — quem avalia é o `check`. */
+  setChallenge: (id: string | null) => void;
   setView: (v: '2d' | '3d') => void;
   /** Zoom mantendo um ponto do quadro preso na tela (`anchor` nulo = centro). */
   zoomBy: (factor: number, anchor?: Pt | null) => void;
@@ -152,6 +161,7 @@ export const useEditor = create<EditorState>((set, get) => ({
   grip: null,
   colorByVoltage: true,
   flow: true,
+  challenge: null,
   view: '2d',
   zoom: 1,
   pan: { x: 0, y: 0 },
@@ -472,6 +482,7 @@ export const useEditor = create<EditorState>((set, get) => ({
 
   setColorByVoltage: (on) => set({ colorByVoltage: on }),
   setFlow: (on) => set({ flow: on }),
+  setChallenge: (id) => set({ challenge: id }),
 
   setView: (v) => set({ view: v, draft: null, grip: null, panning: false }),
 

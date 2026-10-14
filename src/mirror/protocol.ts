@@ -14,6 +14,7 @@
  */
 
 import type { CircuitDoc, CompKind, Pt } from '../core/netlist';
+import { CHALLENGE_IDS } from '../editor/challenges';
 import { decodeDoc, encodeDoc } from '../editor/share';
 import type { Selection } from '../editor/store';
 
@@ -31,6 +32,13 @@ export interface State {
   colorByVoltage: boolean;
   /** Corrente animada nos fios (o mesmo interruptor da tela que conduz). */
   flow: boolean;
+  /**
+   * Desafio aberto na bancada (`null` = nenhum): a turma vê a MESMA tarefa e o
+   * mesmo veredito que quem monta. O veredito em si não viaja — cada tela
+   * recalcula pelo `check(doc, reading)`, então não dá para a tela do aluno
+   * discordar da do professor.
+   */
+  challenge: string | null;
 }
 
 export type Msg =
@@ -67,6 +75,7 @@ export function encodeState(st: State): string {
     a: st.placing ?? '',
     c: st.colorByVoltage ? 1 : 0,
     f: st.flow ? 1 : 0,
+    k: st.challenge ?? '',
   });
 }
 
@@ -97,6 +106,7 @@ export function decodeMsg(raw: unknown): Msg | null {
     a?: unknown;
     c?: unknown;
     f?: unknown;
+    k?: unknown;
   };
   try {
     m = JSON.parse(raw) as typeof m;
@@ -127,6 +137,8 @@ export function decodeMsg(raw: unknown): Msg | null {
       placing: typeof m.a === 'string' && KINDS[m.a] ? (m.a as CompKind) : null,
       colorByVoltage: m.c === 1,
       flow: m.f === 1,
+      // Fio não confiável: só id que existe aqui vira desafio (fora isso, nada).
+      challenge: typeof m.k === 'string' && CHALLENGE_IDS.has(m.k) ? m.k : null,
     },
   };
 }

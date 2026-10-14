@@ -1,6 +1,6 @@
 # Plano — Laboratório Virtual de Física (Circuitos) em Realidade Mista
 
-> Status: **Fase 0–3a concluídas — Fase 4 em execução (começou pelo share por URL + QR)**
+> Status: **Fase 0–3a concluídas — Fase 4 em execução (share por URL + QR, espelho ao vivo, CSV, corrente animada e desafios com verificação automática)**
 > Objetivo: evolução contínua (sem data de entrega marcada), uso real em sala de aula.
 
 ---
@@ -569,6 +569,49 @@ Feito (girar duas vezes mantém o traçado e inverte os terminais):
   r2 em `translate(192 112) rotate(180)`, as 7 retas iguais às de antes, e
   o painel `r1 4,50 45 mA N1 → N2 / r2 4,50 45 mA N2 → GND`, **`__ed.log`
   vazio**.
+
+### Desafios com verificação automática — onde está
+
+- O problema: a bancada media e mostrava tudo, mas **ninguém dizia ao aluno se a
+  tarefa foi cumprida** — o professor checava três resistores na mão, um a um.
+  A Fase 4 pedia "desafios com verificação automática"; é o que entrou agora.
+- O que é: [`src/editor/challenges.ts`](../src/editor/challenges.ts) é uma lista
+  fechada de seis tarefas — **Acenda a lâmpada, Lei de Ohm, Divisor de tensão,
+  Três em paralelo, Três em série, A chave** — cada uma uma função **pura**
+  `check(doc, reading)`: `null` = conseguiu; string = o próximo passo, dito como
+  dica acionável e com o número na mão ("O nó mais alto está em 9,00 V — precisava
+  de 4,50 V", "A chave está ABERTA — clique nela (sem arrastar)"). Nada de estado
+  escondido: a mesma bancada avaliada duas vezes dá o mesmo resultado, então
+  **cada desafio é teste de unidade** e o professor pode confiar na marcação.
+- Onde aparece: no topo do painel de Medições, seis botões de 46 px com
+  `data-hand="challenge:<id>"` (a pinça escolhe) e o veredito embaixo, ao vivo —
+  é o mesmo número que o aluno está olhando (90 mA) que aprova ou reprova.
+- **O espelho recebe o desafio pelo fio, mas recalcula o veredito sozinho**: o
+  protocolo ganhou o campo `k` (aditivo, sem bump de versão — sem `k` ou com id
+  que o outro lado não conhece, vira `null`) e o `Espelho` roda o MESMO `check`
+  sobre o MESMO doc. Assim a projeção lê a mesma tarefa e não tem como
+  discordar da bancada: a veredito não viaja pelo fio, quem julga é a conta.
+- Um detalhe que o modelo real ensinou: **a chave não é componente do solver**
+  (fechada ela vira união de nós, `netA = netB`), então "passa pela chave" é os
+  dois terminais num nó só **+** corrente em algum lugar do laço; e **0 A em três
+  resistores soltos não é série**, por isso o grupo de corrente só conta quem
+  conduz de verdade.
+- Travado por teste em
+  [`src/editor/challenges.test.ts`](../src/editor/challenges.test.ts): os seis na
+  lista com id único; **nunca aprova o quadro vazio** (sempre há dica); o Divisor
+  aprova o exemplo; o Paralelo é **reprovado** no desafio de série por
+  compartilhar nós ("estão em paralelo, não em série"); a Lei de Ohm aponta
+  `45 mA` onde faltam `90 mA`; chave aberta manda clicar; e a avaliação é pura
+  (mesmo veredito, doc intocado). Mais um teste novo em
+  [`src/mirror/mirror.test.ts`](../src/mirror/mirror.test.ts): o desafio sobe e
+  desce pelo fio e id desconhecido vira `null`.
+- Verificado: `tsc` limpo, **228 testes**, build ok. No dev, com o Paralelo
+  carregado: *Lei de Ohm* → `challenge ok` + "Circuito aprovado ✓" (cada 100 Ω
+  ali vê os 9 V inteiros ⇒ 90 mA), *Divisor* → "O nó mais alto está em 9,00 V —
+  precisava de 4,50 V…", *Três em série* → "Esses três compartilham nós: estão
+  em paralelo, não em série." E de ponta a ponta no espelho (`Espelhar` +
+  `mirror.html` em outra aba, `ao vivo`): a faixa "Desafio: Lei de Ohm /
+  conseguiu ✓" aparece com o **mesmo** veredito calculado do outro lado.
 
 ## 6. Riscos e mitigações
 

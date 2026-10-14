@@ -33,6 +33,7 @@ const estado = (sobrescrever: Partial<State> = {}): State => ({
   placing: 'resistor',
   colorByVoltage: false,
   flow: true,
+  challenge: null,
   ...sobrescrever,
 });
 
@@ -70,6 +71,14 @@ describe('protocolo do espelho', () => {
     expect(decodeMsg(helloMsg('ab12'))).toEqual({ kind: 'hello', id: 'ab12' });
     expect(decodeMsg(BYE)).toEqual({ kind: 'bye' });
     expect(decodeMsg('{"t":"hello","v":1}')).toEqual({ kind: 'hello', id: '' });
+  });
+
+  it('desafio viaja pelo fio; id que não existe aqui vira null', () => {
+    const ok = decodeMsg(encodeState(estado({ challenge: 'lei-de-ohm' })));
+    expect(ok && ok.kind === 'state' ? ok.state.challenge : null).toBe('lei-de-ohm');
+    // fio não confiável: o outro lado só aceita id que ELE conhece
+    const ruim = decodeMsg(encodeState(estado({ challenge: 'x' })));
+    expect(ruim && ruim.kind === 'state' ? ruim.state.challenge : null).toBe(null);
   });
 
   it('lixo no canal vira null, nunca erro na tela', () => {

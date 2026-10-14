@@ -89,6 +89,40 @@ body.espelho-page {
   font-size: 16px;
 }
 
+/* faixa do desafio: a turma lê a TAREFA e o VEREDITO acima das leituras —
+   letra de projeção, como o resto do rodapé */
+.espelho-desafio {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 16px;
+  margin: 0 0 12px;
+  padding: 8px 12px;
+  background: #12171e;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  font-size: 16px;
+  color: var(--dim);
+}
+
+.espelho-desafio strong {
+  font-size: 19px;
+  color: var(--ink);
+}
+
+.espelho-desafio-ver {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.espelho-desafio.ok {
+  border-color: #3fb950;
+}
+
+.espelho-desafio.ok .espelho-desafio-ver {
+  color: #3fb950;
+}
+
 .readings.big {
   font-size: 20px;
 }

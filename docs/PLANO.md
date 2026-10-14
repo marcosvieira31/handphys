@@ -569,6 +569,16 @@ Feito (girar duas vezes mantém o traçado e inverte os terminais):
   r2 em `translate(192 112) rotate(180)`, as 7 retas iguais às de antes, e
   o painel `r1 4,50 45 mA N1 → N2 / r2 4,50 45 mA N2 → GND`, **`__ed.log`
   vazio**.
+- **Decisão (14/10/2026): manter o SINAL na exibição.** `V` e `I` continuam
+  com sinal no `Inspector` e no `Espelho` (`−4,50 V`). O sinal não é defeito:
+  é o sentido da corrente no terminal `a → b`, e é matéria da estação de
+  Kirchhoff (entrando/saindo do nó). Nos exemplos ele já não atrapalha — os
+  três estão com leituras positivas, graças ao giro de 180° do r2. Se um dia
+  a turma pedir valor absoluto, a troca é pequena (`formatAmps` + o `toFixed`
+  do `V` no `Inspector` e no `Espelho`); **o CSV e os desafios não mudam**:
+  o relatório guarda o valor cru de `readCircuit` e os verificadores leem
+  por módulo (o desafio de série passou a agrupar por `Math.abs(amps)`
+  justamente para não reprovar série com um resistor girado).
 
 ### Desafios com verificação automática — onde está
 

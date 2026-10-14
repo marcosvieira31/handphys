@@ -38,6 +38,11 @@ body {
 .landing .spikes span { display: block; color: var(--muted); margin-top: 6px; }
 .landing .doc { color: var(--muted); font-size: 0.9rem; }
 .landing code { background: var(--panel); padding: 1px 6px; border-radius: 4px; }
+@media (max-width: 600px) {
+  .landing { padding: 28px 16px; }
+  .landing h1 { font-size: 1.7rem; }
+  .landing .spikes { margin: 24px 0; gap: 12px; }
+}
 
 /* ---------- spikes comuns ---------- */
 body.spike { display: flex; flex-wrap: wrap; gap: 16px; padding: 16px; align-items: flex-start; }

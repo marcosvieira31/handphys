@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { readCircuit } from '../core/netlist';
 import { challengeById, evaluateChallenge } from './challenges';
 import { EXAMPLES } from './examples';
@@ -28,6 +28,12 @@ export function App({ shared = 'none' }: { shared?: 'none' | 'ok' | 'bad' }) {
     ch && statuso
       ? { id: ch.id, titulo: ch.titulo, ok: statuso.ok, dica: statuso.ok ? null : statuso.dica }
       : null;
+  /**
+   * Painel de medições aberto (desktop) ou fechado (celular — a bancada é a
+   * estrela da tela pequena; o botão Medições sobe quando o aluno quer conferir
+   * os números). A largura é lida UMA vez na chegada; depois o aluno decide.
+   */
+  const [painel, setPainel] = useState(() => !window.matchMedia('(max-width: 760px)').matches);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -123,7 +129,16 @@ export function App({ shared = 'none' }: { shared?: 'none' | 'ok' | 'bad' }) {
             <ViewRail />
           </div>
         </main>
-        <Inspector reading={reading} />
+        <button
+          type="button"
+          className="painel-toggle"
+          data-hand="painel"
+          aria-expanded={painel}
+          onClick={() => setPainel((p) => !p)}
+        >
+          {painel ? 'Fechar medições' : 'Medições'}
+        </button>
+        <Inspector reading={reading} aberto={painel} />
       </div>
       <HandsLayer />
     </div>

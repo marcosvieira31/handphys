@@ -43,8 +43,10 @@ function NumberField({ comp, onCommit }: { comp: Placed; onCommit: (v: number) =
 /**
  * Painel de medição: leituras V/I/R do solver, ao vivo. É o coração da estação
  * "Lei de Ohm" — o aluno mexe no resistor e vê a corrente mudar na hora.
+ * `aberto` só importa no celular (gaveta de baixo, botão "Medições"); no
+ * desktop o painel é coluna e sempre está à vista.
  */
-export function Inspector({ reading }: { reading: Reading }) {
+export function Inspector({ reading, aberto = true }: { reading: Reading; aberto?: boolean }) {
   const doc = useEditor((s) => s.doc);
   const selection = useEditor((s) => s.selection);
   const canUndo = useEditor((s) => s.past.length > 0);
@@ -58,7 +60,7 @@ export function Inspector({ reading }: { reading: Reading }) {
   const statuso = ch ? evaluateChallenge(ch, doc, reading) : null;
 
   return (
-    <aside className="inspector">
+    <aside className={aberto ? 'inspector aberto' : 'inspector'}>
       <header>
         <h2>Medições</h2>
         <button type="button" className="ghost" onClick={undo} disabled={!canUndo}>

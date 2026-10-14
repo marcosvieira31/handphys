@@ -1009,3 +1009,82 @@ button:disabled {
   color: #3fb950;
   font-weight: 600;
 }
+
+/* ---------- celular (janela estreita: a bancada é a estrela) ----------
+   No desktop o painel de medições é coluna à direita e nada muda. No celular a
+   barra compacta (sem título), o painel vira GAVETA de baixo que sobe pelo
+   botão Medições, e a bancada fica com a altura inteira — o aluno monta com o
+   polegar e confere os números quando quer. Os trilhos já se viram sozinhos
+   pela container query (bancada < 600 px → sobreõem as bordas do quadro). */
+.painel-toggle {
+  display: none; /* só existe na tela estreita */
+}
+
+@media (max-width: 760px) {
+  .topbar {
+    gap: 6px;
+    padding: 6px 8px;
+  }
+
+  .topbar h1 {
+    display: none; /* o espaço é da bancada, não do título */
+  }
+
+  .topbar nav {
+    gap: 6px;
+  }
+
+  .body {
+    grid-template-columns: 1fr;
+    grid-template-rows: minmax(0, 1fr);
+  }
+
+  .canvas {
+    padding: 8px;
+  }
+
+  /* gaveta de baixo: some quando fechada (visibility tira até do Tab), sobe
+     com o botão e deixa a faixa embaixo para ele */
+  .inspector {
+    position: fixed;
+    inset: auto 0 56px 0;
+    max-height: 58vh;
+    overflow-y: auto;
+    border-left: none;
+    border-top: 1px solid var(--line);
+    border-radius: 12px 12px 0 0;
+    box-shadow: 0 -10px 30px rgba(1, 4, 9, 0.55);
+    transform: translateY(110%);
+    visibility: hidden;
+    transition:
+      transform 0.18s ease,
+      visibility 0s linear 0.18s;
+    overscroll-behavior: contain;
+  }
+
+  .inspector.aberto {
+    transform: none;
+    visibility: visible;
+    transition: transform 0.18s ease;
+  }
+
+  .painel-toggle {
+    display: block;
+    position: fixed;
+    left: 50%;
+    bottom: 8px;
+    transform: translateX(-50%);
+    z-index: 30; /* por baixo do cartão de compartilhar (40) */
+    min-height: 46px; /* alvo de toque, como os trilhos */
+    padding: 6px 18px;
+    border-radius: 999px;
+    box-shadow: 0 6px 20px rgba(1, 4, 9, 0.5);
+  }
+
+  /* leituras em letra de toque: as MESMAS colunas, com menos folga */
+  .readings th,
+  .readings td {
+    padding: 4px 6px;
+    font-size: 12px;
+  }
+}

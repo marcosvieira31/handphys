@@ -1,6 +1,6 @@
 # Plano — Laboratório Virtual de Física (Circuitos) em Realidade Mista
 
-> Status: **Fase 0–4 concluídas — share por URL/QR, espelho ao vivo, CSV + JSON, corrente animada, desafios com verificação automática, estação de Kirchhoff (nós + malhas) e questão na tela. Próximo: responsividade mobile (editor + espelho) e, depois, Fase 5 (piloto com turma). Validação do WebRTC em duas máquinas reais pendente (a automação bloqueia ICE); iOS ainda não medido**
+> Status: **Fase 0–4 concluídas — share por URL/QR, espelho ao vivo, CSV + JSON, corrente animada, desafios com verificação automática, estação de Kirchhoff (nós + malhas), questão na tela e responsividade mobile (editor + espelho + landing). Próximo: Fase 5 (piloto com turma). Validação do WebRTC em duas máquinas reais pendente (a automação bloqueia ICE); iOS ainda não medido**
 > Objetivo: evolução contínua (sem data de entrega marcada), uso real em sala de aula.
 
 ---
@@ -759,6 +759,51 @@ Feito (fim da camada de sala de aula do roadmap — o que faltava do Fase 4):
   outra aba (`ao vivo`); apagada ⇒ cartão vira "Desafio" com o enunciado e o
   rodapé fica `Desafio: Divisor de tensão / conseguiu ✓`, sem duplicar; o JSON
   do Divisor abre com `N2 = 4.5 V`, `r2 = 100 Ω / 45 mA` e 7 fios.
+
+### Responsividade mobile — onde está
+
+Feito (o plano pedia "celular na bancada" desde a Fase 0; até aqui o editor era
+só desktop — **um único media query** em todo o CSS):
+
+- **Celular é bancada, não console**: em janela estreita (`max-width: 760px`)
+  a barra dispensa o título, o painel de medições deixa de ser coluna e vira
+  **gaveta de baixo** — botão-pílula **Medições** fixo no pé (46 px, alvo de
+  toque; `aria-expanded` e `data-hand="painel"` para a pinça), gaveta com
+  `max-height: 58vh`, sombra e `overscroll-behavior: contain`; fechada ela
+  `translateY(110%)` + `visibility: hidden` (some até do Tab). A bancada fica
+  com a altura **inteira** (705 px em 390 × 844) e as colunas do `.body` viram
+  uma só (`grid-template-rows: minmax(0, 1fr)` — a gaveta é `fixed` e sai do
+  fluxo).
+- **Aberto ou fechado na chegada**: `matchMedia('(max-width: 760px)')` lido
+  **uma vez** no [`src/editor/App.tsx`](../src/editor/App.tsx) — desktop nasce
+  com o painel à vista (como sempre esteve), celular nasce com a bancada limpa;
+  depois quem decide é o aluno, e o estado não briga com a media query (o CSS
+  manda na gaveta, o React manda no rótulo/`aria-expanded`).
+- **Nada mudou no desktop**: medido na janela de 1000 px — duas colunas
+  `680px 320px`, `<h1>` visível, pílula fora (`display: none`); os trilhos
+  continuam se virando pela **container query** que já existia (bancada
+  < 600 px → sobreõem as bordas).
+- **Espelho no celular** ([`src/mirror/espelho.css`](../src/mirror/espelho.css)):
+  letra de toque — tabela 14 px, cartão de questão 18 px (fora do `clamp`),
+  cabeçalho e rodapé mais enxutos e rodapé com 48 vh — em 390 px a leitura
+  **não rola na horizontal**.
+- **Landing com CSS de verdade**: [`index.html`](../index.html) não tinha
+  `<link>` nem `<script>` — no build a página saía **crua** (os estilos
+  `.landing` do [`spike.css`](../src/styles/spike.css) nunca eram pedidos).
+  Agora o link está no `<head>`, a landing ganhou padding de celular
+  (`max-width: 600px`) e um entry novo aponta o **espelho** (a página existia
+  e não era listada). [`src/styles/landing.test.ts`](../src/styles/landing.test.ts)
+  trava as três pontas (link do CSS, viewport de aparelho e hrefs das páginas
+  da sala) — sem CSS ligado, o teste falha antes de qualquer deploy.
+- Verificado: `tsc` limpo, **257 testes** (3 novos da landing), build ok (a
+  landing sai com `<link … href="/assets/spike-*.css">`). No dev, medido dentro
+  de um **iframe de 390 × 844** (a media query responde ao viewport do iframe):
+  editor — pílula visível de 46 px, `<h1>` escondido, gaveta escondida
+  (`visibility: hidden`, `translateY(538px)`) e, ao tocar, gaveta de 490 px
+  com `aria-expanded="true"` e rótulo "Fechar medições"; desktop — duas
+  colunas, sem pílula; espelho `ao vivo` — tabela 14 px, 3 linhas + 1 malha e
+  **sem rolagem horizontal**; landing — fundo `#0d1117`, padding 28/16 px e os
+  cinco links.
 
 ## 6. Riscos e mitigações
 

@@ -219,3 +219,45 @@ body.espelho-page {
 .readings.big td {
   padding: 8px 12px;
 }
+
+/* ---------- celular: a projeção vira a TELA DO ALUNO ----------
+   Mesma imagem, letra reduzida: o cartão de questão e as tabelas cabem em
+   360 px sem rolagem horizontal, e o rodapé continua rolável na vertical. */
+@media (max-width: 700px) {
+  .espelho-top {
+    gap: 6px;
+    padding: 8px 10px;
+  }
+
+  .espelho-cont {
+    font-size: 12px;
+  }
+
+  .espelho-questao {
+    margin: 8px 10px 0;
+    padding: 10px 12px;
+  }
+
+  .espelho-questao-txt {
+    font-size: 18px;
+  }
+
+  .espelho-read {
+    padding: 8px 10px 12px;
+    max-height: 48vh; /* mais altura: em pé, a tabela é a referência */
+  }
+
+  .readings.big {
+    font-size: 14px;
+  }
+
+  .readings.big th,
+  .readings.big td {
+    padding: 4px 6px;
+  }
+
+  .espelho-read .kirchhoff .nos > li,
+  .espelho-read .kirchhoff .malha {
+    padding: 6px 8px;
+  }
+}

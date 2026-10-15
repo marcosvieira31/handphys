@@ -156,8 +156,13 @@ body.editor-page {
   order: 1; /* depois do quadro = coluna da direita */
 }
 
-/* bancada estreita (container < 600 px): não cabe trilho AO LADO sem amassar
-   o quadro — voltam a flutuar sobre as bordas, como antes. */
+/* Bancada estreita (container < 600 px) COM janela acima de 760 px: não cabe
+   trilho AO LADO sem amassar o quadro — voltam a flutuar sobre as bordas, como
+   sempre. No celular/janela pequena (≤760 px) quem manda é o @media do FIM do
+   arquivo (mesma especificidade, mais embaixo, vence): ele transforma os
+   trilhos em FAIXAS horizontais. Precisa ser @media: @container só estiliza
+   DESCENDENTES do contêiner — o próprio .canvas-view, que É o contêiner, fica
+   de fora da query (não há contêiner acima dele). */
 @container (max-width: 600px) {
   .rail {
     position: absolute;
@@ -1010,12 +1015,16 @@ button:disabled {
   font-weight: 600;
 }
 
+/* toque: a faixa rola com o dedo e a barra de rolagem some (no iOS/Android ela
+   é overlay e já sozinha some; aqui a gente some também a do Firefox Android) */
 /* ---------- celular (janela estreita: a bancada é a estrela) ----------
    No desktop o painel de medições é coluna à direita e nada muda. No celular a
    barra compacta (sem título), o painel vira GAVETA de baixo que sobe pelo
    botão Medições, e a bancada fica com a altura inteira — o aluno monta com o
-   polegar e confere os números quando quer. Os trilhos já se viram sozinhos
-   pela container query (bancada < 600 px → sobreõem as bordas do quadro). */
+   polegar e confere os números quando quer. E os trilhos largam as bordas do
+   quadro e viram FAIXAS horizontais: lixeira/componentes/fio em CIMA, vista/
+   zoom em BAIXO, cada um numa fileira com scroll lateral (dedo, barra fina ou
+   roda/shift+roda). */
 .painel-toggle {
   display: none; /* só existe na tela estreita */
 }
@@ -1040,7 +1049,81 @@ button:disabled {
   }
 
   .canvas {
-    padding: 8px;
+    padding: 8px 8px 62px; /* folga para a pílula Medições não cobrir a faixa */
+  }
+
+  /* TRILHOS EM FAIXAS HORIZONTAIS (o pedido): itens em CIMA, vista em BAIXO,
+     cada um numa fileira com scroll lateral — no toque, arrastar com o dedo;
+     com mouse, barra fina ou a própria roda (mapeada em Rails.tsx); trackpad
+     manda delta X nativo. O quadro fica com a SOBRA de altura (linha do meio
+     do grid) e segue desenhando quadrado e centrado (xMidYMid por padrão).
+     Especificidade dobrada onde a regra base tem duas classes — aqui o media
+     já vence por ordem (é o último bloco do arquivo), o `.x.x` é a trava. */
+  .canvas-view.canvas-view {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr) auto;
+    gap: 6px;
+    align-items: center;
+    justify-items: stretch;
+  }
+
+  .rail {
+    position: static;
+    top: auto;
+    transform: none; /* o container query lá em cima pede translateY(-50%) */
+    grid-column: 1;
+    width: 100%;
+    max-width: 100%;
+    max-height: none;
+    flex-direction: row;
+    flex-wrap: nowrap;
+    align-items: center;
+    align-content: center;
+    justify-content: flex-start;
+    gap: 4px;
+    padding: 6px 8px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    overscroll-behavior-x: contain;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: thin;
+    scrollbar-color: var(--line) transparent;
+  }
+
+  .rail-items {
+    grid-row: 1;
+  }
+
+  .rail-view {
+    grid-row: 3;
+  }
+
+  .canvas-view > .schematic.schematic,
+  .canvas-view > .scene-wrap.scene-wrap {
+    grid-row: 2;
+    grid-column: 1;
+    width: 100%;
+    height: 100%;
+    min-width: 0;
+    min-height: 0;
+    max-width: 100%;
+    max-height: 100%;
+    align-self: stretch;
+    justify-self: center;
+  }
+
+  .rail::-webkit-scrollbar {
+    height: 6px;
+  }
+
+  .rail::-webkit-scrollbar-thumb {
+    background: var(--line);
+    border-radius: 3px;
+  }
+
+  .rail::-webkit-scrollbar-track {
+    background: transparent;
   }
 
   /* gaveta de baixo: some quando fechada (visibility tira até do Tab), sobe
@@ -1086,5 +1169,19 @@ button:disabled {
   .readings td {
     padding: 4px 6px;
     font-size: 12px;
+  }
+}
+
+/* toque: a faixa da bancada rola com o dedo e a barra some (no iOS/Android ela
+   é overlay e some sozinha; aqui some também a do Firefox Android). Por último
+   no arquivo de propósito: tem que vencer o `scrollbar-width: thin` das faixas
+   acima quando o aparelho não tem hover. */
+@media (hover: none) {
+  .rail {
+    scrollbar-width: none;
+  }
+
+  .rail::-webkit-scrollbar {
+    display: none;
   }
 }

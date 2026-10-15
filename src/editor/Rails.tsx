@@ -1,4 +1,5 @@
 import type { CompKind } from '../core/netlist';
+import type { WheelEvent as ReactWheelEvent } from 'react';
 import { formatValue, Symbol } from './symbol';
 import { useEditor } from './store';
 import { applyZoom, applyZoomReset } from './zoom';
@@ -13,15 +14,36 @@ const ITEMS: { kind: CompKind; label: string; hint: string; value?: number }[] =
 ];
 
 /**
- * Trilhos — as ferramentas ao LADO do quadro (componentes à esquerda, vista
- * e zoom à direita), nunca embaixo.
+ * Roda do mouse sobre a FAIXA horizontal do trilho (bancada estreita): o eixo Y
+ * vira rolagem lateral. Trackpad já manda delta X nativo (e o navegador cuida
+ * dele), então só a roda dominante no Y é traduzida; `deltaMode` 1/2 (linhas e
+ * páginas, roda antiga) volta para pixels. Fora da faixa o trilho é coluna e não
+ * rola — aí isto devolve 0 e nada muda.
+ */
+export const deslocDaRoda = (deltaY: number, deltaX: number, deltaMode = 0): number => {
+  if (Math.abs(deltaY) <= Math.abs(deltaX)) return 0;
+  const px = deltaMode === 1 ? deltaY * 16 : deltaMode === 2 ? deltaY * 100 : deltaY;
+  return px;
+};
+
+/** Repassa a roda para o TRILHO da esquerda: mover a roda rola a faixa na hora. */
+const roda = (e: ReactWheelEvent<HTMLElement>) => {
+  const d = deslocDaRoda(e.deltaY, e.deltaX, e.deltaMode);
+  if (d) e.currentTarget.scrollLeft += d;
+};
+
+/**
+ * Trilhos — as ferramentas ao LADO do quadro (componentes à esquerda, vista e
+ * zoom à direita). Em bancada ESTREITA (container < 600 px) eles viram faixas
+ * horizontais: itens em cima, vista embaixo, com scroll lateral.
  *
- * Com as mãos o limite INFERIOR da câmera é o mais perto: descer o braço
- * abaixo da borda de enxerga da webcam perde o rastreio justamente onde o
- * item está. Horizontalmente a câmera rende muito mais — os dois lados do
- * quadro ficam dentro da faixa que a mão alcança sem esticar, e pegar um
- * resistor vira um movimento curto até o quadro. O mouse continua servindo
- * pelos MESMOS alvos ([data-hand] = a pinça clica como um clique).
+ * Com as mãos o limite INFERIOR da câmera é o mais perto: descer o braço abaixo
+ * da borda de enxerga da webcam perde o rastreio justamente onde o item está —
+ * por isso o padrão é coluna ao lado do quadro, na horizontal, onde a câmera
+ * rende. Na bancada estreita quem comanda é o DEDO (celular/janela miúda), não
+ * a webcam: ali a faixa de ~70 px cabe em qualquer altura de tela e o quadro
+ * fica com a sobra. O mouse continua servindo pelos MESMOS alvos ([data-hand] =
+ * a pinça clica como um clique).
  */
 
 /** Esquerda: a lixeira no TOPO + os componentes + Conectar (armar → pinçar no quadro posicionar). */
@@ -36,7 +58,7 @@ export function ItemsRail() {
   const trash = useEditor((s) => s.trash);
 
   return (
-    <aside className="rail rail-items" role="group" aria-label="Lixeira, componentes e fio">
+    <aside className="rail rail-items" role="group" aria-label="Lixeira, componentes e fio" onWheel={roda}>
       <button
         type="button"
         className={holding ? 'rail-item rail-trash holding' : 'rail-item rail-trash'}
@@ -116,7 +138,7 @@ export function ViewRail() {
   const setFlow = useEditor((s) => s.setFlow);
 
   return (
-    <aside className="rail rail-view" role="group" aria-label="Vista, cores e zoom">
+    <aside className="rail rail-view" role="group" aria-label="Vista, cores e zoom" onWheel={roda}>
       <span className="seg" role="group" aria-label="Vista">
         <button
           type="button"

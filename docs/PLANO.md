@@ -335,7 +335,10 @@ Feito (os itens encostados na bancada, sem esticar o braço):
   renderer só o preenche.
 - **Bancada estreita**: container < 600 px não cabe trilho AO LADO sem amassar o
   quadro — a **container query** devolve os trilhos às bordas (o comportamento
-  antigo, sobreposto), e o quadro volta a `min(largura, altura)`.
+  antigo, sobreposto), e o quadro volta a `min(largura, altura)`. Esse fallback
+  hoje só manda quando a janela passa de 760 px: no celular o `@media` do fim do
+  arquivo vence e os trilhos viram **faixas horizontais** (ver "Responsividade
+  mobile — onde está").
 - Verificado: `tsc` limpo, **196 testes**, build ok; dev em janela larga: gap
   esq/dir = 10 px, quadro 2D quadrado (diff 0) e canvas 3D quadrado; janela
   estreita: fallback sobreposto com quadro quadrado; interação no layout novo —
@@ -781,8 +784,29 @@ só desktop — **um único media query** em todo o CSS):
   manda na gaveta, o React manda no rótulo/`aria-expanded`).
 - **Nada mudou no desktop**: medido na janela de 1000 px — duas colunas
   `680px 320px`, `<h1>` visível, pílula fora (`display: none`); os trilhos
-  continuam se virando pela **container query** que já existia (bancada
-  < 600 px → sobreõem as bordas).
+  continuam em coluna ao lado do quadro, e a **container query** que já existia
+  segue de fallback para bancada < 600 px com janela acima de 760 px
+  (sobreõem as bordas, como sempre).
+- **Trilhos em faixas horizontais** (o pedido: "containers de itens ACIMA e
+  ABAIXO, com scroll horizontal adaptado à web e ao mobile"): em janela
+  ≤ 760 px a bancada vira **grid de três linhas** (`auto minmax(0, 1fr) auto`)
+  — lixeira/componentes/fio **em cima**, vista/cores/zoom **embaixo** e o
+  quadro com a **sobra** de altura no meio; cada trilho vira fileira com
+  `overflow-x: auto`. No **toque** o dedo arrasta (a barra some em
+  `hover: none`); com **mouse**, barra fina de 6 px ou a própria **roda** —
+  `deslocDaRoda()` em [`src/editor/Rails.tsx`](../src/editor/Rails.tsx)
+  traduz `deltaY` em rolagem lateral (trackpad manda `deltaX` nativo e fica
+  com o navegador; roda antiga em linhas/páginas volta para pixels), com 4
+  testes em [`src/editor/rails.test.ts`](../src/editor/rails.test.ts).
+  O `@media` é obrigatório aqui: **`@container` só estiliza descendentes do
+  contêiner** e o `.canvas-view` É o contêiner — dentro da container query ele
+  ficava de fora (medido: `display` continuava `flex`, trilhos com
+  `width: 100%` e o quadro espremido a 2 px). A `.canvas` ganhou
+  `padding-bottom: 62px` para a pílula **não** cobrir a faixa de baixo.
+  Medido no iframe de 390 × 844: grid `98px 404px 135px`, os 8 itens na mesma
+  fileira, roda rolando 150 px, pílula 9 px abaixo da faixa, `scrollHeight`
+  dentro da bancada; em 800 × 600 (desktop estreito) o fallback overlay
+  continua intacto (trilhos a 6–7 px das bordas, quadro quadrado 454 px).
 - **Espelho no celular** ([`src/mirror/espelho.css`](../src/mirror/espelho.css)):
   letra de toque — tabela 14 px, cartão de questão 18 px (fora do `clamp`),
   cabeçalho e rodapé mais enxutos e rodapé com 48 vh — em 390 px a leitura
@@ -795,7 +819,8 @@ só desktop — **um único media query** em todo o CSS):
   e não era listada). [`src/styles/landing.test.ts`](../src/styles/landing.test.ts)
   trava as três pontas (link do CSS, viewport de aparelho e hrefs das páginas
   da sala) — sem CSS ligado, o teste falha antes de qualquer deploy.
-- Verificado: `tsc` limpo, **257 testes** (3 novos da landing), build ok (a
+- Verificado: `tsc` limpo, **261 testes** (3 novos da landing + 4 da roda no
+  trilho), build ok (a
   landing sai com `<link … href="/assets/spike-*.css">`). No dev, medido dentro
   de um **iframe de 390 × 844** (a media query responde ao viewport do iframe):
   editor — pílula visível de 46 px, `<h1>` escondido, gaveta escondida

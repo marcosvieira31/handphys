@@ -143,7 +143,11 @@ button.ghost-btn {
   font-size: 14px;
 }
 
+/* Circuito carregado: estado INVERTIDO (fundo escuro + texto azul + borda
+   azul). O erro antigo era texto azul sobre o próprio azul do botão — o item
+   saía "vazio" no portão (medido em produção: color === backgroundColor). */
 button.active-example {
+  background: #0a0d12;
   border-color: #58a6ff;
   color: #58a6ff;
 }

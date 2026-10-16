@@ -1,5 +1,4 @@
 import { readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
 /**
@@ -10,7 +9,7 @@ import { describe, expect, it } from 'vitest';
  * Lê o CSS por fs (não `?raw`: o vitest intercepta import de `.css` e o raw
  * volta vazio).
  */
-const css = readFileSync(fileURLToPath(new URL('./style.css', import.meta.url)), 'utf8');
+const css = readFileSync(new URL('./style.css', import.meta.url), 'utf8');
 const bloco = (seletor: string): string => {
   const m = new RegExp(`${seletor}\\s*\\{([^}]*)\\}`).exec(css);
   return m ? m[1] : '';

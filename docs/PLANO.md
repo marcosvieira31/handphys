@@ -842,6 +842,14 @@ só desktop — **um único media query** em todo o CSS):
 - **Cobertura**: `src/styles/landing.test.ts` (shell = `#root` + módulo e **sem** menu de links; redirects preservam a query; cardboard intacto com `__cbReady`; estante com CSS ligado e volta), `src/rotas.test.ts` (hash → vista, alias, fallback, caixa, títulos distintos), `share.test.ts` (três destinos, mesma payload, barra final da base, base vazia no node) e `peer.test.ts` (link da sala na rota). Total: **274 testes**.
 - **Verificado no navegador** (dev): `/editor.html?c=` → `/?c=` com chip "vindo do link" e circuito na bancada; `/mirror.html?c=` → `/?c=…#/espelho` com o circuito do QR (4 linhas, título novo, volta); `/mirror.html?sala=K7QW3` → rota com chip "procurando a sala…"; `#/ajuda` com os 3 passos e links certos; share com os 3 destinos (PC = padrão, sem `#`); volta espelho → bancada por hash sem reload; mobile 390 px (gaveta + faixas `98px/404px/135px`); cardboard (gate, alarme, sem React) e estante com **0 erros** de console.
 
+### Portão do cardboard: botão do circuito carregado invisível — onde está
+
+- **Sintoma** (reportado pelo usuário na tela do celular): o **primeiro item** do portão do cardboard saía "vazio" — só o azul do botão, sem texto.
+- **Causa medida em produção**: o botão do circuito CARREGADO recebe a classe `.active-example` (o `i === 0` nasce carregado) e a regra `button.active-example { color: #58a6ff }` pintava o texto do **mesmo azul do fundo** do botão (`background: #58a6ff`). Sonda no ar: `color === backgroundColor === rgb(88, 166, 255)` no primeiro botão — o texto "Lei de Ohm" existia, só era invisível; os outros dois seguiam com o texto escuro normal.
+- **Correção**: estado **invertido** — `background: #0a0d12` (escuro) + texto e borda `#58a6ff` (`src/cardboard/style.css`): continua legível como "selecionado" no painel escuro do portão.
+- **Trava**: `src/cardboard/style.test.ts` — a regra `.active-example` tem que existir e a cor do texto tem que diferir do fundo (o próprio, ou o do `button` base como fallback) — a comparação que pegaria o azul-sobre-azul. O teste lê o CSS por `node:fs` (`?raw` de `.css` volta vazio no vitest: o pipeline de CSS intercepta) e, como o tsconfig é de browser sem `@types/node`, a superfície usada está declarada em `src/cardboard/fs.d.ts`. **276 testes**.
+- **Conferido no ar**: `cardboard.html` de produção — primeiro botão com texto "Lei de Ohm", `background: rgb(10, 13, 18)` e texto azul; 0 erros de console.
+
 ## 6. Riscos e mitigações
 
 1. **PCs fracos + MediaPipe** → medir fps no spike; `GPU` delegate com fallback CPU; mouse sempre disponível.

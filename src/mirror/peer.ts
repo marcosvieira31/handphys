@@ -1,4 +1,4 @@
-import { swapPage } from '../editor/share';
+import { appBase } from '../editor/share';
 import type { MirrorChannel } from './channel';
 
 /**
@@ -44,13 +44,13 @@ export function newRoomCode(tamanho = 5): string {
   return [...buf].map((b) => ALFA[b % ALFA.length]).join('');
 }
 
-/** Link do espelho para ESTA sala (é o que vira QR no quadro). */
+/** Link do espelho para ESTA sala (é o que vira QR no quadro: a rota do app). */
 export function mirrorUrl(code: string, base?: string): string {
-  const root = base ?? (typeof location === 'undefined' ? '' : `${location.origin}${location.pathname}`);
-  return `${swapPage(root, 'mirror.html')}?sala=${code}`;
+  const root = (base ?? appBase()).replace(/\/?$/, '/');
+  return `${root}?sala=${code}#/espelho`;
 }
 
-/** Código de sala vindo na query (`mirror.html?sala=K7QW3`). */
+/** Código de sala vindo na query (`?sala=K7QW3`, o QR do professor). */
 export function roomFromSearch(search: string): string | null {
   const m = /[?&]sala=([A-Za-z0-9_-]{1,12})/.exec(search);
   return m ? m[1].toUpperCase() : null;

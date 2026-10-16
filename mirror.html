@@ -2,12 +2,18 @@
 <html lang="pt-BR">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="color-scheme" content="dark" />
     <title>handphys — espelho da sala</title>
+    <script>
+      // O espelho virou a rota #/espelho do app. Preserva a query inteira —
+      // ?c= (QR do circuito) e ?sala= (sala na rede da escola) — então os
+      // QRs que já estão na sala continuam entrando normalmente.
+      location.replace('./' + location.search + '#/espelho');
+    </script>
   </head>
-  <body class="espelho-page">
-    <div id="root"></div>
-    <script type="module" src="/src/mirror/main.tsx"></script>
+  <body>
+    <noscript>
+      O espelho do handphys precisa de JavaScript.
+      <a href="./#/espelho">Abra a rota do espelho</a> com o script ativado.
+    </noscript>
   </body>
 </html>

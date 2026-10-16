@@ -104,7 +104,9 @@ export function MirrorToggle() {
   };
 
   const abrirEspelho = () => {
-    window.open(new URL('mirror.html', location.href).href, 'handphys-espelho');
+    // a rota do espelho, na MESMA janela de navegação: herda o ?c= atual —
+    // o projetor já abre com este circuito mesmo antes do espelho transmitir
+    window.open('#/espelho', 'handphys-espelho');
   };
 
   // gancho de depuração (só em dev): a automação lê a sala e o log sem console
@@ -202,9 +204,10 @@ export function MirrorToggle() {
             {sala && <p className="share-code">{sala.code}</p>}
 
             <p className="hint">
-              Quem está em outro aparelho da mesma rede escaneia o QR (ou digita o código em{' '}
-              <code>mirror.html?sala=…</code>) e vê esta tela ao vivo. Os dados andam de aparelho a
-              aparelho — só o pareamento passa pela internet.
+              Quem está em outro aparelho da mesma rede escaneia o QR (ou abre o link da
+              sala — o mesmo que o QR guarda, com o código na URL) e vê esta tela ao
+              vivo. Os dados andam de aparelho a aparelho — só o pareamento passa pela
+              internet.
             </p>
 
             <div className="actions">

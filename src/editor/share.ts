@@ -146,19 +146,35 @@ function withFreshIds(doc: { comps: Placed[]; wires: Wire[] }): CircuitDoc {
 /* URL                                                                  */
 /* ------------------------------------------------------------------ */
 
-function pageBase(): string {
+/**
+ * Base do app (a RAIZ — a bancada mora lá): paga o nome de página que o
+ * desenvolvedor ainda estiver usando (`index.html`/`editor.html`/…) e
+ * garante a barra final, para os destinos compostos não brigarem.
+ */
+export function appBase(): string {
   if (typeof location === 'undefined') return '';
-  return `${location.origin}${location.pathname}`;
+  return `${location.origin}${location.pathname}`
+    .replace(/\/(index|editor|mirror)\.html$/, '/')
+    .replace(/\/?$/, '/');
 }
 
-/** Link do circuito a partir da página atual (editor.html?c=...). */
+/** Link do circuito para uma base qualquer (`…/?c=…`). */
 export function shareUrl(doc: CircuitDoc, base?: string): string {
-  return `${base ?? pageBase()}?c=${encodeDoc(doc)}`;
+  return `${base ?? appBase()}?c=${encodeDoc(doc)}`;
 }
 
-/** Mesmo link, apontando para outro arquivo (editor ↔ viewer ↔ espelho). */
-export function swapPage(url: string, page: 'editor.html' | 'cardboard.html' | 'mirror.html'): string {
-  return url.replace(/\/(editor|cardboard|mirror)\.html/, `/${page}`);
+/** Os três destinos do MESMO circuito, como o app os chama hoje. */
+export type Destino = 'bancada' | 'espelho' | 'cardboard';
+
+export function shareLinks(doc: CircuitDoc, base?: string): Record<Destino, string> {
+  const b = (base ?? appBase()).replace(/\/?$/, '/');
+  const c = encodeDoc(doc);
+  return {
+    bancada: `${b}?c=${c}`,
+    espelho: `${b}?c=${c}#/espelho`,
+    // o cardboard mantém página própria: vanilla + alarme de rede lenta
+    cardboard: `${b}cardboard.html?c=${c}`,
+  };
 }
 
 /** O payload `?c=` da query (ou null se não veio link de circuito). */

@@ -2,12 +2,18 @@
 <html lang="pt-BR">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="color-scheme" content="dark" />
-    <title>handphys — editor de circuitos</title>
+    <title>handphys — bancada</title>
+    <script>
+      // A bancada agora é a RAIZ do app (a landing virou o próprio app, com
+      // telas por hash). QR/link antigo continua valendo: a query (?c= do
+      // circuito) sobrevive ao redirect.
+      location.replace('./' + location.search);
+    </script>
   </head>
-  <body class="editor-page">
-    <div id="root"></div>
-    <script type="module" src="/src/editor/main.tsx"></script>
+  <body>
+    <noscript>
+      O handphys é um app e precisa de JavaScript. Sem JS, <a href="./">abra a bancada</a>
+      manualmente e recarregue com o script ativado.
+    </noscript>
   </body>
 </html>

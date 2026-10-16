@@ -123,9 +123,13 @@ describe('salas na rede da escola (peer.ts)', () => {
     expect(newRoomCode()).not.toBe(newRoomCode());
   });
 
-  it('link do espelho aponta para a sala certa', () => {
-    const url = mirrorUrl('K7QW3', 'https://x.io/handphys/editor.html');
-    expect(url).toBe('https://x.io/handphys/mirror.html?sala=K7QW3');
+  it('link do espelho aponta para a rota da sala certa', () => {
+    const url = mirrorUrl('K7QW3', 'https://x.io/handphys/');
+    expect(url).toBe('https://x.io/handphys/?sala=K7QW3#/espelho');
+    // base sem barra final não quebra a composição (pathname pode vir assim)
+    expect(mirrorUrl('K7QW3', 'https://x.io/handphys')).toBe(
+      'https://x.io/handphys/?sala=K7QW3#/espelho',
+    );
   });
 
   it('espelho entra na sala e recebe o estado ao vivo', async () => {

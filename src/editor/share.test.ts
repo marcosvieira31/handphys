@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { CircuitDoc } from '../core/netlist';
 import { EXAMPLES } from './examples';
-import { decodeDoc, encodeDoc, sharePayload, shareUrl, swapPage } from './share';
+import { appBase, decodeDoc, encodeDoc, shareLinks, sharePayload, shareUrl } from './share';
 
 /** JSON -> base64url (o mesmo formato que o link carrega, para montar casos). */
 function enc(obj: unknown): string {
@@ -40,7 +40,7 @@ describe('circuito no link (share por URL)', () => {
   });
 
   it('link curto o bastante para caber num QR e sem cara de URL suja', () => {
-    const url = shareUrl(EXAMPLES[2].doc, 'https://marcosvieira31.github.io/handphys/editor.html');
+    const url = shareUrl(EXAMPLES[2].doc, 'https://marcosvieira31.github.io/handphys/');
     expect(url).toContain('?c=');
     expect(url.length).toBeLessThan(900);
     // base64url: nunca +, / ou = (quebrariam o link ao ser colado no chat)
@@ -54,10 +54,28 @@ describe('circuito no link (share por URL)', () => {
     expect(sharePayload('?c=')).toBeNull();
   });
 
-  it('troca o arquivo mantendo o circuito (PC ↔ viewer do celular)', () => {
-    const u = 'https://x.io/handphys/editor.html?c=abc';
-    expect(swapPage(u, 'cardboard.html')).toBe('https://x.io/handphys/cardboard.html?c=abc');
-    expect(swapPage(swapPage(u, 'cardboard.html'), 'editor.html')).toBe(u);
+  it('os três destinos do app levam o MESMO circuito', () => {
+    const links = shareLinks(EXAMPLES[2].doc, 'https://x.io/handphys/');
+    expect(links.bancada).toMatch(/^https:\/\/x\.io\/handphys\/\?c=/);
+    expect(links.espelho).toBe(`${links.bancada}#/espelho`);
+    // o cardboard é página própria (vanilla + alarme de rede lenta)
+    expect(links.cardboard).toBe(
+      `https://x.io/handphys/cardboard.html?c=${sharePayload(links.bancada)}`,
+    );
+    for (const u of Object.values(links)) {
+      expect(sharePayload(u)).toBe(sharePayload(links.bancada));
+    }
+  });
+
+  it('a base ganha barra final (o pathname pode vir sem ela)', () => {
+    const links = shareLinks(EXAMPLES[0].doc, 'https://x.io/handphys');
+    expect(links.bancada).toContain('/handphys/?c=');
+    expect(links.espelho).toContain('/handphys/?c=');
+    expect(links.cardboard).toContain('/handphys/cardboard.html?c=');
+  });
+
+  it('sem janela (node) a base do app é vazia — nada de URL inventada', () => {
+    expect(appBase()).toBe('');
   });
 
   it('link podre devolve null, nunca lança para a tela', () => {

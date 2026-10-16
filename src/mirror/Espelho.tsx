@@ -32,7 +32,7 @@ const REDE: Record<StatusSala, string> = {
   erro: 'sem rede — só espelho desta máquina',
 };
 
-/** Sala pedida na URL (`mirror.html?sala=K7QW3`, o QR do professor). */
+/** Sala pedida na URL (`?sala=K7QW3`, o QR do professor — rota `#/espelho`). */
 const CODIGO = typeof location === 'undefined' ? null : roomFromSearch(location.search);
 
 /**
@@ -153,6 +153,9 @@ export function Espelho() {
         <span className="espelho-cont">
           {doc.comps.length} componentes · {doc.wires.length} fios · {Math.round(zoom * 100)}%
         </span>
+        <a className="espelho-volta" href="#/" title="Voltar para a bancada (quem monta)">
+          bancada
+        </a>
       </header>
 
       {(questao || ch) && (

@@ -38,6 +38,20 @@ body.espelho-page {
   font-size: 14px;
 }
 
+/* volta para a bancada (quem abriu o espelho na própria aba) — discreto:
+   na projeção é quase nada, no PC do professor é um clique. */
+.espelho-volta {
+  color: var(--dim);
+  font-size: 14px;
+  text-decoration: none;
+  opacity: 0.55;
+}
+
+.espelho-volta:hover {
+  opacity: 1;
+  color: var(--accent);
+}
+
 /* ponto de estado: verde ao vivo, âmbar esperando, vermelho parado */
 .dot {
   flex: none;
@@ -230,6 +244,10 @@ body.espelho-page {
   }
 
   .espelho-cont {
+    font-size: 12px;
+  }
+
+  .espelho-volta {
     font-size: 12px;
   }
 

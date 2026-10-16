@@ -1185,3 +1185,12 @@ button:disabled {
     display: none;
   }
 }
+
+/* tela de carga do shell (a rota lazy ainda baixando): texto curto evita a
+   tela preta enquanto o chunk da bancada/espelho chega. */
+.carregando {
+  margin: 0;
+  padding: 24px;
+  color: var(--dim);
+  font: 14px/1.4 system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+}

@@ -1,9 +1,43 @@
 # handphys
 
-Laboratório virtual de física (circuitos) por realidade mista, para uso em sala de aula.
+Laboratório virtual de física (circuitos) por realidade mista, para uso em sala de aula — **um app, uma porta de entrada, três telas**.
 
 - **Plano completo:** [`docs/PLANO.md`](docs/PLANO.md)
 - **Fase 0 — spikes:** [`docs/SPIKE.md`](docs/SPIKE.md)
+
+## As telas do app
+
+O app abre na **bancada** (a raiz) e cada aparelho da sala entra pela tela que lhe cabe:
+
+| Tela | Onde roda | Endereço |
+| --- | --- | --- |
+| **Bancada** — montar o circuito | PC do professor / tablet | `/` (a casa; abre por padrão) |
+| **Espelho** — projeção da sala | projetor / segunda aba | `/#/espelho` (ao vivo, sem edição) |
+| **Sala** — o que é e como usar | qualquer lugar | `/#/ajuda` |
+| **Cardboard** — bancada 3D estéreo | celular no visor | `cardboard.html` (página própria, de propósito) |
+| Estante de spikes | equipe | `spikes/` (fora do produto) |
+
+O circuito viaja num link `?c=` (base64url): o **Compartilhar** gera QR para os **três destinos** (PC, celular e projetor). `editor.html` e `mirror.html` continuam existindo como **redirecionamentos** — os QRs que já estão na sala caem na rota certa, com `?c=` e `?sala=` intactos. O **cardboard** mantém página própria de propósito: vanilla (zero React no celular) e com alarme de rede lenta no HTML clássico — a escola com Wi-Fi ruim é o público.
+
+## Estrutura
+
+```
+index.html          → shell do app (src/main.tsx — telas por hash, import preguiçoso)
+editor.html         → redirect → / (bancada; QR antigo com ?c=)
+mirror.html         → redirect → /#/espelho (?c= e ?sala= preservados)
+cardboard.html      → vista do celular (vanilla; src/cardboard/)
+spikes/             → estante de desenvolvimento (hands, cardboard)
+src/
+  main.tsx rotas.ts Sala.tsx   → shell, rotas e tela de ajuda
+  core/       → solver MNA, netlist, Kirchhoff, fluxo de corrente
+  scene/      → bancada 3D (three.js)
+  editor/     → a bancada (quadro 2D, trilhos, mãos, share, desafios, relatórios)
+  mirror/     → espelho (protocolo, peer/WebRTC, follower)
+  cardboard/  → viewer estéreo do celular
+  hands/      → hand tracking (MediaPipe) — só da bancada
+  spikes/     → os spikes 0.1/0.2
+  styles/     → editor.css (app), espelho.css, sala.css, spike.css (spikes)
+```
 
 ## Rodar
 
@@ -13,6 +47,8 @@ npm run dev      # http://localhost:5173
 npm run build    # typecheck + build estático (saída em dist/)
 npm test         # testes do solver (Vitest)
 ```
+
+O `npm run dev` abre a **bancada**; as outras telas ficam em `#/espelho` (projeção) e `#/ajuda` (sala). `cardboard.html` é a vista do celular, testável direto no navegador.
 
 ## Deploy
 
@@ -61,4 +97,5 @@ Publicação automática no **GitHub Pages** a cada push em `main`
 - [x] Fase 4 (parcial) — **questão na tela (modo professor)**: campo novo no painel (**Questão da aula**, antes dos desafios, `maxLength` = `QUESTAO_MAX`) para o professor escrever a pergunta da turma; ela viaja pelo fio do espelho (campo `q` — texto livre **limpo na leitura**: controle vira espaço, espaço vira espaço, corte em `QUESTAO_MAX = 200`, e o que não é string vira pergunta vazia — o fio não confia em quem manda) e aparece em **letra de projeção** num cartão no TOPO de [`mirror.html`](mirror.html) (`clamp(20px, 2.6vh, 30px)`, legível do fundo da sala). Sem questão escrita, o MESMO cartão mostra o **enunciado do desafio ativo** (rótulo "Desafio"); sem questão e sem desafio, não aparece. O rodapé do espelho ficou com **título + veredito** só — o enunciado saiu de lá para não duplicar o que agora está em cima. [`src/editor/Inspector.tsx`](src/editor/Inspector.tsx), [`src/editor/store.ts`](src/editor/store.ts), [`src/mirror/protocol.ts`](src/mirror/protocol.ts) e [`src/mirror/Espelho.tsx`](src/mirror/Espelho.tsx)
 - [x] Fase 4 (parcial) — **relatório JSON**: o botão **JSON** da barra (ao lado do CSV, mesmo desenho: desativado com o quadro vazio, `data-hand="json"`, download 100 % local) baixa `handphys-circuito-AAAA-MM-DD.json` com o MESMO dado do CSV em forma de máquina: **montagem crua** (`circuito.componentes` + `circuito.fios` — reconstrói o circuito inteiro, coisa que o CSV não faz), uma **leitura** por componente (valor em **SI puro** — sem prefixo de etiqueta: capacitor em `F` — tensão, corrente e os dois nós; chave com `estado: fechada|aberta`), as **tensões de nó** (GND primeiro), o **veredito do desafio** recalculado na hora pelo `check` puro (id, título, `ok` e dica quando reprovado) e `erros.solver` + `diagnosticos` em lista. Ponto decimal (`.`) e arredondamento em 9 casas só para tirar a poeira do float (`4.50000000001 ⇒ 4.5`): JSON é texto para máquina, não planilha pt-BR. [`src/editor/report.ts`](src/editor/report.ts) e [`src/editor/App.tsx`](src/editor/App.tsx) — total 254
 - [x] Fase 4 (parcial) — **responsividade mobile (editor + espelho + landing)**: no celular a bancada é a estrela — a barra dispensa o título, o painel de medições vira **gaveta de baixo** que sobe pelo botão **Medições** (pílula fixa de 46 px no pé da tela, `aria-expanded`, `data-hand="painel"`; fechada some até do Tab por `visibility`) e a bancada fica com a altura inteira (705 px numa tela de 390 × 844). O painel nasce **aberto no desktop e fechado no celular** (`matchMedia` lido UMA vez na chegada — depois quem decide é o aluno); no desktop nada muda (duas colunas `680px 320px`, sem pílula). No celular os trilhos **largam as bordas e viram faixas horizontais** — lixeira/componentes/fio **em cima**, vista/cores/zoom **embaixo**, cada um numa fileira com **scroll lateral** adaptado ao aparelho: no toque o dedo arrasta (barra some em `hover: none`), com mouse a barra fina ou a própria **roda** (`deslocDaRoda()` em [`src/editor/Rails.tsx`](src/editor/Rails.tsx) traduz `deltaY` em rolagem lateral; trackpad manda `deltaX` nativo) — e o quadro fica com a sobra de altura, quadrado e centrado. O `@media (max-width: 760px)` manda nisso tudo porque `@container` só estiliza descendentes do contêiner e o `.canvas-view` **é** o contêiner; a container query continua de fallback para janela de desktop > 760 px estreita (sobreõem as bordas, como antes). O **espelho** ganhou letra de toque no celular (tabela 14 px, cartão de questão 18 px, rodapé mais alto — 390 px sem rolagem horizontal) e a **landing** finalmente recebe o CSS: [`src/styles/spike.css`](src/styles/spike.css) ligado no [`index.html`](index.html) — sem o `<link>`, a página saía **crua** no build (nenhum estilo) —, com padding de celular e um entry novo apontando o espelho. O trava disso é [`src/styles/landing.test.ts`](src/styles/landing.test.ts) (link do CSS, viewport de aparelho e as três páginas da sala) — total 261
+- [x] Fase 4 (cont.) — **integração: um app, uma porta, três telas**: a landing de 5 links morreu — o `index.html` virou o **shell** do app ([`src/main.tsx`](src/main.tsx)) e as telas são escolhidas pelo hash com **import preguiçoso**: `#/` a **bancada** (a casa), `#/espelho` a **projeção** (o projetor não baixa a cena 3D) e `#/ajuda` a **Sala** ([`src/Sala.tsx`](src/Sala.tsx) — a landing virou tela de "como usar", com os 3 passos da aula). `editor.html` e `mirror.html` viraram **redirecionamentos** de ~600 B que preservam a query (`?c=` do QR do circuito e `?sala=` da sala na rede) — todo QR que já está na sala continua entrando; o link da sala na rede virou rota (`?sala=…#/espelho`) e o botão *Abrir espelho* abre a rota herdando o `?c=` atual. O **Compartilhar** passou a gerar os **três destinos** do mesmo circuito (`shareLinks`): PC (bancada), Celular (cardboard) e Projetor (espelho). Os **spikes saíram do produto** para a estante [`spikes/index.html`](spikes/index.html); o **cardboard** ficou com página própria **de propósito** (vanilla — zero React no celular — e com o alarme de rede lenta no HTML clássico). A bancada ganhou o link **Ajuda** na barra (o antigo "Voltar" apontava para a landing) e o espelho um discreto "bancada". Travado por [`src/styles/landing.test.ts`](src/styles/landing.test.ts) (shell, redirects, cardboard intacto, estante), [`src/rotas.test.ts`](src/rotas.test.ts) e os testes do share — total **274**
 - [ ] Fase 5 — piloto com turma

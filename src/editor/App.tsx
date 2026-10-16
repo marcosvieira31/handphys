@@ -62,9 +62,11 @@ export function App({ shared = 'none' }: { shared?: 'none' | 'ok' | 'bad' }) {
   return (
     <div className="editor">
       <header className="topbar">
-        <h1>handphys — editor de circuitos</h1>
+        <h1>handphys — bancada</h1>
         <nav>
-          <a href="./">Voltar</a>
+          <a href="#/ajuda" data-hand="sala" title="O que é o handphys e as telas da sala">
+            Ajuda
+          </a>
           <span className="sep" />
           {EXAMPLES.map((ex, i) => (
             <button

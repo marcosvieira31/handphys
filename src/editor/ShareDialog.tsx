@@ -1,9 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { makeQr, qrPath } from './qr';
-import { shareUrl, swapPage } from './share';
+import { shareLinks, type Destino } from './share';
 import { useEditor } from './store';
-
-type Page = 'editor.html' | 'cardboard.html';
 
 /**
  * Compartilhar: o circuito vira link (+ QR) para a turma abrir sem montar de
@@ -14,12 +12,13 @@ export function ShareDialog() {
   const doc = useEditor((s) => s.doc);
   const setModal = useEditor((s) => s.setModal);
   const [open, setOpen] = useState(false);
-  const [page, setPage] = useState<Page>('editor.html');
+  const [destino, setDestino] = useState<Destino>('bancada');
   const [copied, setCopied] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
   // só calcula enquanto aberto (codificar é barato, mas não é de graça)
-  const url = useMemo(() => (open ? swapPage(shareUrl(doc), page) : ''), [open, doc, page]);
+  const links = useMemo(() => (open ? shareLinks(doc) : null), [open, doc]);
+  const url = links?.[destino] ?? '';
   const qr = useMemo(() => (url ? makeQr(url) : null), [url]);
 
   useEffect(() => {
@@ -104,21 +103,30 @@ export function ShareDialog() {
             <span className="seg share-seg" role="group" aria-label="Para onde o link abre">
               <button
                 type="button"
-                className={page === 'editor.html' ? 'ghost active' : 'ghost'}
+                className={destino === 'bancada' ? 'ghost active' : 'ghost'}
                 data-hand="share:pc"
                 title="Quem abrir no PC monta e edita o circuito"
-                onClick={() => setPage('editor.html')}
+                onClick={() => setDestino('bancada')}
               >
-                PC (editor)
+                PC (bancada)
               </button>
               <button
                 type="button"
-                className={page === 'cardboard.html' ? 'ghost active' : 'ghost'}
+                className={destino === 'cardboard' ? 'ghost active' : 'ghost'}
                 data-hand="share:vr"
-                title="Quem abrir no celular vê na bancada, para o viewer"
-                onClick={() => setPage('cardboard.html')}
+                title="Quem abrir no celular vê na bancada 3D, para o viewer"
+                onClick={() => setDestino('cardboard')}
               >
-                Celular (viewer)
+                Celular (cardboard)
+              </button>
+              <button
+                type="button"
+                className={destino === 'espelho' ? 'ghost active' : 'ghost'}
+                data-hand="share:espelho"
+                title="Quem abrir no projetor vê o espelho da sala, ao vivo e sem edição"
+                onClick={() => setDestino('espelho')}
+              >
+                Projetor (espelho)
               </button>
             </span>
 
@@ -144,7 +152,9 @@ export function ShareDialog() {
 
             <p className="hint">
               Aponte a câmera do celular para o QR: a turma abre este circuito pronto, sem
-              reconstruir. O link guarda o circuito inteiro — nada sai deste navegador.
+              reconstruir. O link guarda o circuito inteiro — nada sai deste navegador. O
+              projetor pode abrir pelo destino <em>Projetor (espelho)</em>: mesma imagem,
+              sem edição.
             </p>
           </div>
         </div>

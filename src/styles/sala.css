@@ -1,0 +1,80 @@
+/* A SALA (rota #/ajuda): tela de "o que é e como usar" — layout PRÓPRIO,
+   escopado em `.sala` (nada de body/:root aqui: este CSS entra junto da
+   rota e não pode apontar o resto do app quando as telas trocam). */
+.sala {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 32px 24px;
+  color: var(--ink);
+}
+
+.sala h1 {
+  margin: 0;
+  font-size: 2rem;
+  letter-spacing: -0.02em;
+}
+
+.sala .sub {
+  color: var(--dim);
+  margin: 4px 0 0;
+}
+
+.sala .passos {
+  list-style: none;
+  padding: 0;
+  margin: 28px 0;
+  display: grid;
+  gap: 14px;
+}
+
+.sala .passos li {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 16px;
+}
+
+.sala .passos strong {
+  display: block;
+  margin-bottom: 6px;
+}
+
+.sala .passos span {
+  display: block;
+  color: var(--dim);
+  margin-bottom: 10px;
+}
+
+.sala .passos em {
+  font-style: normal;
+  color: var(--ink);
+}
+
+.sala .passos a,
+.sala .voltar a,
+.sala .doc a {
+  color: var(--accent);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.sala .doc {
+  color: var(--dim);
+  font-size: 0.9rem;
+}
+
+.sala code {
+  background: var(--panel);
+  padding: 1px 6px;
+  border-radius: 4px;
+}
+
+@media (max-width: 600px) {
+  .sala {
+    padding: 20px 16px;
+  }
+
+  .sala h1 {
+    font-size: 1.6rem;
+  }
+}

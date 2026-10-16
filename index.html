@@ -3,36 +3,21 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <link rel="stylesheet" href="/src/styles/spike.css" />
+    <meta name="color-scheme" content="dark" />
+    <meta
+      name="description"
+      content="handphys — laboratório virtual de física por realidade mista: bancada 2D/3D, espelho de projeção e cardboard."
+    />
     <title>handphys — laboratório virtual de física</title>
   </head>
-  <body>
-    <main class="landing">
-      <h1>handphys</h1>
-      <p class="sub">Laboratório virtual de física por realidade mista — <strong>Fase 4</strong>: bancada 2D/3D com mãos ou mouse, espelho ao vivo da sala, desafios com verificação automática e estação de Kirchhoff.</p>
-      <ul class="spikes">
-        <li>
-          <a href="editor.html">🔌 Editor de circuitos — Fases 1–2 e 4</a>
-          <span>Monte o circuito no quadro 2D ou na bancada 3D, ligue os fios (mouse ou pinça da webcam) e acompanhe V/I/R ao vivo. Questão da aula na projeção, relatórios CSV/JSON e share por QR.</span>
-        </li>
-        <li>
-          <a href="mirror.html">📖 Espelho da sala — projeção</a>
-          <span>A MESMA bancada ao vivo no projetor: leituras em letra de sala, questão da aula, desafios e as contas de Kirchhoff — nada editável.</span>
-        </li>
-        <li>
-          <a href="cardboard.html">🥽 Cardboard — Fase 3a</a>
-          <span>Os circuitos na bancada 3D em estéreo no celular: mire + toque para ver V/I (giroscópio ou arrastar).</span>
-        </li>
-        <li>
-          <a href="spikes/hands.html">🖥️ Spike0.1 — Hand tracking na webcam</a>
-          <span>MediaPipe Hand Landmarker: fps, latência e estabilidade do gesto de pinça no PC da escola.</span>
-        </li>
-        <li>
-          <a href="spikes/cardboard.html">🥽 Spike0.2 — Cardboard estéreo + giroscópio</a>
-          <span>Render estéreo split-screen e DeviceOrientation no celular (precisa HTTPS).</span>
-        </li>
-      </ul>
-      <p class="doc">Plano completo: <code>docs/PLANO.md</code> · Checklist do spike: <code>docs/SPIKE.md</code></p>
-    </main>
+  <body class="editor-page">
+    <div id="root"></div>
+    <noscript>
+      <p style="font: 15px system-ui; color: #e6edf3; padding: 24px">
+        O handphys é um app de verdade e precisa de JavaScript. Ative o JavaScript e
+        recarregue esta página.
+      </p>
+    </noscript>
+    <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

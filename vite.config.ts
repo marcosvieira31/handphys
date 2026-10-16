@@ -23,9 +23,12 @@ export default defineConfig({
     rollupOptions: {
       input: {
         main: 'index.html',
+        // redireciona para a raiz (a bancada virou o app) — mantidos como
+        // entrada para os QRs antigos continuarem caindo em algo
         editor: 'editor.html',
+        mirror: 'mirror.html', // redireciona para a rota #/espelho
         cardboard: 'cardboard.html',
-        mirror: 'mirror.html',
+        spikesHome: 'spikes/index.html',
         hands: 'spikes/hands.html',
         spikeCardboard: 'spikes/cardboard.html',
       },

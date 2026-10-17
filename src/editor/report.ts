@@ -1,14 +1,5 @@
-import type { CircuitDoc, CompKind, Placed, Reading } from '../core/netlist';
-
-/** Rótulos do relatório (mesmos do Inspector e do espelho). */
-const KIND_LABEL: Record<CompKind, string> = {
-  vsource: 'Fonte',
-  resistor: 'Resistor',
-  capacitor: 'Capacitor',
-  lamp: 'Lâmpada',
-  switch: 'Chave',
-  ground: 'Terra',
-};
+import { KIND_LABEL } from '../core/kinds';
+import type { CircuitDoc, Placed, Reading } from '../core/netlist';
 
 /** Cabeçalho do CSV (12 colunas). */
 export const CSV_HEAD =

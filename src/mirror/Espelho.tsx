@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
-import { readCircuit, type CompKind } from '../core/netlist';
+import { KIND_LABEL } from '../core/kinds';
+import { readCircuit } from '../core/netlist';
 import { challengeById, evaluateChallenge } from '../editor/challenges';
+import { KIND_ICON } from '../editor/icons';
 import { Kirchhoff } from '../editor/Kirchhoff';
 import { Rc } from '../editor/Rc';
 import { formatAmps, formatValue } from '../editor/symbol';
@@ -14,15 +16,6 @@ import './espelho.css';
 import { MirrorFollower } from './follower';
 import type { Msg } from './protocol';
 import { joinRoom, roomFromSearch, SALA_LOG, type RoomChannel, type StatusSala } from './peer';
-
-const KIND_LABEL: Record<CompKind, string> = {
-  vsource: 'Fonte',
-  resistor: 'Resistor',
-  capacitor: 'Capacitor',
-  lamp: 'Lâmpada',
-  switch: 'Chave',
-  ground: 'Terra',
-};
 
 const STATUS: Record<'esperando' | 'ao-vivo' | 'parado', string> = {
   esperando: 'esperando a tela que monta…',
@@ -200,10 +193,14 @@ export function Espelho() {
             <tbody>
               {reading.comps.map((r) => {
                 const comp = doc.comps.find((c) => c.id === r.id);
+                const Ico = KIND_ICON[r.kind];
                 return (
                   <tr key={r.id}>
                     <td>
-                      <code>{r.id}</code> {KIND_LABEL[r.kind]}
+                      <span className="comp">
+                        <Ico size={20} />
+                        <code>{r.id}</code> {KIND_LABEL[r.kind]}
+                      </span>
                     </td>
                     <td>{comp ? formatValue(r.kind, comp.value) : '—'}</td>
                     <td className="num">{r.volts.toFixed(2)}</td>

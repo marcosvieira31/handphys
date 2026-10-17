@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import './style.css';
+import { KIND_LABEL } from '../core/kinds';
 import { readCircuit, type CircuitDoc, type Reading } from '../core/netlist';
 import { EXAMPLES } from '../editor/examples';
 import { DwellController } from '../hands/dwell';
@@ -23,15 +24,6 @@ const IPD = 0.064;
 const EYE_FOV = 75;
 const HEAD_POS: [number, number, number] = [0, 15, 21];
 const HEAD_PITCH = -0.55; // olhar na bancada (30 de lado, centro na origem)
-
-const KIND_LABEL: Record<string, string> = {
-  vsource: 'Fonte',
-  resistor: 'Resistor',
-  capacitor: 'Capacitor',
-  lamp: 'Lâmpada',
-  switch: 'Chave',
-  ground: 'Terra',
-};
 
 const canvas = document.querySelector<HTMLCanvasElement>('#view')!;
 const gate = document.querySelector<HTMLElement>('#gate')!;

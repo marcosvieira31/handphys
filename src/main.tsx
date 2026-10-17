@@ -2,6 +2,7 @@ import { StrictMode, Suspense, lazy, useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { bootFromLink } from './editor/share';
 import { useEditor } from './editor/store';
+import { iniciarTema } from './editor/theme';
 import { TITULOS, viewDaHash, type Vista } from './rotas';
 import './styles/editor.css';
 
@@ -27,6 +28,10 @@ const Sala = lazy(async () => ({ default: (await import('./Sala')).Sala }));
 // Circuito no link (?c=): entra no estado ANTES do React montar — sem isso a
 // tela pisca vazia e quem abre o QR vê o quadro em branco por um frame.
 const shared = bootFromLink();
+
+// Tema claro/escuro: também ANTES do React (é atributo do <html>, não do app).
+// Sem isso, quem escolheu o claro levaria um piscar escuro a cada recarga.
+iniciarTema(document.documentElement);
 
 function Telas() {
   const [vista, setVista] = useState<Vista>(() => viewDaHash(location.hash));

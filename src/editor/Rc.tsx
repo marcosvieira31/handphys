@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { CircuitDoc } from '../core/netlist';
 import { rcStation, TAU_FRACAO, type RcCurve } from '../core/rc';
+import { IcoTau } from './icons';
 import { formatAmps } from './symbol';
 import { useEditor } from './store';
 
@@ -212,8 +213,16 @@ export function Rc({ doc }: { doc: CircuitDoc }) {
   const tc = prog * (ativa?.window ?? 0);
 
   return (
-    <section className="rc">
-      <h3>Estação RC — carga e descarga</h3>
+    <section className="card rc">
+      <h3>
+        <IcoTau size={18} />
+        Carga e descarga
+        <span className="selo">constante τ</span>
+      </h3>
+      <p className="card-sub">
+        O capacitor enche e esvazia. Escolha o regime e veja, no gráfico, quanto tempo a
+        tensão leva para chegar lá.
+      </p>
 
       <div className="rc-modos" role="group" aria-label="Experiência">
         <button

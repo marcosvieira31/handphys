@@ -204,9 +204,8 @@ export function MirrorToggle() {
             {sala && <p className="share-code">{sala.code}</p>}
 
             <p className="hint">
-              Quem está em outro aparelho da mesma rede escaneia o QR (ou abre o link da
-              sala — o mesmo que o QR guarda, com o código na URL) e vê esta tela ao
-              vivo. Os dados andam de aparelho a aparelho — só o pareamento passa pela
+              Quem está em outro aparelho da mesma rede escaneia o QR (ou abre o link da sala) e vê
+              esta tela ao vivo. O circuito anda de aparelho a aparelho — só o pareamento passa pela
               internet.
             </p>
 

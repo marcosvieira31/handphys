@@ -1,5 +1,6 @@
 import { useCallback } from 'react';
 import { hands, useHandsStatus, type HandFilter } from '../hands/controller';
+import { IcoMao } from './icons';
 
 const FILTERS: HandFilter[] = ['auto', 'right', 'left', 'lock'];
 const FILTER_TEXT: Record<HandFilter, string> = {
@@ -29,29 +30,38 @@ export function HandsPanel() {
   }, []);
 
   return (
-    <section className="editor-box">
-      <h3>Mãos (webcam)</h3>
+    <section className="card">
+      <h3>
+        <IcoMao size={18} />
+        Mãos (webcam)
+      </h3>
       {!st.active && !st.starting && (
         <>
+          <p className="card-sub">
+            Sem mouse? A câmera acompanha as suas mãos. Ela fica só nesta máquina e nunca entra na
+            cena — o que aparece é o esqueleto.
+          </p>
           <div className="actions">
-            <button type="button" onClick={() => hands.toggle()}>
+            <button type="button" data-hand="maos" onClick={() => hands.toggle()}>
               Usar as mãos
             </button>
           </div>
-          <p className="hint">
-            Gesto de <strong>pinça</strong>: feche para apertar/arrastar e abrir para soltar — no
-            quadro 2D, na bancada 3D e nos botões da tela (a pinça clica neles).{' '}
-            <strong>Duas mãos</strong> abrindo e juntando dão zoom só enquanto{' '}
-            <strong>Mão que comanda</strong> estiver em <strong>Qualquer</strong> (ou use os
-            botões −/%/+ no canto). O esqueleto fica maior quando a mão se aproxima da câmera e a
-            cena mostra só o esqueleto, nunca o vídeo. Com a câmera ligada,{' '}
-            <strong>Mão que comanda</strong> restringe tudo — cursor, pinça, calibração e zoom — à
-            UMA mão escolhida (direita, esquerda ou travar na que estiver em uso): a outra fica
-            apagada e não comanda nada.
-          </p>
+          <ul className="gestos">
+            <li>
+              <strong>Pinça</strong> — feche para apertar e arrastar, abra para soltar (vale no
+              quadro 2D, na bancada 3D e nos botões da tela).
+            </li>
+            <li>
+              <strong>Zoom</strong> — com as duas mãos, abra e junte.
+            </li>
+            <li>
+              <strong>Mão que comanda</strong> — depois de ligar, dá para deixar só a direita, só a
+              esquerda, ou travar na que estiver em uso.
+            </li>
+          </ul>
         </>
       )}
-      {st.starting && <p className="hint">Ligando câmera e modelo…</p>}
+      {st.starting && <p className="card-sub">Ligando câmera e modelo…</p>}
       {st.error && <p className="notice error">{st.error}</p>}
       {st.active && (
         <>
@@ -124,6 +134,10 @@ export function HandsPanel() {
               </button>
             ))}
           </div>
+          <p className="card-sub">
+            Cursor, pinça, calibração e zoom seguem só a mão escolhida; a outra fica apagada e não
+            comanda nada.
+          </p>
           {st.calibrating ? (
             <p className="hint">
               Mostre UMA mão para a câmera.{' '}

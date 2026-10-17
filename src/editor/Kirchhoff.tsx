@@ -1,15 +1,8 @@
 import { KCL_TOL, fechaConta, malhas, porNo } from '../core/kirchhoff';
-import type { CompKind, Reading } from '../core/netlist';
+import { KIND_LABEL } from '../core/kinds';
+import type { Reading } from '../core/netlist';
+import { IcoMalha, IcoNo } from './icons';
 import { formatAmps } from './symbol';
-
-const KIND_LABEL: Record<CompKind, string> = {
-  vsource: 'Fonte',
-  resistor: 'Resistor',
-  capacitor: 'Capacitor',
-  lamp: 'Lâmpada',
-  switch: 'Chave',
-  ground: 'Terra',
-};
 
 /** Tensão no formato da tabela de leituras (toFixed(2), mesmo ponto). */
 const fmtV = (v: number) => `${v.toFixed(2)} V`;
@@ -39,8 +32,16 @@ export function Kirchhoff({ reading }: { reading: Reading }) {
   return (
     <>
       {nos.length > 0 && (
-        <section className="kirchhoff">
-          <h3>Kirchhoff — corrente por nó</h3>
+        <section className="card kirchhoff">
+          <h3>
+            <IcoNo size={18} />
+            Corrente no nó
+            <span className="selo">1ª lei de Kirchhoff</span>
+          </h3>
+          <p className="card-sub">
+            Num mesmo ponto do circuito, tudo o que chega também sai. Somando o que entra e
+            tirando o que sai, a conta fecha em zero.
+          </p>
           <ul className="nos">
             {nos.map((n) => (
               <li key={n.net}>
@@ -66,15 +67,21 @@ export function Kirchhoff({ reading }: { reading: Reading }) {
               </li>
             ))}
           </ul>
-          <p className="hint">
-            Σ = o que entra menos o que sai: a 1ª lei de Kirchhoff pede zero.
-          </p>
+          <p className="card-sub">Σ = (o que entra) − (o que sai): a 1ª lei pede zero.</p>
         </section>
       )}
 
       {voltas.length > 0 && (
-        <section className="kirchhoff">
-          <h3>Kirchhoff — tensão nas malhas</h3>
+        <section className="card kirchhoff">
+          <h3>
+            <IcoMalha size={18} />
+            Tensão na volta
+            <span className="selo">2ª lei de Kirchhoff</span>
+          </h3>
+          <p className="card-sub">
+            Dando uma volta completa pelo circuito, a tensão que sobe é igual à que cai: a
+            soma de tudo fecha em zero.
+          </p>
           <ol className="malhas">
             {voltas.map((m, i) => (
               <li key={m.passos.map((p) => p.id).join('+')} className="malha">
@@ -112,9 +119,7 @@ export function Kirchhoff({ reading }: { reading: Reading }) {
               </li>
             ))}
           </ol>
-          <p className="hint">
-            Σ ao redor da volta = 0: a 2ª lei de Kirchhoff pede zero.
-          </p>
+          <p className="card-sub">Σ ao redor da volta = 0: a 2ª lei pede zero.</p>
         </section>
       )}
     </>

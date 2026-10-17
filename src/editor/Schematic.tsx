@@ -202,12 +202,13 @@ export function Schematic({ reading }: { reading: Reading }) {
     const sel = selection?.kind === 'wire' && selection.id === w.id;
     const pts = wireRoute(doc, w);
     const d = pts.map((p) => `${p.x * CELL},${p.y * CELL}`).join(' ');
-    const stroke = sel ? '#58a6ff' : colorByVoltage ? voltageColor(v, reading.maxVolts) : '#7d8590';
+    const stroke = colorByVoltage ? voltageColor(v, reading.maxVolts) : undefined;
     return (
       <g key={w.id} className={sel ? 'wire selected' : 'wire'}>
         {/* caminho largo invisível: facilita o clique sem afinar o traço */}
         <polyline points={d} fill="none" stroke="transparent" strokeWidth={9} />
         <polyline
+          className="wire-line"
           points={d}
           fill="none"
           stroke={stroke}
@@ -256,9 +257,9 @@ export function Schematic({ reading }: { reading: Reading }) {
     const pts = wireRoute({ comps: doc.comps, wires: [...doc.wires, preview] }, preview);
     draftLine = (
       <polyline
+        className="draft-line"
         points={pts.map((p) => `${p.x * CELL},${p.y * CELL}`).join(' ')}
         fill="none"
-        stroke="#58a6ff"
         strokeWidth={2.5}
         strokeDasharray="4 3"
         strokeLinecap="round"
@@ -290,7 +291,7 @@ export function Schematic({ reading }: { reading: Reading }) {
             cy={pos.y * CELL}
             r={isSnap ? 9 : 6.5}
             fill="none"
-            stroke={isSnap ? '#58a6ff' : '#8b949e'}
+            className={isSnap ? 'ring snap' : 'ring'}
             strokeWidth={isSnap ? 2.5 : 1.5}
             strokeDasharray={isSnap ? undefined : '3 2'}
             opacity={isSnap ? 1 : 0.75}
@@ -332,7 +333,7 @@ export function Schematic({ reading }: { reading: Reading }) {
     >
       <defs>
         <pattern id="grid" width={CELL} height={CELL} patternUnits="userSpaceOnUse">
-          <path d={`M ${CELL} 0 L 0 0 0 ${CELL}`} fill="none" stroke="#1c2128" strokeWidth={0.6} />
+          <path d={`M ${CELL} 0 L 0 0 0 ${CELL}`} fill="none" className="grid-line" strokeWidth={0.6} />
         </pattern>
       </defs>
       <rect width="100%" height="100%" fill="url(#grid)" />

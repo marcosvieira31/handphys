@@ -3,6 +3,7 @@ import { readCircuit } from '../core/netlist';
 import { challengeById, evaluateChallenge } from './challenges';
 import { EXAMPLES } from './examples';
 import { HandsLayer } from './HandsLayer';
+import { IcoBaixar, IcoBancada, IcoLixeira } from './icons';
 import { Inspector } from './Inspector';
 import { ItemsRail, ViewRail } from './Rails';
 import { MirrorToggle } from './MirrorToggle';
@@ -11,6 +12,7 @@ import { SceneView } from './SceneView';
 import { ShareDialog } from './ShareDialog';
 import { downloadCsv, downloadJson, type DesafioRel } from './report';
 import { useEditor } from './store';
+import { ThemeToggle } from './ThemeToggle';
 import { applyZoom, applyZoomReset } from './zoom';
 
 /** `ok`/`bad` = a página abriu com `?c=` (circuito no link) — bom ou podre. */
@@ -62,48 +64,72 @@ export function App({ shared = 'none' }: { shared?: 'none' | 'ok' | 'bad' }) {
   return (
     <div className="editor">
       <header className="topbar">
-        <h1>handphys — bancada</h1>
+        <div className="marca">
+          <IcoBancada size={20} />
+          <h1>
+            <strong>handphys</strong> bancada
+          </h1>
+        </div>
         <nav>
           <a href="#/ajuda" data-hand="sala" title="O que é o handphys e as telas da sala">
             Ajuda
           </a>
           <span className="sep" />
-          {EXAMPLES.map((ex, i) => (
-            <button
-              key={ex.name}
-              type="button"
-              className="ghost"
-              onClick={() => load(ex.doc)}
-              data-hand={`example:${i}`}
-            >
-              {ex.name}
-            </button>
-          ))}
-          <ShareDialog />
-          <MirrorToggle />
-          <button
-            type="button"
-            className="ghost"
-            onClick={() => downloadCsv(doc, reading)}
-            disabled={!doc.comps.length}
-            title="Baixar o circuito como CSV (abre no Excel/LibreOffice)"
-            data-hand="csv"
-          >
-            CSV
-          </button>
-          <button
-            type="button"
-            className="ghost"
-            onClick={() => downloadJson(doc, reading, desafioRel)}
-            disabled={!doc.comps.length}
-            title="Baixar o relatório JSON (montagem + leituras + veredito do desafio)"
-            data-hand="json"
-          >
-            JSON
-          </button>
-          <button type="button" className="ghost" onClick={clear} data-hand="clear">
-            Limpar
-          </button>
+          <span className="grupo" aria-label="Exemplos prontos">
+            {EXAMPLES.map((ex, i) => (
+              <button
+                key={ex.name}
+                type="button"
+                className="ghost"
+                onClick={() => load(ex.doc)}
+                data-hand={`example:${i}`}
+              >
+                {ex.name}
+              </button>
+            ))}
+          </span>
+          <span className="sep" />
+          <span className="grupo" aria-label="Projetar e compartilhar">
+            <ShareDialog />
+            <MirrorToggle />
+          </span>
+          {/* Exportar e limpar são coisas de PROFESSOR (fim da aula), não do
+              gesto de montar: moram num menu para não empurrar a barra para
+              uma terceira linha em janela pequena (o que já acontecia). */}
+          <details className="menu">
+            <summary data-hand="mais" title="Exportar o circuito ou limpar o quadro">
+              ⋯ Mais
+            </summary>
+            <div className="menu-body">
+              <button
+                type="button"
+                className="ghost"
+                onClick={() => downloadCsv(doc, reading)}
+                disabled={!doc.comps.length}
+                title="Baixar o circuito como CSV (abre no Excel/LibreOffice)"
+                data-hand="csv"
+              >
+                <IcoBaixar size={17} />
+                Baixar CSV
+              </button>
+              <button
+                type="button"
+                className="ghost"
+                onClick={() => downloadJson(doc, reading, desafioRel)}
+                disabled={!doc.comps.length}
+                title="Baixar o relatório JSON (montagem + leituras + veredito do desafio)"
+                data-hand="json"
+              >
+                <IcoBaixar size={17} />
+                Baixar JSON
+              </button>
+              <button type="button" className="ghost" onClick={clear} data-hand="clear">
+                <IcoLixeira size={17} />
+                Limpar o quadro
+              </button>
+            </div>
+          </details>
+          <ThemeToggle />
           {shared !== 'none' && (
             <span
               className={shared === 'ok' ? 'chip' : 'chip warn'}

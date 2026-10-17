@@ -1,16 +1,19 @@
+import { KIND_LABEL } from '../core/kinds';
 import type { CompKind } from '../core/netlist';
 import type { WheelEvent as ReactWheelEvent } from 'react';
 import { formatValue, Symbol } from './symbol';
 import { useEditor } from './store';
 import { applyZoom, applyZoomReset } from './zoom';
 
-const ITEMS: { kind: CompKind; label: string; hint: string; value?: number }[] = [
-  { kind: 'vsource', label: 'Fonte', hint: '9 V', value: 9 },
-  { kind: 'resistor', label: 'Resistor', hint: '100 Ω', value: 100 },
-  { kind: 'lamp', label: 'Lâmpada', hint: '20 Ω', value: 20 },
-  { kind: 'capacitor', label: 'Capacitor', hint: '1 µF', value: 1e-6 },
-  { kind: 'switch', label: 'Chave', hint: 'aberta' },
-  { kind: 'ground', label: 'Terra', hint: 'referência 0 V' },
+/** Os itens do trilho: o TIPO e o valor com que a peça nasce. O nome de cada
+ *  uma e o que ela faz vêm de `core/kinds` — a mesma fonte dos painéis. */
+const ITEMS: { kind: CompKind; hint: string; value?: number }[] = [
+  { kind: 'vsource', hint: '9 V', value: 9 },
+  { kind: 'resistor', hint: '100 Ω', value: 100 },
+  { kind: 'lamp', hint: '20 Ω', value: 20 },
+  { kind: 'capacitor', hint: '1 µF', value: 1e-6 },
+  { kind: 'switch', hint: 'aberta' },
+  { kind: 'ground', hint: 'referência 0 V' },
 ];
 
 /**
@@ -90,7 +93,7 @@ export function ItemsRail() {
           className={placing === it.kind ? 'rail-item active' : 'rail-item'}
           onClick={() => arm(placing === it.kind ? null : it.kind)}
           data-hand={`kind:${it.kind}`}
-          title={`${it.label} ${it.hint} — clique e depois no quadro para posicionar`}
+          title={`${KIND_LABEL[it.kind]} ${it.hint} — clique e depois no quadro para posicionar`}
         >
           <svg viewBox="-24 -24 48 48" width={26} height={26} aria-hidden>
             <Symbol
@@ -104,7 +107,7 @@ export function ItemsRail() {
               }}
             />
           </svg>
-          <strong>{it.label}</strong>
+          <strong>{KIND_LABEL[it.kind]}</strong>
           <em>{it.kind === 'switch' ? it.hint : formatValue(it.kind, it.value ?? 0) || it.hint}</em>
         </button>
       ))}

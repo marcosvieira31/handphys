@@ -1,3 +1,4 @@
+import { ThemeToggle } from './editor/ThemeToggle';
 import './styles/sala.css';
 
 /**
@@ -12,7 +13,10 @@ import './styles/sala.css';
 export function Sala() {
   return (
     <main className="sala">
-      <h1>handphys</h1>
+      <div className="sala-top">
+        <h1>handphys</h1>
+        <ThemeToggle />
+      </div>
       <p className="sub">
         Laboratório virtual de física por realidade mista: a turma monta o circuito na
         bancada, a sala inteira acompanha no projetor e o celular vira bancada 3D dentro

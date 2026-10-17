@@ -1,4 +1,5 @@
 import type { CompKind, Placed } from '../core/netlist';
+import { useTema, type Tema } from './theme';
 
 export interface SymbolProps {
   comp: Placed;
@@ -11,13 +12,44 @@ export interface SymbolProps {
 /** Meia-largura do corpo na grade: 1 = corpo + haste, 2 = corpo + terminal. */
 const BODY = 1;
 
-const COLORS = {
-  wire: '#7d8590',
-  hot: '#e3b341',
-  body: '#0d1117',
-  stroke: '#c9d1d9',
-  accent: '#58a6ff',
-  glow: '#f2cc60',
+/**
+ * As cores do DESENHO do quadro (o "papel" do esquemático), por tema: o tema
+ * claro tem tabuleiro branco, então o interior das peças (que existe para o fio
+ * não aparecer por dentro do símbolo) também é branco. O traço escurece, o
+ * âmbar da chave fecha fica mais fechado — o desenho continua legível nos dois.
+ */
+export interface CoresQuadro {
+  /** O interior das peças — é o "papel" do quadro. */
+  body: string;
+  /** O traço dos componentes. */
+  stroke: string;
+  /** Terminal/peça em foco. */
+  accent: string;
+  /** Chave fechada (a faca encostada). */
+  hot: string;
+  /** Lâmpada acesa. */
+  glow: string;
+  /** Terminal em repouso. */
+  dot: string;
+}
+
+export const CORES_QUADRO: Record<Tema, CoresQuadro> = {
+  escuro: {
+    body: '#0d1117',
+    stroke: '#c9d1d9',
+    accent: '#58a6ff',
+    hot: '#e3b341',
+    glow: '#f2cc60',
+    dot: '#8b949e',
+  },
+  claro: {
+    body: '#ffffff',
+    stroke: '#1f2937',
+    accent: '#0969da',
+    hot: '#b06a00',
+    glow: '#e3b341',
+    dot: '#6b7280',
+  },
 };
 
 /**
@@ -27,7 +59,8 @@ const COLORS = {
  * lugar, o fio deixa de encostar — por isso os dois vivem no mesmo módulo.
  */
 export function Symbol({ comp, glow = 0, active = false }: SymbolProps) {
-  const stroke = active ? COLORS.accent : COLORS.stroke;
+  const cores = CORES_QUADRO[useTema()];
+  const stroke = active ? cores.accent : cores.stroke;
   const rot = comp.rot;
   const terminal = (i: 0 | 1) => (
     <circle
@@ -35,7 +68,7 @@ export function Symbol({ comp, glow = 0, active = false }: SymbolProps) {
       cx={(i === 0 ? -BODY : BODY) * 16}
       cy={0}
       r={active ? 5.5 : 4.5}
-      fill={active ? COLORS.accent : '#8b949e'}
+      fill={active ? cores.accent : cores.dot}
       className="terminal"
     />
   );
@@ -51,7 +84,7 @@ export function Symbol({ comp, glow = 0, active = false }: SymbolProps) {
       )}
 
       {comp.kind === 'resistor' && (
-        <rect x={-10} y={-5} width={20} height={10} rx={1.5} fill={COLORS.body} stroke={stroke} strokeWidth={2} />
+        <rect x={-10} y={-5} width={20} height={10} rx={1.5} fill={cores.body} stroke={stroke} strokeWidth={2} />
       )}
 
       {comp.kind === 'capacitor' && (
@@ -63,10 +96,10 @@ export function Symbol({ comp, glow = 0, active = false }: SymbolProps) {
 
       {comp.kind === 'lamp' && (
         <>
-          {glow > 0 && <circle r={11 + glow * 3} fill={COLORS.glow} opacity={Math.min(0.55, glow * 0.4)} />}
-          <circle r={9} fill={glow > 0 ? COLORS.glow : COLORS.body} stroke={stroke} strokeWidth={2} />
-          <line x1={-6.4} y1={-6.4} x2={6.4} y2={6.4} stroke={COLORS.body} strokeWidth={2} />
-          <line x1={-6.4} y1={6.4} x2={6.4} y2={-6.4} stroke={COLORS.body} strokeWidth={2} />
+          {glow > 0 && <circle r={11 + glow * 3} fill={cores.glow} opacity={Math.min(0.55, glow * 0.4)} />}
+          <circle r={9} fill={glow > 0 ? cores.glow : cores.body} stroke={stroke} strokeWidth={2} />
+          <line x1={-6.4} y1={-6.4} x2={6.4} y2={6.4} stroke={cores.body} strokeWidth={2} />
+          <line x1={-6.4} y1={6.4} x2={6.4} y2={-6.4} stroke={cores.body} strokeWidth={2} />
         </>
       )}
 
@@ -79,7 +112,7 @@ export function Symbol({ comp, glow = 0, active = false }: SymbolProps) {
             y1={0}
             x2={comp.closed ? 10 : 7}
             y2={comp.closed ? 0 : -11}
-            stroke={comp.closed ? COLORS.hot : stroke}
+            stroke={comp.closed ? cores.hot : stroke}
             strokeWidth={2.5}
           />
         </>

@@ -62,8 +62,8 @@ body.espelho-page {
 }
 
 .dot.ao-vivo {
-  background: #3fb950;
-  box-shadow: 0 0 0 4px rgba(63, 185, 80, 0.18);
+  background: var(--ok);
+  box-shadow: 0 0 0 4px var(--ok-soft);
 }
 
 .dot.esperando {
@@ -83,7 +83,7 @@ body.espelho-page {
   gap: 6px 14px;
   margin: 12px 16px 0;
   padding: 12px 16px;
-  background: #12171e;
+  background: var(--card);
   border: 1px solid var(--line);
   border-left: 4px solid var(--hot);
   border-radius: 10px;
@@ -144,7 +144,7 @@ body.espelho-page {
   gap: 4px 16px;
   margin: 0 0 12px;
   padding: 8px 12px;
-  background: #12171e;
+  background: var(--card);
   border: 1px solid var(--line);
   border-radius: 8px;
   font-size: 16px;
@@ -162,11 +162,11 @@ body.espelho-page {
 }
 
 .espelho-desafio.ok {
-  border-color: #3fb950;
+  border-color: var(--ok);
 }
 
 .espelho-desafio.ok .espelho-desafio-ver {
-  color: #3fb950;
+  color: var(--ok);
 }
 
 /* a mesma tabela de Kirchhoff do painel, em letra de projeção: a turma lê a
@@ -256,6 +256,45 @@ body.espelho-page {
   padding: 8px 12px;
 }
 
+/* ---------- os cartões das estações na projeção ----------
+   A mesma estrutura do painel (cartão, título, linha de apoio, selo), só que
+   em letra de sala: o que mudou no painel mudou aqui, sem ter de reescrever. */
+.espelho-read .card {
+  padding: 12px 14px;
+  margin-bottom: 14px;
+  border-radius: var(--radius);
+}
+
+.espelho-read .card h3 {
+  font-size: 17px;
+  gap: 9px;
+}
+
+.espelho-read .card h3 svg {
+  width: 22px;
+  height: 22px;
+}
+
+.espelho-read .card-sub {
+  margin: 0 0 10px;
+  font-size: 15px;
+  line-height: 1.4;
+}
+
+.espelho-read .selo {
+  padding: 2px 9px;
+  font-size: 13px;
+}
+
+/* o número da tabela é o que a última fileira lê */
+.espelho-read .readings .num {
+  font-size: 22px;
+}
+
+.espelho-read .readings .comp {
+  gap: 8px;
+}
+
 /* ---------- celular: a projeção vira a TELA DO ALUNO ----------
    Mesma imagem, letra reduzida: o cartão de questão e as tabelas cabem em
    360 px sem rolagem horizontal, e o rodapé continua rolável na vertical. */
@@ -294,6 +333,14 @@ body.espelho-page {
   .readings.big th,
   .readings.big td {
     padding: 4px 6px;
+  }
+
+  .espelho-read .readings .num {
+    font-size: 15px;
+  }
+
+  .espelho-read .card-sub {
+    font-size: 13px;
   }
 
   .espelho-read .kirchhoff .nos > li,

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { fechaConta, malhas, porNo } from '../core/kirchhoff';
 import { readCircuit, terminalPos, wireRoute } from '../core/netlist';
+import { rcStation } from '../core/rc';
 import { EXAMPLES } from './examples';
 
 /** Exemplos quebrados já morderam (Série × paralelo em curto): todos resolvem. */
@@ -114,7 +115,22 @@ describe('exemplos do editor/Cardboard', () => {
     expect(gnd.ramos.filter((r) => r.sentido === 'entra')).toHaveLength(3);
   });
 
-  it('2ª lei: toda volta de exemplo fecha a tensão — e as independentes são 1, 1 e 3', () => {
+  it('Circuito RC: em regime o capacitor é circuito aberto — 9 V e 0 A', () => {
+    const doc = EXAMPLES[3].doc;
+    const out = readCircuit(doc);
+    expect(out.error).toBeNull();
+    expect(out.diagnostics.join(' ')).not.toMatch(/curto/i);
+    const cap = out.comps.find((c) => c.id === 'c1')!;
+    expect(cap.volts).toBeCloseTo(9, 6); // carregado: a tensão toda da fonte
+    expect(cap.amps).toBeCloseTo(0, 9); // e sem corrente nenhuma passando
+    expect(out.comps.find((c) => c.id === 'r1')!.amps).toBeCloseTo(0, 9);
+    // a estação RC é quem mostra o que acontece no instante em que a chave fecha
+    const st = rcStation(doc)!;
+    expect(st.carga!.vinf).toBeCloseTo(9, 6);
+    expect(st.carga!.tau).toBeCloseTo(1, 1); // 1 kΩ · 1000 µF
+  });
+
+  it('2ª lei: toda volta de exemplo fecha a tensão — e as independentes são 1, 1, 3 e 1', () => {
     const contagens: number[] = [];
     for (const ex of EXAMPLES) {
       const out = readCircuit(ex.doc);
@@ -126,6 +142,6 @@ describe('exemplos do editor/Cardboard', () => {
       }
       contagens.push(ms.length);
     }
-    expect(contagens).toEqual([1, 1, 3]);
+    expect(contagens).toEqual([1, 1, 3, 1]);
   });
 });

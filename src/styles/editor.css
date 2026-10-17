@@ -719,6 +719,119 @@ body.editor-page {
   color: var(--dim);
 }
 
+/* ---------- estação RC: o osciloscópio da carga e da descarga ---------------
+   O traço tem o nível dos 63,2% (onde o τ é lido), a curva do OUTRO regime
+   apagada (o mesmo τ nas duas) e a bolinha da varredura correndo na curva
+   ativa. Cores do tema: o azul é o mesmo da corrente animada nos fios. */
+.rc .rc-scope {
+  display: block;
+  width: 100%;
+  height: auto;
+  margin: 2px 0 6px;
+}
+
+/* o par de botões da chave comutadora: Carregar / Descarregar */
+.rc .rc-modos {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.rc .rc-bg {
+  fill: #0b0f14;
+  stroke: var(--line);
+}
+
+.rc .rc-63 {
+  stroke: var(--line);
+  stroke-dasharray: 3 3;
+}
+
+.rc .rc-tau {
+  stroke: var(--accent);
+  stroke-dasharray: 3 3;
+  opacity: 0.7;
+}
+
+.rc .rc-curve {
+  fill: none;
+  stroke-width: 2;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+
+.rc .rc-curve.other {
+  stroke: var(--dim);
+  stroke-width: 1.5;
+  stroke-dasharray: 4 3;
+  opacity: 0.55;
+}
+
+.rc .rc-curve.active {
+  stroke: var(--accent);
+}
+
+.rc .rc-cursor {
+  fill: var(--accent);
+  stroke: #0b0f14;
+  stroke-width: 1.5;
+}
+
+.rc .rc-lab {
+  fill: var(--dim);
+  font-size: 9px;
+}
+
+.rc .rc-lab.tau {
+  fill: var(--accent);
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.rc-regime {
+  margin: 0 0 6px;
+  font-size: 12px;
+  color: var(--dim);
+}
+
+.rc-regime strong {
+  color: var(--ink);
+}
+
+.rc-nums {
+  list-style: none;
+  margin: 0 0 6px;
+  padding: 6px 8px;
+  background: #12171e;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 3px 12px;
+  font-size: 12px;
+}
+
+.rc-nums li {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.rc-nums span {
+  color: var(--dim);
+}
+
+/* o número que anda junto com a varredura ocupa a linha inteira */
+.rc-nums .rc-agora {
+  grid-column: 1 / -1;
+}
+
+.rc-actions {
+  display: flex;
+  gap: 6px;
+}
+
 code,
 kbd {
   font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;

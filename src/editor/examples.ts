@@ -87,4 +87,30 @@ export const EXAMPLES: { name: string; doc: CircuitDoc }[] = [
       ],
     },
   },
+  {
+    name: 'Circuito RC',
+    // O circuito de sempre do livro: fonte — CHAVE — resistor — capacitor, tudo
+    // em série. Fechada a chave, o capacitor carrega por R até a tensão da
+    // fonte; e como a chave comutadora do laboratório também tem a posição que
+    // troca a fonte por um fio, a estação RC aproveita para mostrar a descarga
+    // pelo MESMO resistor, com o MESMO τ. Números redondos de propósito:
+    // 1 kΩ × 1000 µF = τ de 1,0 s — dá para acompanhar com o dedo na tela.
+    doc: {
+      comps: [
+        { id: 'bat1', kind: 'vsource', x: 4, y: 4, rot: 0, value: 9 },
+        { id: 'sw1', kind: 'switch', x: 7, y: 4, rot: 0, value: 0, closed: true },
+        { id: 'r1', kind: 'resistor', x: 11, y: 4, rot: 0, value: 1000 },
+        { id: 'c1', kind: 'capacitor', x: 15, y: 4, rot: 0, value: 1e-3 },
+      ],
+      // Uma fileira só: o + sai pela chave, atravessa o R e o C, e o retorno
+      // contorna por baixo do banco até o − da fonte (mesmo idioma da escada).
+      wires: [
+        { id: 'w1', from: { x: 5, y: 4 }, to: { x: 6, y: 4 } },
+        { id: 'w2', from: { x: 8, y: 4 }, to: { x: 10, y: 4 } },
+        { id: 'w3', from: { x: 12, y: 4 }, to: { x: 14, y: 4 } },
+        { id: 'w4', from: { x: 16, y: 4 }, to: { x: 16, y: 9 } },
+        { id: 'w5', from: { x: 16, y: 9 }, to: { x: 3, y: 4 } },
+      ],
+    },
+  },
 ];

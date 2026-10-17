@@ -5,6 +5,7 @@ import { CHALLENGES, challengeById, evaluateChallenge } from './challenges';
 import { formatAmps, formatValue } from './symbol';
 import { HandsPanel } from './HandsPanel';
 import { Kirchhoff } from './Kirchhoff';
+import { Rc } from './Rc';
 import { useEditor } from './store';
 
 const KIND_LABEL: Record<CompKind, string> = {
@@ -177,6 +178,8 @@ export function Inspector({ reading, aberto = true }: { reading: Reading; aberto
       )}
 
       <Kirchhoff reading={reading} />
+
+      <Rc doc={doc} />
 
       {selected && (
         <section className="editor-box">

@@ -225,6 +225,28 @@ body.espelho-page {
   font-size: 15px;
 }
 
+/* o osciloscópio RC na projeção: o próprio SVG já escala com a largura do
+   rodapé — aqui só a letra do texto em volta vira letra de sala. */
+.espelho-read .rc {
+  margin-top: 16px;
+}
+
+.espelho-read .rc h3 {
+  margin: 0 0 8px;
+  font-size: 17px;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.espelho-read .rc .rc-regime,
+.espelho-read .rc .rc-nums {
+  font-size: 16px;
+}
+
+.espelho-read .rc .hint {
+  font-size: 14px;
+}
+
 .readings.big {
   font-size: 20px;
 }

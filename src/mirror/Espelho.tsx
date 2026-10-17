@@ -2,10 +2,15 @@ import { useEffect, useState } from 'react';
 import { readCircuit, type CompKind } from '../core/netlist';
 import { challengeById, evaluateChallenge } from '../editor/challenges';
 import { Kirchhoff } from '../editor/Kirchhoff';
+import { Rc } from '../editor/Rc';
 import { formatAmps, formatValue } from '../editor/symbol';
 import { Schematic } from '../editor/Schematic';
 import { useEditor } from '../editor/store';
 import { localChannel } from './channel';
+// A letra de projeção da sala. Veio junto com o `mirror.html` antigo e ficou
+// para trás na integração de um app só — sem este import o rodapé do espelho
+// (leituras, Kirchhoff e estação RC) sai em letra de bancada, não de sala.
+import './espelho.css';
 import { MirrorFollower } from './follower';
 import type { Msg } from './protocol';
 import { joinRoom, roomFromSearch, SALA_LOG, type RoomChannel, type StatusSala } from './peer';
@@ -210,6 +215,7 @@ export function Espelho() {
           </table>
         )}
         <Kirchhoff reading={reading} />
+        <Rc doc={doc} />
       </footer>
     </div>
   );

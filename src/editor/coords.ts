@@ -45,6 +45,22 @@ export function clientToCell(
 }
 
 /**
+ * Tolerância (px de tela) do clique: andou mais que isso, o dedo/mouse ARRASTOU.
+ */
+export const CLIQUE_TOLERANCIA = 5;
+
+/**
+ * Apertou e soltou praticamente no mesmo lugar? É o que separa EDITAR de
+ * ORBITAR na bancada 3D: lá o arraste gira a câmera (OrbitControls), então só
+ * o aperto parado vale como clique — e o clique faz o mesmo que o do quadro 2D
+ * (posiciona o item armado, seleciona, abre a chave). No 2D o arraste move a
+ * peça e quem decide é o `moved` do store; aqui o gesto é o mesmo, medido em px.
+ */
+export function foiClique(a: { x: number; y: number }, b: { x: number; y: number }): boolean {
+  return Math.hypot(b.x - a.x, b.y - a.y) <= CLIQUE_TOLERANCIA;
+}
+
+/**
  * A mira está sobre um botão da bancada ([data-hand])? Nesse caso a pinça
  * CLIQUE no botão (HandsLayer) e o quadro não pode apertar por baixo — senão
  * o item armado já caía na célula sob o botão, "preso na borda". Fora do

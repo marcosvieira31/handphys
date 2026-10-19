@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { cellToWorld, layoutScene, rotToRotY, WIRE_Y, WORLD } from './layout';
+import { cellToWorld, ghostNode, layoutScene, rotToRotY, WIRE_Y, WORLD } from './layout';
 import { readCircuit, type CircuitDoc } from '../core/netlist';
 
 const gray = () => '#7d8590';
@@ -16,6 +16,28 @@ describe('grade => mundo', () => {
     expect(rotToRotY(90)).toBeCloseTo(-Math.PI / 2, 12);
     expect(rotToRotY(180)).toBeCloseTo(-Math.PI, 12);
     expect(rotToRotY(270)).toBeCloseTo((-3 * Math.PI) / 2, 12);
+  });
+});
+
+describe('ghostNode (o fantasma do item armado na bancada 3D)', () => {
+  it('cai na MESMA célula dos componentes de verdade', () => {
+    const g = ghostNode('capacitor', { x: 7, y: 21 });
+    expect([g.wx, g.wz]).toEqual(cellToWorld(7, 21));
+    expect(g.kind).toBe('capacitor');
+    expect(g.id).toBe('ghost'); // id reservado: não é do documento
+  });
+
+  it('células diferentes => lugares diferentes na bancada', () => {
+    expect(ghostNode('resistor', { x: 2, y: 3 }).wx).not.toBe(ghostNode('resistor', { x: 3, y: 3 }).wx);
+    expect(ghostNode('resistor', { x: 2, y: 4 }).wz).toBe(ghostNode('resistor', { x: 2, y: 3 }).wz + 1);
+  });
+
+  it('nasce apagado e sem leitura: é prévia, não peça ligada', () => {
+    const g = ghostNode('lamp', { x: 1, y: 1 });
+    expect(g.glow).toBe(0);
+    expect(g.closed).toBe(false);
+    expect(g.rotY).toBe(0);
+    expect(g.value).toBe(0);
   });
 });
 

@@ -1,4 +1,4 @@
-import type { CircuitDoc, CompKind, Reading } from '../core/netlist';
+import type { CircuitDoc, CompKind, Pt, Reading } from '../core/netlist';
 import { wireRoute } from '../core/netlist';
 import { computeFlow } from '../core/flow';
 
@@ -87,6 +87,17 @@ export interface WireFlowPart {
   points: [number, number, number][];
   /** Amperes; positivo = no sentido dos pontos. */
   amps: number;
+}
+
+/**
+ * A peça que ainda NÃO existe, sob a mira: o fantasma do item armado. Passa
+ * pelo MESMO caminho dos componentes de verdade (célula => mundo), para cair
+ * exatamente onde a peça vai cair — mas não pertence ao documento: não tem
+ * leitura (apagada) nem estado de chave, e usa o id reservado `ghost`.
+ */
+export function ghostNode(kind: CompKind, cell: Pt): CompNode {
+  const [wx, wz] = cellToWorld(cell.x, cell.y);
+  return { id: 'ghost', kind, wx, wz, rotY: 0, value: 0, closed: false, glow: 0 };
 }
 
 export interface SceneLayout {

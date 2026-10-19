@@ -1,12 +1,13 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import type { CircuitDoc, Pt, Reading } from '../core/netlist';
+import type { CircuitDoc, CompKind, Pt, Reading } from '../core/netlist';
 import { flowDuration } from '../core/flow';
 import { voltageColor } from '../editor/colors';
 import { CELL } from '../editor/coords';
 import { clampZoom } from '../editor/zoomMath';
 import {
   cumLength,
+  ghostNode,
   layoutScene,
   pointAlong,
   WORLD,
@@ -49,6 +50,12 @@ export interface LabView {
    * vazio escuro. A grade do quadro FICA: é ela que mostra onde é a bancada.
    */
   setAr(on: boolean): void;
+  /**
+   * FANTASMA do item armado: a peça translúcida sob a mira, para ver ONDE ela
+   * cai antes de soltar. `null` limpa. Não é do documento (não entra no
+   * raycast nem na leitura): some no instante em que a peça de verdade nasce.
+   */
+  setGhost(kind: CompKind | null, cell: Pt | null): void;
   dispose(): void;
 }
 
@@ -156,7 +163,8 @@ function lead(x0: number, x1: number, y: number): THREE.Mesh {
   return m;
 }
 
-function buildComp(c: CompNode): THREE.Group {
+/** Uma peça da bancada: corpo + terminais, no mundo e na rotação do nó. */
+export function buildComp(c: CompNode): THREE.Group {
   const g = new THREE.Group();
   g.position.set(c.wx, 0, c.wz);
   g.rotation.y = c.rotY;
@@ -302,6 +310,27 @@ export function disposeGroup(g: THREE.Object3D) {
     }
   });
   g.clear();
+}
+
+/**
+ * Pinta um grupo como FANTASMA do item armado: véu azul translúcido que não
+ * escreve no z-buffer (não esconde o que está atrás nem a própria peça). Os
+ * materiais vêm de `mat()`, que cria um novo a cada peça — então tingir aqui
+ * não encosta em nenhum componente de verdade.
+ */
+export function marcaFantasma(g: THREE.Object3D): void {
+  g.traverse((o) => {
+    const mesh = o as THREE.Mesh;
+    if (!mesh.isMesh) return;
+    const m = mesh.material as THREE.MeshStandardMaterial;
+    m.transparent = true;
+    m.opacity = 0.45;
+    m.depthWrite = false;
+    if (m.emissive) {
+      m.emissive.set(0x58a6ff); // o azul da bancada: lê como "prévia" nos dois temas
+      m.emissiveIntensity = 0.5;
+    }
+  });
 }
 
 /** Bancada: tampo + grade (mesma grade do esquemático, vista de cima). */
@@ -538,6 +567,34 @@ export function createLabView(
   let layout: SceneLayout | null = null;
   let circuit: THREE.Group | null = null; // componentes+fios+gotas (disposeGroup o destrói)
 
+  // FANTASMA do item armado (a peça que ainda não existe, sob a mira): fica no
+  // `scene`, FORA do `dyn`, de propósito — a mira (`cellAt`) faz raycast no
+  // `dyn` e não pode enxergar a prévia, senão o fantasma "grudava" na própria
+  // mira. Translúcido e sem escrever no z-buffer: é um véu, não uma peça.
+  let fantasma: THREE.Group | null = null;
+  let fantasmaMarca = ''; // kind + célula já pintados (não remonta à toa)
+  const limpaFantasma = () => {
+    if (!fantasma) return;
+    scene.remove(fantasma);
+    disposeGroup(fantasma);
+    fantasma = null;
+    fantasmaMarca = '';
+  };
+  const setGhost = (kind: CompKind | null, cell: Pt | null) => {
+    if (!kind || !cell) {
+      limpaFantasma();
+      return;
+    }
+    const marca = `${kind}:${cell.x},${cell.y}`;
+    if (marca === fantasmaMarca) return;
+    limpaFantasma();
+    fantasmaMarca = marca;
+    fantasma = new THREE.Group();
+    fantasma.add(buildComp(ghostNode(kind, cell)));
+    marcaFantasma(fantasma);
+    scene.add(fantasma);
+  };
+
   // Mira da pinça no 3D: raio do dedo contra a bancada (plano y=0) => célula.
   // Se o raio acerta um componente, mira o CENTRO dele (o imã de terminal/corpo
   // faz o resto); senão, usa a célula da bancada sob o dedo. Cursor já espelhado.
@@ -669,6 +726,7 @@ export function createLabView(
       arLigado = on;
       pintaFundo();
     },
+    setGhost,
     dispose() {
       dead = true;
       cancelAnimationFrame(raf);

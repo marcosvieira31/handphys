@@ -73,6 +73,30 @@ export function mensagemDeErroCamera(nome: string): string {
 }
 
 /**
+ * A CÂMERA PRÓPRIA DO FUNDO fica registrada aqui para que as MÃOS possam PEDIR
+ * a câmera ANTES de chamar `getUserMedia`. No celular, dois `getUserMedia` para
+ * a MESMA câmera não convivem (NotReadableError: "câmera ocupada") — e o AR de
+ * bolso abre a traseira sozinho justamente quando as mãos estão desligadas.
+ * Sem este aviso, ligar as mãos COM o AR ligado morria com a câmera ocupada: o
+ * aluno via o AR na mesa e nunca conseguia manipular com as mãos. Quem registra
+ * é a camada do AR; quem chama é o controller das mãos.
+ */
+let soltarCameraPropria: (() => void) | null = null;
+
+/** A camada do AR diz como soltar a câmera DELA (null ao desmontar/sair do AR). */
+export function registrarCameraDoFundo(soltar: (() => void) | null): void {
+  soltarCameraPropria = soltar;
+}
+
+/**
+ * As mãos vão pedir a câmera: quem a tem na mão devolve AGORA (no-op quando o
+ * fundo está reusando o stream das próprias mãos — esse não é nosso para soltar).
+ */
+export function liberarCameraDoFundo(): void {
+  soltarCameraPropria?.();
+}
+
+/**
  * Fecha o fundo — mas só o que é NOSSO. O stream das mãos continua servindo ao
  * rastreio (a mira não pode cair junto com o modo AR).
  */

@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { registrarCameraDoFundo } from '../ar/fundo';
 import { definirAr, reiniciarAr } from '../editor/ar';
 import { useEditor } from '../editor/store';
 import { bindZoomTarget } from '../editor/zoom';
@@ -797,6 +798,173 @@ describe('mãos com a câmera de TRÁS (o AR ligado): a mesa como o aluno vê', 
     await Promise.resolve();
     expect(trocas).toEqual([true, false]);
     expect(ctl.getSnapshot().camera).toBe('frontal');
+  });
+
+  it('a ESCOLHA do aluno manda por cima da regra do AR', async () => {
+    const ctl = wireUp();
+    expect(cameraDasMaos(true, 'frontal')).toBe('frontal');
+    expect(cameraDasMaos(false, 'traseira')).toBe('traseira');
+    expect(cameraDasMaos(false)).toBe('frontal'); // 'auto' segue a regra
+
+    ctl.setCameraEscolha('traseira'); // sem sessão: só guarda para a próxima
+    expect(ctl.getSnapshot().camera).toBe('traseira');
+    expect(ctl.getSnapshot().cameraEscolha).toBe('traseira');
+
+    definirAr(true); // o AR liga e NÃO derruba a escolha do aluno
+    await Promise.resolve();
+    expect(ctl.getSnapshot().camera).toBe('traseira');
+
+    ctl.setCameraEscolha('frontal');
+    await Promise.resolve();
+    expect(ctl.getSnapshot().camera).toBe('frontal');
+
+    ctl.setCameraEscolha('auto'); // volta à regra: com o AR ligado, a de trás
+    await Promise.resolve();
+    expect(ctl.getSnapshot().camera).toBe('traseira');
+  });
+
+  it('a escolha "De trás" vale mesmo SEM AR: a mira não é espelhada', () => {
+    const ctl = wireUp();
+    ctl.setCameraEscolha('traseira');
+    const { antes, depois } = anda(ctl);
+    expect(depois.x).toBeCloseTo(antes.x + 0.25, 2); // anda junto, como na mesa
+  });
+
+  it('com sessão viva, trocar a escolha reabre a câmera na hora', async () => {
+    const ctl = wireUp();
+    const trocas: boolean[] = [];
+    const interno = ctl as unknown as {
+      hiddenVideo: unknown;
+      status: Record<string, unknown>;
+      tracker: Record<string, unknown>;
+    };
+    interno.hiddenVideo = { srcObject: null, muted: false, play: () => Promise.resolve() };
+    interno.tracker = {
+      running: true,
+      trocarCamera: (_v: unknown, traseira: boolean) => {
+        trocas.push(traseira);
+        return Promise.resolve();
+      },
+    };
+    interno.status = { ...interno.status, active: true };
+
+    ctl.setCameraEscolha('traseira');
+    await Promise.resolve();
+    expect(trocas).toEqual([true]);
+    expect(ctl.getSnapshot().camera).toBe('traseira');
+  });
+
+  it('se nenhuma câmera sobrou depois da troca, a sessão ACABA com aviso', async () => {
+    const ctl = wireUp();
+    const interno = ctl as unknown as {
+      hiddenVideo: unknown;
+      status: Record<string, unknown>;
+      tracker: Record<string, unknown>;
+    };
+    interno.hiddenVideo = { srcObject: null, muted: false, play: () => Promise.resolve() };
+    interno.tracker = {
+      running: false, // o tracker já se deu por parado: não ficou câmera nenhuma
+      trocarCamera: () => Promise.reject(new DOMException('ocupada', 'NotReadableError')),
+    };
+    interno.status = { ...interno.status, active: true };
+
+    definirAr(true);
+    await new Promise((r) => setTimeout(r, 0));
+    // painel dizendo "ativa" com a mira morta seria pior do que dizer a verdade
+    expect(ctl.getSnapshot().active).toBe(false);
+    expect(ctl.getSnapshot().camera).toBe('frontal');
+    expect(ctl.getSnapshot().error).toMatch(/ocupada/);
+  });
+});
+
+describe('a câmera passa de mão em mão (AR ⇄ mãos) no mesmo aparelho', () => {
+  beforeEach(() => {
+    resetDoc();
+    reiniciarAr();
+  });
+  afterEach(() => {
+    reiniciarAr();
+    registrarCameraDoFundo(null);
+  });
+
+  it('ligar as mãos com o AR na tela devolve a câmera do fundo ANTES do pedido', async () => {
+    const ctl = wireUp();
+    const ordem: string[] = [];
+    // é o que a camada do AR registra quando está com a câmera própria na mão
+    registrarCameraDoFundo(() => ordem.push('fundo devolve a câmera'));
+    const interno = ctl as unknown as {
+      hiddenVideo: unknown;
+      tracker: Record<string, unknown>;
+    };
+    interno.hiddenVideo = { srcObject: null, muted: false, play: () => Promise.resolve() };
+    interno.tracker = {
+      running: true,
+      gpuDelegate: '–',
+      getStream: () => null,
+      start: () => {
+        // o aparelho não deixa duas câmeras abertas: aqui a do fundo JÁ foi solta
+        ordem.push('mãos pedem a câmera');
+        return Promise.resolve();
+      },
+    };
+
+    await ctl.toggle();
+    expect(ordem).toEqual(['fundo devolve a câmera', 'mãos pedem a câmera']);
+    expect(ctl.getSnapshot().active).toBe(true);
+    expect(ctl.getSnapshot().tentativa).toBe(1); // desfecho: a camada do AR pode reusar
+  });
+
+  it('largada que FALHA também termina: o contador anda e a mesa pode voltar', async () => {
+    const ctl = wireUp();
+    const interno = ctl as unknown as {
+      hiddenVideo: unknown;
+      tracker: Record<string, unknown>;
+    };
+    interno.hiddenVideo = { srcObject: null, muted: false, play: () => Promise.resolve() };
+    interno.tracker = {
+      running: false,
+      start: () => Promise.reject(new DOMException('negada', 'NotAllowedError')),
+    };
+
+    await ctl.toggle();
+    const st = ctl.getSnapshot();
+    expect(st.active).toBe(false);
+    expect(st.starting).toBe(false);
+    expect(st.error).toMatch(/negada/i);
+    expect(st.tentativa).toBe(1); // sem isso o AR ficaria sem câmera nenhuma
+  });
+
+  describe('largada que TRAVA (a câmera respondeu e o vídeo nunca andou)', () => {
+    afterEach(() => vi.unstubAllGlobals());
+
+    it('desfaz a sessão com aviso em vez de "Ligando câmera e modelo…" para sempre', async () => {
+      // em node não há relógio de tela: o vigia só existe com `window`
+      vi.stubGlobal('window', { setTimeout: (fn: () => void) => setTimeout(fn, 0) });
+      const ctl = wireUp();
+      let parou = false;
+      const interno = ctl as unknown as {
+        hiddenVideo: unknown;
+        tracker: Record<string, unknown>;
+      };
+      interno.hiddenVideo = { srcObject: null, muted: false, play: () => Promise.resolve() };
+      interno.tracker = {
+        running: true,
+        getStream: () => ({ getTracks: () => [] }), // a câmera JÁ respondeu
+        stop: () => {
+          parou = true;
+        },
+        start: () => new Promise(() => {}), // o `play()` nunca volta
+      };
+
+      void ctl.toggle();
+      await new Promise((r) => setTimeout(r, 5));
+      const st = ctl.getSnapshot();
+      expect(parou).toBe(true);
+      expect(st.starting).toBe(false);
+      expect(st.active).toBe(false);
+      expect(st.error).toMatch(/não começou a transmitir/);
+      expect(st.tentativa).toBe(1); // o AR recebe o recado e reabre a câmera dele
+    });
   });
 });
 

@@ -1,5 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
-import { abrirFundo, fecharFundo, mensagemDeErroCamera, type FundoLigado } from '../ar/fundo';
+import {
+  abrirFundo,
+  fecharFundo,
+  mensagemDeErroCamera,
+  registrarCameraDoFundo,
+  type FundoLigado,
+} from '../ar/fundo';
 import { hands, useHandsStatus } from '../hands/controller';
 
 /**
@@ -17,14 +23,21 @@ import { hands, useHandsStatus } from '../hands/controller';
  * sobre o circuito); desligadas, abre-se a câmera de trás. Quando as mãos
  * mudam — ou quando elas TROCAM de câmera por causa do AR (frontal ⇄ de trás)
  * — o efeito roda de novo e reusa o stream novo; e aí só fecha o que é nosso.
+ *
+ * O REPASSE DA CÂMERA: a câmera NOSSA é devolvida na hora em que as mãos vão
+ * pedir (`liberarCameraDoFundo`, no controller) — enquanto elas ligam, este
+ * efeito fica quieto (nada aqui toma a câmera que elas pediram). Se a largada
+ * não der certo, o contador `tentativa` muda e a mesa volta sozinha (é por isso
+ * que ele é a dependência, e não um `if (ligando)`: nascer inerte deixaria o AR
+ * sem câmera nenhuma justamente quando a das mãos falha).
  */
 export function ArLayer() {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [erro, setErro] = useState<string | null>(null);
   // `camera` entra como dependência: as mãos podem trocar de câmera (o AR liga
   // com elas já ligadas na frontal) e este vídeo tem de passar a mostrar o novo
-  // stream — o das mãos, que é quem manda aqui.
-  const { active: maosAtivas, camera } = useHandsStatus(hands);
+  // stream — o das mãos, que é quem manda aqui. `tentativa` fecha o ciclo.
+  const { active: maosAtivas, camera, tentativa } = useHandsStatus(hands);
 
   useEffect(() => {
     const video = videoRef.current;
@@ -32,6 +45,14 @@ export function ArLayer() {
     let vivo = true;
     let fundo: FundoLigado | null = null;
     setErro(null);
+
+    // as mãos vão pedir a câmera: devolvemos a NOSSA agora (a delas não é nossa)
+    registrarCameraDoFundo(() => {
+      if (!fundo || fundo.fonte !== 'propria') return;
+      video.srcObject = null; // nada de quadro congelado: a mesa volta em seguida
+      fecharFundo(fundo);
+      fundo = null;
+    });
 
     void (async () => {
       try {
@@ -49,10 +70,11 @@ export function ArLayer() {
 
     return () => {
       vivo = false;
+      registrarCameraDoFundo(null);
       video.srcObject = null;
       fecharFundo(fundo); // só a câmera que é NOSSA: a das mãos continua na mira
     };
-  }, [maosAtivas, camera]);
+  }, [maosAtivas, camera, tentativa]);
 
   return (
     <>

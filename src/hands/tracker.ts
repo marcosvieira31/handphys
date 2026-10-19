@@ -72,6 +72,8 @@ export class HandTracker {
   private lastVideoTime = -1;
   private videoFrameHandle = 0;
   private stopped = true;
+  /** Número da largada em curso: `stop()` anda com ele e a largada desiste. */
+  private epoch = 0;
   private onFrame: (hands: FrameHand[], stats: FrameStats) => void = () => {};
   private onVideoTick: () => void = () => {};
 
@@ -101,6 +103,11 @@ export class HandTracker {
     traseira = false,
   ): Promise<void> {
     if (!this.stopped) return;
+    // largada com número: se um `stop()` chegar no meio (troca de vista, saída
+    // do AR), esta largada DESISTE em vez de ressuscitar uma câmera que já foi
+    // solta — era assim que o painel ficava "Ligando câmera e modelo…" para
+    // sempre e a mira morria sem aviso.
+    const meu = ++this.epoch;
     this.onFrame = callbacks.onFrame;
     if (callbacks.onVideoTick) this.onVideoTick = callbacks.onVideoTick;
     if (!this.landmarker) {
@@ -108,11 +115,23 @@ export class HandTracker {
       this.landmarker = landmarker;
       this.delegate = delegate;
     }
+    if (this.epoch !== meu) throw new DOMException('largada cancelada', 'AbortError');
     this.video = video;
-    this.stream = await this.pedir(traseira);
-    video.srcObject = this.stream;
+    // a câmera da largada cancelada não pode ficar ABERTA (é ela que o aparelho
+    // só libera para o próximo pedido)
+    const novo = await this.pedir(traseira);
+    if (this.epoch !== meu) {
+      novo.getTracks().forEach((t) => t.stop());
+      throw new DOMException('largada cancelada', 'AbortError');
+    }
+    this.stream = novo;
+    video.srcObject = novo;
     video.muted = true;
     await video.play().catch(() => {});
+    if (this.epoch !== meu) {
+      this.soltarStream();
+      throw new DOMException('largada cancelada', 'AbortError');
+    }
     this.stopped = false;
     this.lastVideoTime = -1;
     this.scheduleVideoFrame();
@@ -122,11 +141,33 @@ export class HandTracker {
    * Troca a câmera da sessão (frontal ⇄ de trás) SEM derrubar o rastreio: o
    * modelo, o laço de quadros e o elemento de vídeo continuam — só o stream
    * muda. A câmera nova é aberta ANTES de soltar a antiga: se ela falhar
-   * (aparelho sem traseira, câmera ocupada por outro app), a que estava
-   * funcionando continua na mira em vez de a sessão cair no meio da aula.
+   * (aparelho sem traseira, permissão revogada), a que estava funcionando
+   * continua na mira em vez de a sessão cair no meio da aula.
+   *
+   * MAS o celular costuma só liberar a câmera antiga DEPOIS de ela ser fechada
+   * (NotReadableError: "câmera ocupada") — é o caso da frontal ⇄ de trás com o
+   * AR ligando. Então, se a primeira tentativa falhar, a antiga é solta e
+   * tenta-se UMA vez de novo; se falhar também, não fica câmera nenhuma e o
+   * tracker se dá por PARADO (quem chamou confere `running` e avisa em vez de
+   * ficar com uma mira morta sem explicação).
    */
   async trocarCamera(video: HTMLVideoElement, traseira: boolean): Promise<void> {
     if (this.stopped) return;
+    try {
+      await this.abrir(traseira, video);
+    } catch (err) {
+      this.soltarStream();
+      try {
+        await this.abrir(traseira, video);
+      } catch (err2) {
+        this.stop();
+        throw err2 ?? err;
+      }
+    }
+  }
+
+  /** Abre a câmera nova, põe no vídeo e só então solta a antiga. */
+  private async abrir(traseira: boolean, video: HTMLVideoElement): Promise<void> {
     const nova = await this.pedir(traseira);
     const antiga = this.stream;
     this.video = video;
@@ -138,6 +179,13 @@ export class HandTracker {
     antiga?.getTracks().forEach((t) => t.stop());
   }
 
+  /** Solta o stream atual sem derrubar o rastreio, para liberar a câmera. */
+  private soltarStream(): void {
+    this.stream?.getTracks().forEach((t) => t.stop());
+    this.stream = null;
+    if (this.video) this.video.srcObject = null;
+  }
+
   /** Único lugar que fala com a câmera: frontal (selfie) ou de trás (a mesa). */
   private pedir(traseira: boolean): Promise<MediaStream> {
     return navigator.mediaDevices.getUserMedia(restricoesMaos(traseira));
@@ -145,6 +193,7 @@ export class HandTracker {
 
   stop() {
     this.stopped = true;
+    this.epoch += 1; // largada que esteja no meio desiste (não ressuscita a câmera)
     if (this.videoFrameHandle && this.video) {
       const v = this.video as HTMLVideoElement & {
         cancelVideoFrameCallback?: (h: number) => void;
@@ -156,9 +205,7 @@ export class HandTracker {
       cancelAnimationFrame(this.rafHandle);
       this.rafHandle = 0;
     }
-    this.stream?.getTracks().forEach((t) => t.stop());
-    this.stream = null;
-    if (this.video) this.video.srcObject = null;
+    this.soltarStream();
     this.video = null;
     this.lastVideoTime = -1;
   }

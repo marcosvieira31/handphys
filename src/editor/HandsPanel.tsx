@@ -1,5 +1,5 @@
 import { useCallback } from 'react';
-import { hands, useHandsStatus, type HandFilter } from '../hands/controller';
+import { hands, useHandsStatus, type EscolhaCamera, type HandFilter } from '../hands/controller';
 import { IcoMao } from './icons';
 
 const FILTERS: HandFilter[] = ['auto', 'right', 'left', 'lock'];
@@ -14,6 +14,19 @@ const FILTER_HINT: Record<HandFilter, string> = {
   right: 'Só a mão DIREITA comanda (o lado sai de um voto entre as últimas amostras, não do rótulo que troca sozinho).',
   left: 'Só a mão ESQUERDA comanda.',
   lock: 'Gruda na mão que estiver em uso e ignora as outras — não precisa acertar direita/esquerda.',
+};
+
+const CAMERAS: EscolhaCamera[] = ['auto', 'frontal', 'traseira'];
+const CAMERA_TEXT: Record<EscolhaCamera, string> = {
+  auto: 'Seguir o AR',
+  frontal: 'Frontal',
+  traseira: 'De trás',
+};
+const CAMERA_HINT: Record<EscolhaCamera, string> = {
+  auto: 'Sem AR, a câmera frontal (selfie). Com o AR ligado, a de trás — a mesma que aponta para a mesa e serve de fundo: uma câmera só, e a mão de verdade fica sobre o circuito.',
+  frontal: 'Sempre a câmera frontal (selfie, virada para você). A mão aparece espelhada, como num espelho.',
+  traseira:
+    'Sempre a câmera de trás (a que aponta para o que está na frente do aparelho, normalmente a mesa). Num aparelho sem essa câmera — o PC de webcam única — o navegador entrega a que existe.',
 };
 
 /**
@@ -128,6 +141,26 @@ export function HandsPanel() {
             )}
             {st.lastCalib && <li>Última calibração: {st.lastCalib}</li>}
           </ul>
+          <div className="hands-filter" role="group" aria-label="Câmera da mão">
+            <span>Câmera da mão</span>
+            {CAMERAS.map((c) => (
+              <button
+                key={c}
+                type="button"
+                className={`ghost${st.cameraEscolha === c ? ' active' : ''}`}
+                data-hand={`cam:${c}`}
+                title={CAMERA_HINT[c]}
+                aria-pressed={st.cameraEscolha === c}
+                onClick={() => hands.setCameraEscolha(c)}
+              >
+                {CAMERA_TEXT[c]}
+              </button>
+            ))}
+          </div>
+          <p className="card-sub">
+            Seguindo o AR, a mesa entra sozinha com o AR ligado. Escolhendo um lado, a câmera fica
+            naquele até você mudar — as mãos manipulam o circuito igual nos dois casos.
+          </p>
           <div className="hands-filter" role="group" aria-label="Mão que comanda">
             <span>Mão que comanda</span>
             {FILTERS.map((f) => (

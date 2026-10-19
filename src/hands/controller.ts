@@ -1,5 +1,5 @@
 import { useSyncExternalStore } from 'react';
-import { mensagemDeErroCamera } from '../ar/fundo';
+import { liberarCameraDoFundo, mensagemDeErroCamera } from '../ar/fundo';
 import { arAtual, assinarAr } from '../editor/ar';
 import { applyPan, applyRoll, applyZoom } from '../editor/zoom';
 import { clientToBoard, miraOverTrash } from '../editor/coords';
@@ -19,6 +19,15 @@ import {
 
 /** Seletor de UMA mão: quem comanda o cursor, a pinça e a calibração. */
 export type HandFilter = 'auto' | 'right' | 'left' | 'lock';
+
+/**
+ * De onde vem a câmera das mãos: 'auto' segue o AR (ligado = a de trás, a
+ * mesa; desligado = a frontal) e as outras duas forçam um lado. Serve para o
+ * aparelho em que a regra automática não é a certa — celular preso num suporte
+ * apontado para a mesa com o AR desligado, tablet com duas câmeras, PC em que
+ * o rótulo "frontal/traseira" não quer dizer nada.
+ */
+export type EscolhaCamera = 'auto' | 'frontal' | 'traseira';
 
 export interface HandPoint {
   x: number;
@@ -60,6 +69,16 @@ export interface HandsStatus {
    * e a camada do AR reage a mudanças (o fundo passa a ser o stream novo).
    */
   camera: LadoCamera;
+  /** O que o aluno ESCOLHEU: 'auto' = a regra do AR; ou frontal/traseira fixa. */
+  cameraEscolha: EscolhaCamera;
+  /**
+   * Quantas largadas de câmera já TERMINARAM (ligou ou falhou). É o sinal que a
+   * camada do AR usa para reabrir a câmera dela quando a largada das mãos não
+   * deu certo: enquanto as mãos estão LIGANDO o contador não muda (o fundo fica
+   * quieto, com a câmera devolvida), e quando o desfecho sai ele muda — se as
+   * mãos não vieram, a mesa volta sozinha.
+   */
+  tentativa: number;
   /** Razão polegar–indicador da mão piloto (para diagnóstico em aula). */
   ratio: number | null;
   /** Cursor da mão piloto (0..1, já pronto para a tela). */
@@ -90,7 +109,10 @@ export interface HandsStatus {
 
 const LS_KEY = 'handphys.pinchThreshold';
 const LS_FILTER = 'handphys.handFilter';
+const LS_CAMERA = 'handphys.handCamera';
 const CALIB_MS = 2500;
+/** Depois disto, uma largada com stream e sem quadro é dada por travada. */
+const LARGADA_MS = 5000;
 /** Pulso→metacarpal do meio, em fração da imagem, com a mão a ~40 cm da câmera. */
 const HAND_REF = 0.2;
 
@@ -100,6 +122,16 @@ function loadFilter(): HandFilter {
     if (raw === 'right' || raw === 'left' || raw === 'lock') return raw;
   } catch {
     /* sem storage: qualquer mão comanda */
+  }
+  return 'auto';
+}
+
+function loadEscolhaCamera(): EscolhaCamera {
+  try {
+    const raw = typeof localStorage !== 'undefined' ? localStorage.getItem(LS_CAMERA) : null;
+    if (raw === 'frontal' || raw === 'traseira') return raw;
+  } catch {
+    /* sem storage: segue o AR */
   }
   return 'auto';
 }
@@ -120,8 +152,12 @@ function loadThreshold(): number {
  * para a mesa, a MESMA do vídeo de fundo. Assim o aluno manipula com as mãos
  * sobre a mesa o circuito que está vendo, e só existe uma câmera aberta. Sem
  * AR volta para a frontal, que enxerga quem está na frente da tela.
+ *
+ * A escolha do aluno (o painel das mãos) manda por cima da regra quando não é
+ * 'auto' — é o desempate de quem tem o aparelho numa posição fora do comum.
  */
-export function cameraDasMaos(ar: boolean): LadoCamera {
+export function cameraDasMaos(ar: boolean, escolha: EscolhaCamera = 'auto'): LadoCamera {
+  if (escolha !== 'auto') return escolha;
   return ar ? 'traseira' : 'frontal';
 }
 
@@ -225,11 +261,13 @@ export class HandsController {
   private lockedId: string | null = null;
   private hiddenVideo: HTMLVideoElement | null = null;
   private previewVideo: HTMLVideoElement | null = null;
+  /** A câmera que o aluno escolheu no painel (persiste): 'auto' segue o AR. */
+  private escolhaCamera: EscolhaCamera = loadEscolhaCamera();
   /**
-   * A câmera que as mãos DEVEM usar agora (segue o AR). Ela só muda com uma
-   * sessão viva por `sincronizarCamera`, que troca o stream na hora.
+   * A câmera que as mãos DEVEM usar agora (o AR ou a escolha do aluno). Ela só
+   * muda com uma sessão viva por `sincronizarCamera`, que troca o stream na hora.
    */
-  private usaTraseira = arAtual();
+  private usaTraseira = cameraDasMaos(arAtual(), this.escolhaCamera) === 'traseira';
   private listeners = new Set<() => void>();
   private draw: { hands: DrawHand[]; cursor: DrawCursor | null } = { hands: [], cursor: null };
   private status: HandsStatus = {
@@ -237,7 +275,9 @@ export class HandsController {
     starting: false,
     hands: 0,
     pinched: [],
-    camera: cameraDasMaos(arAtual()),
+    camera: cameraDasMaos(arAtual(), this.escolhaCamera),
+    cameraEscolha: this.escolhaCamera,
+    tentativa: 0,
     ratio: null,
     cursor: null,
     mira: 'livre',
@@ -291,38 +331,61 @@ export class HandsController {
   }
 
   /**
-   * Alinha a câmera das mãos com o AR. Com sessão viva troca o stream na hora,
+   * Alinha a câmera das mãos com o que elas devem usar agora (o AR ligado/
+   * desligado ou a escolha do aluno). Com sessão viva troca o stream na hora,
    * sem derrubar o modelo nem o laço de quadros; sem sessão só guarda a
    * escolha — a próxima já nasce na câmera certa.
    */
   async sincronizarCamera(): Promise<void> {
-    const traseira = arAtual();
-    if (traseira === this.usaTraseira) return;
+    const traseira = cameraDasMaos(arAtual(), this.escolhaCamera) === 'traseira';
+    if (traseira === this.usaTraseira) {
+      this.setStatus({ camera: this.ladoUsado }, true); // só o painel mudou de texto
+      return;
+    }
     const antes = this.usaTraseira;
     this.usaTraseira = traseira;
     const video = this.hiddenVideo;
     if (!this.status.active || !video) {
-      this.setStatus({ camera: cameraDasMaos(traseira) }, true);
+      this.setStatus({ camera: this.ladoUsado }, true);
       return;
     }
     this.esqueceMaos(); // a imagem que vem agora é OUTRA: nada fica agarrado
     try {
+      // no celular não cabem duas câmeras abertas: quem tem a antiga devolve
+      liberarCameraDoFundo();
       await this.tracker.trocarCamera(video, traseira);
       if (this.previewVideo) {
         this.previewVideo.srcObject = this.tracker.getStream();
         this.previewVideo.play().catch(() => {});
       }
       this.setStatus(
-        { camera: cameraDasMaos(traseira), hands: 0, pinched: [], calibrating: null, error: null },
+        { camera: this.ladoUsado, hands: 0, pinched: [], calibrating: null, error: null },
         true,
       );
       this.vigiaDeQuadros(); // o veredito da câmera antiga não vale para a nova
     } catch (err) {
-      // ficar na câmera errada é melhor do que perder a mira no meio da aula
+      // ficar na câmera errada é melhor do que perder a mira no meio da aula —
+      // mas se nem a antiga sobrou (o aparelho não devolveu nenhuma), a sessão
+      // acaba com a frase de sala de aula em vez de um painel mentindo "ativa"
       this.usaTraseira = antes;
+      if (this.tracker.running === false) {
+        this.setStatus(
+          {
+            active: false,
+            starting: false,
+            hands: 0,
+            pinched: [],
+            calibrating: null,
+            camera: this.ladoUsado,
+            error: mensagemDeErroCamera(err instanceof DOMException ? err.name : ''),
+          },
+          true,
+        );
+        return;
+      }
       this.setStatus(
         {
-          camera: cameraDasMaos(antes),
+          camera: this.ladoUsado,
           hands: 0,
           pinched: [],
           calibrating: null,
@@ -331,6 +394,28 @@ export class HandsController {
         true,
       );
     }
+  }
+
+  /** A câmera usada agora, para o painel e o status. */
+  private get ladoUsado(): LadoCamera {
+    return this.usaTraseira ? 'traseira' : 'frontal';
+  }
+
+  /**
+   * O aluno escolhe a câmera das mãos no painel. 'auto' volta à regra do AR;
+   * 'frontal'/'traseira' fixam um lado (persiste, como o limiar e o seletor de
+   * mão). Com sessão viva a troca acontece na hora.
+   */
+  setCameraEscolha(e: EscolhaCamera) {
+    if (e === this.escolhaCamera) return;
+    this.escolhaCamera = e;
+    try {
+      localStorage.setItem(LS_CAMERA, e);
+    } catch {
+      /* sem storage */
+    }
+    this.setStatus({ cameraEscolha: e, error: null }, true);
+    void this.sincronizarCamera();
   }
 
   /** Solta apertos e esquece as mãos vistas (a imagem que chega agora é outra). */
@@ -394,7 +479,12 @@ export class HandsController {
       return;
     }
     this.setStatus({ starting: true, error: null }, true);
+    this.vigiaDaLargada();
     try {
+      // o AR de bolso pode estar com a câmera de trás na mão (o vídeo de fundo
+      // sem as mãos): no celular não cabem duas abertas, então ela é devolvida
+      // antes do pedido — a camada do AR reusa o stream assim que ele existe
+      liberarCameraDoFundo();
       await this.tracker.start(
         this.hiddenVideo,
         {
@@ -415,16 +505,26 @@ export class HandsController {
           active: true,
           starting: false,
           delegate: this.tracker.gpuDelegate,
-          camera: cameraDasMaos(this.usaTraseira),
+          camera: this.ladoUsado,
+          error: null,
+          tentativa: this.status.tentativa + 1,
         },
         true,
       );
       this.vigiaDeQuadros();
     } catch (err) {
+      // um `stop()` no meio da largada (troca de vista, "Parar") não é falha de
+      // câmera: o estado já foi desfeito — só o contador anda, para o AR saber
+      // que pode reabrir a câmera dele
+      if (!this.status.starting && !this.status.active) {
+        this.setStatus({ tentativa: this.status.tentativa + 1 }, true);
+        return;
+      }
       const msg = err instanceof Error ? err.message : String(err);
       this.setStatus(
         {
           starting: false,
+          tentativa: this.status.tentativa + 1, // o AR pode reabrir a câmera dele
           error: /denied|permission|not allowed/i.test(msg)
             ? 'Câmera negada: permita o acesso e tente de novo.'
             : /https|secure/i.test(msg)
@@ -434,6 +534,37 @@ export class HandsController {
         true,
       );
     }
+  }
+
+  /**
+   * Vigia da LARGADA: câmera que responde mas não começa a transmitir (o vídeo
+   * nunca sai do `play()`, quadro que não chega) deixaria o painel em "Ligando
+   * câmera e modelo…" para sempre — e o fundo do AR esperando uma câmera que
+   * não vem. Aqui a sessão é desfeita com uma frase que diz o que fazer.
+   *
+   * Só desfaz quando o stream JÁ chegou: antes disso o que está na tela é o
+   * pedido de permissão do navegador, e o aluno pode levar o tempo que quiser
+   * (por isso o vigia se re-arma enquanto não houver stream).
+   */
+  private vigiaDaLargada(): void {
+    if (typeof window === 'undefined') return; // em node (testes) não há relógio de tela
+    window.setTimeout(() => {
+      if (!this.status.starting) return; // largoou (ou já foi desfeita) no caminho
+      if (!this.tracker.getStream()) {
+        this.vigiaDaLargada(); // ainda é o pedido de permissão: espera mais
+        return;
+      }
+      this.tracker.stop();
+      this.setStatus(
+        {
+          starting: false,
+          active: false,
+          tentativa: this.status.tentativa + 1,
+          error: 'A câmera não começou a transmitir: toque em "Usar as mãos" de novo.',
+        },
+        true,
+      );
+    }, LARGADA_MS);
   }
 
   /**

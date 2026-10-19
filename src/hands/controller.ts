@@ -324,6 +324,16 @@ export class HandsController {
     return this.status.active;
   }
 
+  /**
+   * O stream da webcam que está alimentando o rastreio, para o AR de bolso
+   * reusar como FUNDO da cena: uma câmera só, zero permissão a mais — e o que a
+   * mão vê é o que ela pinça. Devolve null quando as mãos estão desligadas (aí
+   * quem quiser fundo abre a própria câmera; o stream NÃO é nosso para fechar).
+   */
+  get streamDasMaos(): MediaStream | null {
+    return this.active ? this.tracker.getStream() : null;
+  }
+
   /** Ajuste fino manual do limiar (±, persiste): para quando a auto-calibração erra. */
   nudgeThreshold(delta: number) {
     const thr = Math.min(0.8, Math.max(0.2, Math.round((this.status.threshold + delta) * 100) / 100));

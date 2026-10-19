@@ -1,6 +1,8 @@
 import { KIND_LABEL } from '../core/kinds';
 import type { CompKind } from '../core/netlist';
 import type { WheelEvent as ReactWheelEvent } from 'react';
+import { useAr, definirAr } from './ar';
+import { IcoCamera } from './icons';
 import { formatValue, Symbol } from './symbol';
 import { useEditor } from './store';
 import { applyZoom, applyZoomReset } from './zoom';
@@ -130,7 +132,7 @@ export function ItemsRail() {
   );
 }
 
-/** Direita: vista 2D/3D, cores por tensão e zoom (− / % / +), empilhados. */
+/** Direita: vista 2D/3D, AR de bolso, cores por tensão e zoom (− / % / +), empilhados. */
 export function ViewRail() {
   const view = useEditor((s) => s.view);
   const zoom = useEditor((s) => s.zoom);
@@ -139,6 +141,11 @@ export function ViewRail() {
   const setView = useEditor((s) => s.setView);
   const setColorByVoltage = useEditor((s) => s.setColorByVoltage);
   const setFlow = useEditor((s) => s.setFlow);
+  const ar = useAr();
+  // O AR só VALE na bancada 3D (é o canvas dela que fica transparente): sair
+  // para o 2D não desliga a chave, mas a câmera fecha junto com a camada — por
+  // isso o botão "acende" só quando o fundo de câmera está de fato na tela.
+  const arAtivo = ar && view === '3d';
 
   return (
     <aside className="rail rail-view" role="group" aria-label="Vista, cores e zoom" onWheel={roda}>
@@ -162,6 +169,24 @@ export function ViewRail() {
           3D
         </button>
       </span>
+
+      <button
+        type="button"
+        className={arAtivo ? 'rail-item active' : 'rail-item'}
+        onClick={() => {
+          if (arAtivo) definirAr(false);
+          else {
+            setView('3d'); // o fundo de câmera mora no canvas da bancada 3D
+            definirAr(true);
+          }
+        }}
+        data-hand="ar"
+        title="AR de bolso: a câmera vira o fundo e o circuito aparece na sua mesa (o navegador pede a permissão da câmera). Vale só na bancada 3D."
+      >
+        <IcoCamera size={26} />
+        <strong>AR</strong>
+        <em>na sua mesa</em>
+      </button>
 
       <button
         type="button"

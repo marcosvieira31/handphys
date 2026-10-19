@@ -42,6 +42,13 @@ export interface LabView {
   frameTo(center: Pt, zoom: number): void;
   /** Volta a câmera ao enquadro de chegada (ângulos inclusive). */
   resetView(): void;
+  /**
+   * AR DE BOLSO: a bancada escura sai de cena, o canvas fica TRANSPARENTE (o
+   * vídeo da câmera entra atrás, posto pela DOM) e o circuito ganha uma sombra
+   * de contato — ele passa a "estar" na mesa de verdade em vez de flutuar num
+   * vazio escuro. A grade do quadro FICA: é ela que mostra onde é a bancada.
+   */
+  setAr(on: boolean): void;
   dispose(): void;
 }
 
@@ -301,12 +308,50 @@ export function disposeGroup(g: THREE.Object3D) {
 export function buildBoard(): THREE.Group {
   const g = new THREE.Group();
   const top = new THREE.Mesh(new THREE.BoxGeometry(WORLD + 1, 0.5, WORLD + 1), mat(0x11161d));
+  top.name = TAMPO;
   top.position.y = -0.26;
   g.add(top);
   const grid = new THREE.GridHelper(WORLD, WORLD, 0x2d333b, 0x1c2128);
+  grid.name = 'grade';
   grid.position.y = 0.005;
   g.add(grid);
   return g;
+}
+
+/** Nome do tampo: no AR ele sai (o chão é a mesa de verdade) e a grade fica. */
+const TAMPO = 'tampo';
+
+/**
+ * Sombra de contato do AR: um borrão radial desenhado na hora (sem asset e sem
+ * textura baixada) que "assenta" o circuito na mesa. Sem ela o circuito flutua
+ * sobre o vídeo e a mistura não convence.
+ */
+function sombraDeContato(): THREE.Mesh {
+  const lado = 128;
+  const tela = document.createElement('canvas');
+  tela.width = tela.height = lado;
+  const ctx = tela.getContext('2d');
+  if (ctx) {
+    const meio = lado / 2;
+    const grad = ctx.createRadialGradient(meio, meio, 4, meio, meio, meio - 2);
+    grad.addColorStop(0, 'rgba(0, 0, 0, 0.5)');
+    grad.addColorStop(0.55, 'rgba(0, 0, 0, 0.2)');
+    grad.addColorStop(1, 'rgba(0, 0, 0, 0)');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, lado, lado);
+  }
+  const malha = new THREE.Mesh(
+    new THREE.PlaneGeometry(WORLD + 2, WORLD + 2),
+    new THREE.MeshBasicMaterial({
+      map: new THREE.CanvasTexture(tela),
+      transparent: true,
+      depthWrite: false, // é só um véu no chão: não esconde o que está em cima
+    }),
+  );
+  malha.rotation.x = -Math.PI / 2;
+  malha.position.y = -0.004; // sob a grade e sob as peças
+  malha.visible = false;
+  return malha;
 }
 
 /** Uma gota:3 esferas por trecho, andando no comprimento de arco. */
@@ -430,10 +475,13 @@ export function createLabView(
   canvas: HTMLCanvasElement,
   onFraming?: (center: Pt, zoom: number) => void,
 ): LabView {
-  const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+  // `alpha: true`: no AR de bolso o canvas precisa ser TRANSPARENTE para o
+  // vídeo da câmera aparecer atrás dele; fora do AR o fundo é opaco, como era.
+  const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
   const scene = new THREE.Scene();
-  scene.background = new THREE.Color(0x0a0d12);
+  const COR_FUNDO = new THREE.Color(0x0a0d12);
+  scene.background = COR_FUNDO;
 
   const camera = new THREE.PerspectiveCamera(45, 1, 0.1, 300);
   camera.position.copy(HOME_POS);
@@ -467,7 +515,22 @@ export function createLabView(
   const lampLight = new THREE.PointLight(0xffd27a, 0, 16, 1.8);
   scene.add(lampLight);
 
-  scene.add(buildBoard());
+  const bancada = buildBoard();
+  scene.add(bancada);
+  const tampo = bancada.getObjectByName(TAMPO);
+  const sombra = sombraDeContato();
+  scene.add(sombra);
+
+  // AR de bolso: o fundo do canvas abre (o vídeo entra pela DOM), o tampo escuro
+  // sai (o chão é a mesa de verdade) e a sombra de contato entra no lugar.
+  let arLigado = false;
+  const pintaFundo = () => {
+    scene.background = arLigado ? null : COR_FUNDO;
+    renderer.setClearAlpha(arLigado ? 0 : 1);
+    if (tampo) tampo.visible = !arLigado;
+    sombra.visible = arLigado;
+  };
+  pintaFundo();
 
   const dyn = new THREE.Group();
   scene.add(dyn);
@@ -601,6 +664,11 @@ export function createLabView(
       controls.target.copy(HOME_TARGET);
       controls.update();
     },
+    setAr(on) {
+      if (on === arLigado) return;
+      arLigado = on;
+      pintaFundo();
+    },
     dispose() {
       dead = true;
       cancelAnimationFrame(raf);
@@ -614,6 +682,7 @@ export function createLabView(
       );
       orbit = { theta: sph.theta, phi: sph.phi };
       controls.dispose();
+      (sombra.material as THREE.MeshBasicMaterial).map?.dispose(); // textura é nossa
       disposeGroup(dyn);
       disposeGroup(scene);
       renderer.dispose();

@@ -259,6 +259,20 @@ export const IcoCorrente = (p: IcoProps) => (
   </Base>
 );
 
+/**
+ * AR de bolso: a câmera com a bancada atrás dela — a mesa de verdade com o
+ * circuito desenhado por cima (é o fundo do vídeo, não um "óculos de VR").
+ */
+export const IcoCamera = (p: IcoProps) => (
+  <Base {...p}>
+    <path d="M3.4 9.6h17.2v9.4H3.4z" />
+    <path d="M8.6 9.6 10 6.4h4l1.4 3.2" />
+    <circle cx="12" cy="14.2" r="3" opacity="0.85" />
+    <path d="M17.6 12.2h1.2" opacity="0.85" />
+    <path d="M2.2 21.2h19.6" opacity="0.55" />
+  </Base>
+);
+
 /** Lixeira. */
 export const IcoLixeira = (p: IcoProps) => (
   <Base {...p}>
@@ -362,6 +376,7 @@ export const ICONES = {
   Ico3d,
   IcoCores,
   IcoCorrente,
+  IcoCamera,
   IcoLixeira,
   IcoMais,
   IcoMenos,

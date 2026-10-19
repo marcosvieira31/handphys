@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import type { Reading } from '../core/netlist';
 import { hands } from '../hands/controller';
+import { ArLayer } from './ArLayer';
+import { useAr } from './ar';
 import { overHandButton } from './coords';
 import { useEditor } from './store';
 import { applyFrameFrom2D, bindZoomTarget } from './zoom';
@@ -14,11 +16,17 @@ import type { LabView } from '../scene/buildScene';
  * O enquadramento é ÚNICO das duas vistas: ao montar a câmera herda centro e
  * zoom do quadro 2D, e a cada movimento ela escreve de volta (setFraming) —
  * alternar 2D↔3D nunca reposiciona o que o professor estava olhando.
+ *
+ * AR de bolso (a chave do trilho): o canvas fica transparente e o vídeo da
+ * câmera entra atrás (a camada `ArLayer`) — a bancada escura sai e o circuito
+ * aparece na mesa de verdade. Sair da vista 3D fecha a câmera por construção:
+ * a camada desmonta junto.
  */
 export function SceneView({ reading }: { reading: Reading }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const viewRef = useRef<LabView | null>(null);
   const [ready, setReady] = useState(false);
+  const ar = useAr();
   const doc = useEditor((s) => s.doc);
   const flow = useEditor((s) => s.flow); // gotas de corrente nos fios 3D
 
@@ -34,6 +42,7 @@ export function SceneView({ reading }: { reading: Reading }) {
       viewRef.current = view;
       bindZoomTarget(view); // botões/gestos de zoom passam a mexer a câmera
       applyFrameFrom2D(); // e a câmera herda o enquadramento do quadro 2D
+      view.setAr(ar); // a chave pode já estar ligada quando a cena monta
       setReady(true);
       const s = useEditor.getState();
       view.update(s.doc, reading, s.flow);
@@ -65,8 +74,14 @@ export function SceneView({ reading }: { reading: Reading }) {
     viewRef.current?.update(doc, reading, flow);
   });
 
+  // a cena é a MESMA: muda o fundo (transparente ou não), o tampo e a sombra
+  useEffect(() => {
+    viewRef.current?.setAr(ar);
+  }, [ar]);
+
   return (
-    <div className="scene-wrap">
+    <div className={ar ? 'scene-wrap ar' : 'scene-wrap'}>
+      {ar && <ArLayer />}
       <canvas ref={canvasRef} className="scene3d" />
       {!ready && <p className="scene-loading">montando a bancada 3D…</p>}
     </div>

@@ -1,7 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { definirAr, reiniciarAr } from '../editor/ar';
 import { useEditor } from '../editor/store';
 import { bindZoomTarget } from '../editor/zoom';
-import { HandsController, type HandPoint } from './controller';
+import { HandsController, cameraDasMaos, pontoNaTela, type HandPoint } from './controller';
 import type { FrameHand } from './tracker';
 
 /** Mão sintética: polegar e indicador onde se quer; a mão INTEIRA acompanha
@@ -696,5 +697,137 @@ describe('pinca e puxa = pan da vista (controller)', () => {
     feed(ctl, hand('Right', 0.7, 0.8334), 8, clk); // arrasta o fio p/ a direita
     expect(useEditor.getState().pan).toEqual({ x: 0, y: 0 }); // nao deslocou a vista
     expect(useEditor.getState().draft).not.toBeNull();
+  });
+});
+
+describe('mãos com a câmera de TRÁS (o AR ligado): a mesa como o aluno vê', () => {
+  beforeEach(() => {
+    resetDoc();
+    reiniciarAr(); // a chave do AR é do APARELHO e sobrevive ao teste se não zerar
+  });
+  afterEach(() => reiniciarAr()); // e a assinatura do controller vai junto
+
+  /** Pinça fechada em x e arrasta a mão INTEIRA +0,25: devolve a mira antes/depois. */
+  const anda = (ctl: HandsController) => {
+    let now = 0;
+    const feed = (h: FrameHand, n: number) => {
+      for (let i = 0; i < n; i++) {
+        now += 33;
+        ctl.ingest([h], 5, now);
+      }
+    };
+    feed(hand('Right', 0.45, 0.4834), 20); // fecha: a mira trava no ponto médio
+    const antes = ctl.getSnapshot().cursor!;
+    feed(hand('Right', 0.7, 0.7334), 20); // o braço anda (a pinça continua)
+    return { antes, depois: ctl.getSnapshot().cursor! };
+  };
+
+  it('sem AR a câmera é a frontal e a mira é espelhada, como um selfie', () => {
+    const ctl = wireUp();
+    expect(ctl.getSnapshot().camera).toBe('frontal');
+    expect(cameraDasMaos(false)).toBe('frontal');
+    const { antes, depois } = anda(ctl);
+    // mão p/ a direita => mira p/ a ESQUERDA na tela
+    expect(depois.x).toBeCloseTo(antes.x - 0.25, 2);
+  });
+
+  it('com AR as mãos nascem na câmera de trás e a mira anda JUNTO com a mão', () => {
+    definirAr(true);
+    const ctl = wireUp(); // nasce já na câmera de trás (o AR já estava ligado)
+    expect(ctl.getSnapshot().camera).toBe('traseira');
+    expect(cameraDasMaos(true)).toBe('traseira');
+    const { antes, depois } = anda(ctl);
+    // sem espelho: a mão andou p/ a direita, a mira anda p/ a direita
+    expect(depois.x).toBeCloseTo(antes.x + 0.25, 2);
+    expect(depois.y).toBeCloseTo(antes.y, 2);
+  });
+
+  it('ligar o AR com as mãos JÁ ligadas troca a câmera (e o espelho vai junto)', async () => {
+    const ctl = wireUp();
+    const { antes, depois } = anda(ctl);
+    expect(depois.x).toBeCloseTo(antes.x - 0.25, 2); // frontal: espelhado
+
+    definirAr(true);
+    await Promise.resolve(); // o aviso do AR chega fora do render
+    expect(ctl.getSnapshot().camera).toBe('traseira');
+    const agora = anda(ctl);
+    expect(agora.depois.x).toBeGreaterThan(agora.antes.x); // agora anda junto
+  });
+
+  it('desligar o AR devolve as mãos para a frontal', async () => {
+    definirAr(true);
+    const ctl = wireUp();
+    expect(ctl.getSnapshot().camera).toBe('traseira');
+    definirAr(false);
+    await Promise.resolve();
+    expect(ctl.getSnapshot().camera).toBe('frontal');
+    expect(ctl.getSnapshot().active).toBe(false); // sem sessão, só guarda a escolha
+  });
+
+  it('com sessão viva a troca reabre a câmera e solta o que a mão segurava', async () => {
+    // costura sem câmera (node não tem getUserMedia): o que a troca de AR usa é
+    // um stream vivo para reabrir, e isso aqui é um vídeo e um tracker de mentira
+    const ctl = wireUp();
+    const trocas: boolean[] = [];
+    const interno = ctl as unknown as {
+      hiddenVideo: unknown;
+      status: Record<string, unknown>;
+      tracker: { trocarCamera: (v: unknown, t: boolean) => Promise<void> };
+    };
+    interno.hiddenVideo = { srcObject: null, muted: false, play: () => Promise.resolve() };
+    interno.tracker = {
+      trocarCamera: (_v, traseira) => {
+        trocas.push(traseira);
+        return Promise.resolve();
+      },
+    };
+    interno.status = { ...interno.status, active: true };
+
+    useEditor.getState().pressAt({ x: 5, y: 10 }); // fio na mão (draft)
+    expect(useEditor.getState().draft).not.toBeNull();
+
+    definirAr(true);
+    await Promise.resolve();
+    // a imagem que vem agora é OUTRA: nada pode continuar agarrado na mão
+    expect(trocas).toEqual([true]);
+    expect(useEditor.getState().draft).toBeNull();
+    expect(ctl.getSnapshot().camera).toBe('traseira');
+
+    definirAr(false); // e a volta (sair do AR) reabre na frontal
+    await Promise.resolve();
+    expect(trocas).toEqual([true, false]);
+    expect(ctl.getSnapshot().camera).toBe('frontal');
+  });
+});
+
+describe('mira do fundo do AR: o ponto do vídeo na caixa desenhada (cover)', () => {
+  const caixa = { x: 100, y: 50, w: 400, h: 400 };
+
+  it('o centro do quadro cai no centro da caixa', () => {
+    expect(pontoNaTela(0.5, 0.5, { w: 1280, h: 720 }, caixa)).toEqual({ x: 300, y: 250 });
+  });
+
+  it('vídeo e caixa do mesmo formato: o quadro inteiro cabe, sem recorte', () => {
+    expect(pontoNaTela(0.25, 0.75, { w: 400, h: 400 }, caixa)).toEqual({ x: 200, y: 350 });
+  });
+
+  it('quadro 16:9 num quadrado: as sobras laterais são CORTADAS (não estica)', () => {
+    // escala = 400/720 => a imagem desenhada tem 711 px de largura: 155 de cada
+    // lado ficam fora da caixa (é o que o `object-fit: cover` faz)
+    const bordaEsquerda = 155.5556 / 711.1111; // ≈ 0,2188 do quadro
+    const dentro = pontoNaTela(bordaEsquerda, 0.5, { w: 1280, h: 720 }, caixa);
+    expect(dentro.x).toBeCloseTo(100, 1);
+    // além da borda o ponto cai FORA da caixa (aquela parte da imagem não aparece)
+    expect(pontoNaTela(0, 0.5, { w: 1280, h: 720 }, caixa).x).toBeLessThan(100);
+    // em y não sobra nada: o topo e o pé do quadro coincidem com a caixa
+    expect(pontoNaTela(0.5, 0, { w: 1280, h: 720 }, caixa).y).toBeCloseTo(50, 6);
+    expect(pontoNaTela(0.5, 1, { w: 1280, h: 720 }, caixa).y).toBeCloseTo(450, 6);
+  });
+
+  it('caixa degenerada (sem layout) não vira NaN', () => {
+    expect(pontoNaTela(0.5, 0.5, { w: 1280, h: 720 }, { x: 0, y: 0, w: 0, h: 0 })).toEqual({
+      x: 0,
+      y: 0,
+    });
   });
 });

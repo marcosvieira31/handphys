@@ -58,6 +58,10 @@ export function HandsPanel() {
               <strong>Mão que comanda</strong> — depois de ligar, dá para deixar só a direita, só a
               esquerda, ou travar na que estiver em uso.
             </li>
+            <li>
+              <strong>Na mesa</strong> — com o AR ligado a câmera passa para a de trás (a mesma do
+              vídeo de fundo): as mãos manipulam o circuito projetado na própria mesa.
+            </li>
           </ul>
         </>
       )}
@@ -76,6 +80,12 @@ export function HandsPanel() {
             </li>
             <li>
               {st.fps} det/s · {st.latencyMs} ms · {st.delegate} · {st.mode}
+            </li>
+            <li>
+              <span title="Com o AR ligado as mãos usam a câmera de trás — a mesma do vídeo de fundo: uma câmera só, e a mira cai onde a mão aparece na mesa.">
+                Câmera{' '}
+                <strong>{st.camera === 'traseira' ? 'de trás (a mesa)' : 'frontal'}</strong>
+              </span>
             </li>
             <li>
               <span title="Fonte da razão de pinça: 3D usa o eixo Z (coordenadas de mundo, em metros); 2D usa só a imagem da câmera.">

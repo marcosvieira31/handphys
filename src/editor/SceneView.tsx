@@ -78,7 +78,7 @@ export function SceneView({ reading }: { reading: Reading }) {
       // um clique lá, e nem ponteiro nem pinça precisam se mexer para ele nascer)
       pintaFantasma();
       pararDeOlhar = useEditor.subscribe(pintaFantasma);
-      // mira da pinça no 3D: cursor espelhado (fração da JANELA) => célula sob o dedo
+      // mira da pinça no 3D: cursor JÁ na tela (fração da JANELA) => célula sob o dedo
       hands.bindSlot('3d', (p) => {
         const r = canvasRef.current?.getBoundingClientRect();
         if (!r || r.width <= 0 || r.height <= 0) return null;

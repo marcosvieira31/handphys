@@ -1,4 +1,6 @@
 import { useSyncExternalStore } from 'react';
+import { mensagemDeErroCamera } from '../ar/fundo';
+import { arAtual, assinarAr } from '../editor/ar';
 import { applyPan, applyRoll, applyZoom } from '../editor/zoom';
 import { clientToBoard, miraOverTrash } from '../editor/coords';
 import { useEditor } from '../editor/store';
@@ -6,7 +8,14 @@ import { Clutch } from './clutch';
 import { OneEuroFilter } from './oneEuro';
 import { PinchTracker } from './pinch';
 import { SideVote, type HandSide } from './side';
-import { HandTracker, pinchRatio2D, pinchRatio3D, type FrameHand, type Pt3 } from './tracker';
+import {
+  HandTracker,
+  pinchRatio2D,
+  pinchRatio3D,
+  type FrameHand,
+  type LadoCamera,
+  type Pt3,
+} from './tracker';
 
 /** Seletor de UMA mão: quem comanda o cursor, a pinça e a calibração. */
 export type HandFilter = 'auto' | 'right' | 'left' | 'lock';
@@ -18,7 +27,7 @@ export interface HandPoint {
 
 export interface DrawHand {
   side: string;
-  /** Pontos suavizados, normalizados e ESPELHADOS (prontos para desenhar). */
+  /** Pontos suavizados, normalizados e JÁ na tela (prontos para desenhar). */
   pts: HandPoint[];
   pinched: boolean;
   /** true = esta mão é a que fornece a mira (o esqueleto é ancorado nela). */
@@ -45,9 +54,15 @@ export interface HandsStatus {
   starting: boolean;
   hands: number;
   pinched: string[];
+  /**
+   * Qual câmera está alimentando o rastreio: com o AR ligado é a de TRÁS (a
+   * mesa, a mesma do vídeo de fundo); sem AR é a frontal. O painel mostra isso
+   * e a camada do AR reage a mudanças (o fundo passa a ser o stream novo).
+   */
+  camera: LadoCamera;
   /** Razão polegar–indicador da mão piloto (para diagnóstico em aula). */
   ratio: number | null;
-  /** Cursor da mão piloto (0..1, já espelhado). */
+  /** Cursor da mão piloto (0..1, já pronto para a tela). */
   cursor: HandPoint | null;
   /** 'travada' = mira congelada na palma (dedos fechando não deslocam o ponto). */
   mira: 'livre' | 'travada';
@@ -101,6 +116,51 @@ function loadThreshold(): number {
 }
 
 /**
+ * Que câmera as MÃOS devem usar: com o AR ligado é a de TRÁS — a que aponta
+ * para a mesa, a MESMA do vídeo de fundo. Assim o aluno manipula com as mãos
+ * sobre a mesa o circuito que está vendo, e só existe uma câmera aberta. Sem
+ * AR volta para a frontal, que enxerga quem está na frente da tela.
+ */
+export function cameraDasMaos(ar: boolean): LadoCamera {
+  return ar ? 'traseira' : 'frontal';
+}
+
+/**
+ * Onde cai o ponto (u,v) do QUADRO do vídeo quando ele é desenhado com
+ * `object-fit: cover` numa caixa da tela (é assim que o fundo do AR aparece).
+ * O cover estica a imagem até cobrir a caixa e CORTA o que sobra: a sobra vira
+ * metade de cada lado, isto é, um deslocamento negativo. Sem isso, com a câmera
+ * de trás a mira e a mão de verdade andariam em lugares diferentes na tela.
+ */
+export function pontoNaTela(
+  u: number,
+  v: number,
+  quadro: { w: number; h: number },
+  caixa: { x: number; y: number; w: number; h: number },
+): HandPoint {
+  if (quadro.w <= 0 || quadro.h <= 0 || caixa.w <= 0 || caixa.h <= 0) {
+    return { x: caixa.x + u * caixa.w, y: caixa.y + v * caixa.h };
+  }
+  const escala = Math.max(caixa.w / quadro.w, caixa.h / quadro.h);
+  const sobraX = (caixa.w - quadro.w * escala) / 2;
+  const sobraY = (caixa.h - quadro.h * escala) / 2;
+  return {
+    x: caixa.x + sobraX + u * quadro.w * escala,
+    y: caixa.y + sobraY + v * quadro.h * escala,
+  };
+}
+
+/** A caixa do vídeo do AR na tela — só existe com a bancada 3D em AR montada. */
+function caixaDoVideoAr(): { x: number; y: number; w: number; h: number; quadro: { w: number; h: number } } | null {
+  if (typeof document === 'undefined' || !document.querySelector) return null;
+  const el = document.querySelector<HTMLVideoElement>('video.ar-video');
+  if (!el || !el.videoWidth || !el.videoHeight) return null;
+  const r = el.getBoundingClientRect();
+  if (r.width <= 0 || r.height <= 0) return null;
+  return { x: r.left, y: r.top, w: r.width, h: r.height, quadro: { w: el.videoWidth, h: el.videoHeight } };
+}
+
+/**
  * Adapter mãos => store: a pinça aperta/move/solta as MESMAS ações do mouse
  * (pressAt/moveAt/releaseAt). Sem vídeo sobre a cena (privacidade): a camada
  * desenha só o esqueleto. Testável sem câmera via `ingest`.
@@ -111,6 +171,7 @@ export type LocateFn = (cursor: HandPoint) => { x: number; y: number } | null;
 interface SeenHand {
   sm: HandPoint[];
   fast: HandPoint[];
+  /** Pontos prontos para a TELA (espelho da frontal, recorte do fundo do AR). */
   mir: HandPoint[];
   pinched: boolean;
   edge: 'down' | 'up' | null;
@@ -164,6 +225,11 @@ export class HandsController {
   private lockedId: string | null = null;
   private hiddenVideo: HTMLVideoElement | null = null;
   private previewVideo: HTMLVideoElement | null = null;
+  /**
+   * A câmera que as mãos DEVEM usar agora (segue o AR). Ela só muda com uma
+   * sessão viva por `sincronizarCamera`, que troca o stream na hora.
+   */
+  private usaTraseira = arAtual();
   private listeners = new Set<() => void>();
   private draw: { hands: DrawHand[]; cursor: DrawCursor | null } = { hands: [], cursor: null };
   private status: HandsStatus = {
@@ -171,6 +237,7 @@ export class HandsController {
     starting: false,
     hands: 0,
     pinched: [],
+    camera: cameraDasMaos(arAtual()),
     ratio: null,
     cursor: null,
     mira: 'livre',
@@ -214,6 +281,80 @@ export class HandsController {
   }
 
   // ---- ciclo de vida ----
+  constructor() {
+    // A câmera das mãos segue o AR: ligado, a mão que comanda é a da MESA (a
+    // mesma câmera do vídeo de fundo); desligado, volta a frontal. O ouvinte
+    // vive junto com o módulo (uma instância: `hands`).
+    assinarAr(() => {
+      void this.sincronizarCamera();
+    });
+  }
+
+  /**
+   * Alinha a câmera das mãos com o AR. Com sessão viva troca o stream na hora,
+   * sem derrubar o modelo nem o laço de quadros; sem sessão só guarda a
+   * escolha — a próxima já nasce na câmera certa.
+   */
+  async sincronizarCamera(): Promise<void> {
+    const traseira = arAtual();
+    if (traseira === this.usaTraseira) return;
+    const antes = this.usaTraseira;
+    this.usaTraseira = traseira;
+    const video = this.hiddenVideo;
+    if (!this.status.active || !video) {
+      this.setStatus({ camera: cameraDasMaos(traseira) }, true);
+      return;
+    }
+    this.esqueceMaos(); // a imagem que vem agora é OUTRA: nada fica agarrado
+    try {
+      await this.tracker.trocarCamera(video, traseira);
+      if (this.previewVideo) {
+        this.previewVideo.srcObject = this.tracker.getStream();
+        this.previewVideo.play().catch(() => {});
+      }
+      this.setStatus(
+        { camera: cameraDasMaos(traseira), hands: 0, pinched: [], calibrating: null, error: null },
+        true,
+      );
+      this.vigiaDeQuadros(); // o veredito da câmera antiga não vale para a nova
+    } catch (err) {
+      // ficar na câmera errada é melhor do que perder a mira no meio da aula
+      this.usaTraseira = antes;
+      this.setStatus(
+        {
+          camera: cameraDasMaos(antes),
+          hands: 0,
+          pinched: [],
+          calibrating: null,
+          error: mensagemDeErroCamera(err instanceof DOMException ? err.name : ''),
+        },
+        true,
+      );
+    }
+  }
+
+  /** Solta apertos e esquece as mãos vistas (a imagem que chega agora é outra). */
+  private esqueceMaos(): void {
+    const s = useEditor.getState();
+    s.cancelDraft();
+    s.releaseGrip();
+    this.pinch.reset();
+    this.slowFilters.clear();
+    this.fastFilters.clear();
+    this.worldFilters.clear();
+    this.sideVote.clear();
+    this.spread = null;
+    this.lockedId = null;
+    this.slots.clear();
+    this.lastCell.clear();
+    this.pressed.clear();
+    this.driver = null;
+    this.clutch.reset();
+    this.clutchId = null;
+    this.calib = null;
+    this.draw = { hands: [], cursor: null };
+  }
+
   /** Uma vista (2d/3d) registra como transformar cursor em célula + vídeo. */
   bindSlot(name: string, locate: LocateFn | null, video?: HTMLVideoElement) {
     if (locate) this.locators.set(name, locate);
@@ -254,28 +395,31 @@ export class HandsController {
     }
     this.setStatus({ starting: true, error: null }, true);
     try {
-      await this.tracker.start(this.hiddenVideo, {
-        onFrame: (hands, stats) => this.ingest(hands, stats.latencyMs, performance.now()),
-        onVideoTick: () => {
-          this.frames += 1;
+      await this.tracker.start(
+        this.hiddenVideo,
+        {
+          onFrame: (hands, stats) => this.ingest(hands, stats.latencyMs, performance.now()),
+          onVideoTick: () => {
+            this.frames += 1;
+          },
         },
-      });
+        this.usaTraseira,
+      );
       if (this.previewVideo && this.tracker.getStream()) {
         this.previewVideo.srcObject = this.tracker.getStream();
         this.previewVideo.play().catch(() => {});
       }
       this.fpsAt = performance.now();
-      this.setStatus({ active: true, starting: false, delegate: this.tracker.gpuDelegate }, true);
-      // Vigia de prontidão: se a câmera não entregar quadros em 2,5 s (vídeo
-      // pausado, permissão estranha, elemento oculto), avisa em vez de ficar mudo.
-      window.setTimeout(() => {
-        if (this.status.active && this.frames === 0) {
-          this.setStatus(
-            { error: 'A câmera não está entregando quadros: verifique a permissão e recarregue.' },
-            true,
-          );
-        }
-      }, 2500);
+      this.setStatus(
+        {
+          active: true,
+          starting: false,
+          delegate: this.tracker.gpuDelegate,
+          camera: cameraDasMaos(this.usaTraseira),
+        },
+        true,
+      );
+      this.vigiaDeQuadros();
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       this.setStatus(
@@ -292,28 +436,30 @@ export class HandsController {
     }
   }
 
+  /**
+   * Vigia de prontidão: se a câmera não entregar quadros em 2,5 s (vídeo
+   * pausado, permissão estranha, elemento oculto), avisa em vez de ficar mudo.
+   * Vale na largada e DEPOIS de cada troca de câmera — a imagem que chega é
+   * outra, e o veredito da antiga não serve para ela.
+   */
+  private vigiaDeQuadros(): void {
+    if (typeof window === 'undefined') return; // em node (testes) não há relógio de tela
+    this.frames = 0;
+    window.setTimeout(() => {
+      if (this.status.active && this.frames === 0) {
+        this.setStatus(
+          { error: 'A câmera não está entregando quadros: verifique a permissão e recarregue.' },
+          true,
+        );
+      }
+    }, 2500);
+  }
+
   stop() {
     // solta tudo que a mão segurava (sem fio preso nem arraste fantasma)
-    const s = useEditor.getState();
-    s.cancelDraft();
-    s.releaseGrip();
+    this.esqueceMaos();
     this.tracker.stop();
     if (this.previewVideo) this.previewVideo.srcObject = null;
-    this.pinch.reset();
-    this.slowFilters.clear();
-    this.fastFilters.clear();
-    this.worldFilters.clear();
-    this.sideVote.clear();
-    this.spread = null;
-    this.lockedId = null;
-    this.slots.clear();
-    this.lastCell.clear();
-    this.pressed.clear();
-    this.driver = null;
-    this.clutch.reset();
-    this.clutchId = null;
-    this.calib = null;
-    this.draw = { hands: [], cursor: null };
     this.setStatus(
       { active: false, starting: false, hands: 0, pinched: [], fps: 0, calibrating: null },
       true,
@@ -439,7 +585,7 @@ export class HandsController {
       seen.set(id, {
         sm,
         fast,
-        mir: this.mirroredFast(id),
+        mir: this.miraDaMao(id),
         pinched,
         edge,
         label: h.side,
@@ -744,15 +890,36 @@ export class HandsController {
     }));
   }
 
-  private mirroredFast(id: string): HandPoint[] {
+  /**
+   * Os pontos da mão prontos para a TELA — é deles que saem o cursor, o
+   * esqueleto e o gesto de zoom. Na câmera FRONTAL a imagem é um selfie: quem
+   * levanta a mão direita se vê à esquerda da tela, então a mira é espelhada.
+   * Na câmera de TRÁS não há espelho (a mesa aparece como o aluno a vê) e, com
+   * o AR ligado, a mira cai no PIXEL em que a mão aparece no vídeo de fundo —
+   * é isso que faz a mão de verdade e o cursor coincidirem. Sem bancada em AR
+   * (o vídeo não está na tela), vale o quadro inteiro.
+   *
+   * O rótulo Left/Right NÃO muda com a câmera: o modelo já recebe imagem
+   * direta nos dois casos — o espelho é de TELA, não do pixel.
+   */
+  private miraDaMao(id: string): HandPoint[] {
     const b = this.fastFilters.get(id);
     if (!b) return [];
-    return b.x.map((f, i) => ({ x: 1 - (f.value ?? 0), y: b.y[i].value ?? 0 }));
+    const cru = b.x.map((f, i) => ({ x: f.value ?? 0, y: b.y[i].value ?? 0 }));
+    if (!this.usaTraseira) return cru.map((p) => ({ x: 1 - p.x, y: p.y }));
+    const caixa = caixaDoVideoAr();
+    if (!caixa || typeof window === 'undefined') return cru;
+    const tela = { w: window.innerWidth, h: window.innerHeight };
+    return cru.map((p) => {
+      const q = pontoNaTela(p.x, p.y, caixa.quadro, caixa);
+      return { x: q.x / tela.w, y: q.y / tela.h };
+    });
   }
 
   /**
-   * Cursor (já espelhado) => célula na vista ativa. A 3D tem prioridade sobre a
-   * 2D; sem vista aplicável devolve null (a pinça não age).
+   * Cursor (fração da janela, já pronto para a tela) => célula na vista ativa. A
+   * 3D tem prioridade sobre a 2D; sem vista aplicável devolve null (a pinça não
+   * age).
    */
   resolveCell(cursor: HandPoint): { x: number; y: number } | null {
     for (const name of ['3d', '2d']) {
@@ -817,7 +984,7 @@ export class HandsController {
   private closedRef = 0;
 }
 
-/** Média de dois landmarks num array JÁ espelhado (espaço da janela). */
+/** Média de dois landmarks num array JÁ convertido para a tela (espaço da janela). */
 function midOf(pts: HandPoint[], i: number, j: number): HandPoint {
   const a = pts[i] ?? { x: 0.5, y: 0.5 };
   const b = pts[j] ?? { x: 0.5, y: 0.5 };

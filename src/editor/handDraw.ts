@@ -1,4 +1,4 @@
-/** Ponto em coordenadas normalizadas (0..1) de janela — já espelhado. */
+/** Ponto em coordenadas normalizadas (0..1) de janela — já pronto para a tela. */
 export interface Pt {
   x: number;
   y: number;

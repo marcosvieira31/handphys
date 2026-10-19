@@ -23,6 +23,31 @@ export function pinchRatio3D(world: Pt3[]): number {
   return d(world[4], world[8]) / (d(world[0], world[9]) || 1e-6);
 }
 
+/** De que lado do aparelho a webcam olha: a FRONTAL (selfie) ou a de TRÁS. */
+export type LadoCamera = 'frontal' | 'traseira';
+
+/**
+ * O que pedir para a câmera das MÃOS. Com o AR ligado é a de TRÁS — a mesma que
+ * aponta para a mesa, e é ela que o fundo do AR reaproveita (uma câmera só,
+ * zero permissão a mais) — e nesse caso a resolução é a do VÍDEO DE FUNDO, que
+ * ocupa a tela inteira: 720p custa pouco no modelo (ele redimensiona o quadro de
+ * qualquer jeito) e salva a mesa de aparecer serrilhada atrás do circuito. Sem
+ * AR é a frontal em 640x480, que é o que o rastreio precisa.
+ *
+ * `ideal` (nunca `exact`): quem não tem a câmera pedida — o PC de webcam única,
+ * o tablet sem frontal — cai na que tiver em vez de ficar sem câmera nenhuma.
+ */
+export function restricoesMaos(traseira: boolean): MediaStreamConstraints {
+  return {
+    video: {
+      facingMode: { ideal: traseira ? 'environment' : 'user' },
+      width: { ideal: traseira ? 1280 : 640 },
+      height: { ideal: traseira ? 720 : 480 },
+    },
+    audio: false,
+  };
+}
+
 export interface FrameHand {
   /** 'Left' | 'Right' (etiqueta do classificador) — nunca índice de array. */
   side: string;
@@ -73,6 +98,7 @@ export class HandTracker {
       onFrame: (hands: FrameHand[], stats: FrameStats) => void;
       onVideoTick?: () => void;
     },
+    traseira = false,
   ): Promise<void> {
     if (!this.stopped) return;
     this.onFrame = callbacks.onFrame;
@@ -83,16 +109,38 @@ export class HandTracker {
       this.delegate = delegate;
     }
     this.video = video;
-    this.stream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 } },
-      audio: false,
-    });
+    this.stream = await this.pedir(traseira);
     video.srcObject = this.stream;
     video.muted = true;
     await video.play().catch(() => {});
     this.stopped = false;
     this.lastVideoTime = -1;
     this.scheduleVideoFrame();
+  }
+
+  /**
+   * Troca a câmera da sessão (frontal ⇄ de trás) SEM derrubar o rastreio: o
+   * modelo, o laço de quadros e o elemento de vídeo continuam — só o stream
+   * muda. A câmera nova é aberta ANTES de soltar a antiga: se ela falhar
+   * (aparelho sem traseira, câmera ocupada por outro app), a que estava
+   * funcionando continua na mira em vez de a sessão cair no meio da aula.
+   */
+  async trocarCamera(video: HTMLVideoElement, traseira: boolean): Promise<void> {
+    if (this.stopped) return;
+    const nova = await this.pedir(traseira);
+    const antiga = this.stream;
+    this.video = video;
+    this.stream = nova;
+    video.srcObject = nova;
+    video.muted = true;
+    await video.play().catch(() => {});
+    this.lastVideoTime = -1; // quadro de outra câmera: o rAF tem de detectar de novo
+    antiga?.getTracks().forEach((t) => t.stop());
+  }
+
+  /** Único lugar que fala com a câmera: frontal (selfie) ou de trás (a mesa). */
+  private pedir(traseira: boolean): Promise<MediaStream> {
+    return navigator.mediaDevices.getUserMedia(restricoesMaos(traseira));
   }
 
   stop() {

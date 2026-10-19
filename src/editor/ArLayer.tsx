@@ -13,14 +13,18 @@ import { hands, useHandsStatus } from '../hands/controller';
  * camada morre junto com a vista, soltando a câmera).
  *
  * A FONTE do vídeo depende das mãos: ligadas, o fundo é o MESMO stream do
- * rastreio (uma webcam só, zero permissão a mais, e a mão de verdade aparece
- * sobre o circuito); desligadas, abre-se a câmera traseira. Quando as mãos
- * mudam, o efeito troca de fonte — e aí só fecha o que é nosso.
+ * rastreio (uma câmera só, zero permissão a mais, e a mão de verdade aparece
+ * sobre o circuito); desligadas, abre-se a câmera de trás. Quando as mãos
+ * mudam — ou quando elas TROCAM de câmera por causa do AR (frontal ⇄ de trás)
+ * — o efeito roda de novo e reusa o stream novo; e aí só fecha o que é nosso.
  */
 export function ArLayer() {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [erro, setErro] = useState<string | null>(null);
-  const maosAtivas = useHandsStatus(hands).active;
+  // `camera` entra como dependência: as mãos podem trocar de câmera (o AR liga
+  // com elas já ligadas na frontal) e este vídeo tem de passar a mostrar o novo
+  // stream — o das mãos, que é quem manda aqui.
+  const { active: maosAtivas, camera } = useHandsStatus(hands);
 
   useEffect(() => {
     const video = videoRef.current;
@@ -48,7 +52,7 @@ export function ArLayer() {
       video.srcObject = null;
       fecharFundo(fundo); // só a câmera que é NOSSA: a das mãos continua na mira
     };
-  }, [maosAtivas]);
+  }, [maosAtivas, camera]);
 
   return (
     <>

@@ -30,6 +30,33 @@ const CAMERA_HINT: Record<EscolhaCamera, string> = {
 };
 
 /**
+ * Escolha da CÂMERA da mão: a automática (segue o AR) ou um lado fixo. Aparece
+ * ANTES de ligar as mãos (é ela que decide qual câmera abre na largada) e
+ * também com a sessão viva (a troca acontece na hora, sem derrubar a mira).
+ */
+function EscolhaDaCamera() {
+  const st = useHandsStatus(hands);
+  return (
+    <div className="hands-filter" role="group" aria-label="Câmera da mão">
+      <span>Câmera da mão</span>
+      {CAMERAS.map((c) => (
+        <button
+          key={c}
+          type="button"
+          className={`ghost${st.cameraEscolha === c ? ' active' : ''}`}
+          data-hand={`cam:${c}`}
+          title={CAMERA_HINT[c]}
+          aria-pressed={st.cameraEscolha === c}
+          onClick={() => hands.setCameraEscolha(c)}
+        >
+          {CAMERA_TEXT[c]}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/**
  * Painel das mãos (Fase 2b): liga/desliga a câmera, mostra estado, calibra a
  * pinça e oferece a prévia da câmera RECOLHIDA (privacidade: a cena nunca
  * mostra o vídeo, só o esqueleto).
@@ -59,6 +86,11 @@ export function HandsPanel() {
               Usar as mãos
             </button>
           </div>
+          <EscolhaDaCamera />
+          <p className="card-sub">
+            Seguindo o AR, a mesa entra sozinha com o AR ligado. Escolhendo um lado, a câmera fica
+            naquele até você mudar.
+          </p>
           <ul className="gestos">
             <li>
               <strong>Pinça</strong> — feche para apertar e arrastar, abra para soltar (vale no
@@ -73,7 +105,8 @@ export function HandsPanel() {
             </li>
             <li>
               <strong>Na mesa</strong> — com o AR ligado a câmera passa para a de trás (a mesma do
-              vídeo de fundo): as mãos manipulam o circuito projetado na própria mesa.
+              vídeo de fundo): as mãos manipulam o circuito projetado na própria mesa. Se a mesa não
+              aparecer, escolha <strong>De trás</strong> aqui em cima.
             </li>
           </ul>
         </>
@@ -141,22 +174,7 @@ export function HandsPanel() {
             )}
             {st.lastCalib && <li>Última calibração: {st.lastCalib}</li>}
           </ul>
-          <div className="hands-filter" role="group" aria-label="Câmera da mão">
-            <span>Câmera da mão</span>
-            {CAMERAS.map((c) => (
-              <button
-                key={c}
-                type="button"
-                className={`ghost${st.cameraEscolha === c ? ' active' : ''}`}
-                data-hand={`cam:${c}`}
-                title={CAMERA_HINT[c]}
-                aria-pressed={st.cameraEscolha === c}
-                onClick={() => hands.setCameraEscolha(c)}
-              >
-                {CAMERA_TEXT[c]}
-              </button>
-            ))}
-          </div>
+          <EscolhaDaCamera />
           <p className="card-sub">
             Seguindo o AR, a mesa entra sozinha com o AR ligado. Escolhendo um lado, a câmera fica
             naquele até você mudar — as mãos manipulam o circuito igual nos dois casos.

@@ -97,7 +97,13 @@ export function HandsPanel() {
               quadro 2D, na bancada 3D e nos botões da tela).
             </li>
             <li>
-              <strong>Zoom</strong> — com as duas mãos, abra e junte.
+              <strong>Zoom</strong> — com <strong>uma mão</strong>: feche a pinça no vazio e leve a
+              mão para DENTRO da tela (para perto do aparelho) para aproximar; para trás, afasta.
+              Com as duas mãos, abra e junte.
+            </li>
+            <li>
+              <strong>Girar a bancada</strong> — com <strong>uma mão</strong>: pinça fechada no
+              vazio e gire a mão (vale na bancada 3D). Com as duas mãos, gire a linha entre elas.
             </li>
             <li>
               <strong>Mão que comanda</strong> — depois de ligar, dá para deixar só a direita, só a
@@ -105,8 +111,10 @@ export function HandsPanel() {
             </li>
             <li>
               <strong>Na mesa</strong> — com o AR ligado a câmera passa para a de trás (a mesma do
-              vídeo de fundo): as mãos manipulam o circuito projetado na própria mesa. Se a mesa não
-              aparecer, escolha <strong>De trás</strong> aqui em cima.
+              vídeo de fundo): as mãos manipulam o circuito projetado na própria mesa. Como uma mão
+              segura o celular, é aí que o zoom de uma mão (pinça no vazio + a mão para dentro da
+              tela) faz diferença. Se a mesa não aparecer, escolha <strong>De trás</strong> aqui em
+              cima.
             </li>
           </ul>
         </>
@@ -148,6 +156,19 @@ export function HandsPanel() {
                 <span title="Fora do seletor de uma mão: aparecem apagadas e não comandam nada.">
                   {' · '}
                   {st.ignored} {st.ignored === 1 ? 'mão ignorada' : 'mãos ignoradas'}
+                </span>
+              )}
+            </li>
+            <li>
+              <span title="Editar = a pinça apertou um componente, fio ou terminal. Navegar = apertou o vazio: a vista acompanha a mão (pan), a mão para dentro da tela aproxima (zoom) e girar a palma gira a bancada no 3D — tudo com UMA mão.">
+                Gesto agora:{' '}
+                <strong>
+                  {st.gesto === 'navega' ? 'navegando' : st.gesto === 'edita' ? 'editando' : '–'}
+                </strong>
+              </span>
+              {st.tamanho !== null && (
+                <span title="Tamanho aparente da palma (fração da imagem): é a régua do zoom de uma mão — perto do aparelho cresce. Serve para medir o gesto no seu aparelho.">
+                  {' '}· palma {st.tamanho.toFixed(2)}
                 </span>
               )}
             </li>

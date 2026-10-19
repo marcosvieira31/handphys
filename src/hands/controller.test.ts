@@ -701,6 +701,159 @@ describe('pinca e puxa = pan da vista (controller)', () => {
   });
 });
 
+describe('mundo na mão: a vista com UMA mão (o celular ocupa a outra)', () => {
+  beforeEach(() => {
+    resetDoc();
+    useEditor.setState({ zoom: 1, pan: { x: 0, y: 0 }, panning: false });
+    vi.stubGlobal('window', { innerWidth: 1000, innerHeight: 800 });
+  });
+  afterEach(() => {
+    bindZoomTarget(null);
+    useEditor.setState({ view: '2d' });
+    vi.unstubAllGlobals();
+  });
+
+  const feeder = (ctl: HandsController) => {
+    let now = 0;
+    return (h: FrameHand, n = 3) => {
+      for (let i = 0; i < n; i++) {
+        now += 33;
+        ctl.ingest([h], 5, now);
+      }
+    };
+  };
+
+  /** Pinça fechada no VAZIO (célula 8,10): é o "pegou o mundo". */
+  const noVazio = () => hand('Right', 0.72, 0.7534);
+
+  /** A MESMA mão pinçada, só maior/menor em torno de um ponto: é assim que o
+   *  teste simula a mão indo e voltando DA CÂMERA (só o tamanho aparente muda
+   *  — pinça, mira e tamanho da palma escalam juntos, como na vida real). */
+  function escala(h: FrameHand, k: number, cx = 0.5, cy = 0.5): FrameHand {
+    return {
+      ...h,
+      pts: h.pts.map((p) => ({ x: cx + (p.x - cx) * k, y: cy + (p.y - cy) * k, z: p.z })),
+      world: null,
+    };
+  }
+
+  /** Gira SÓ o eixo da palma (pulso 0 → metacarpal 9) em torno do próprio meio:
+   *  o resto da mão (pontas 4 e 8, mira) fica parado — separa o canal do giro. */
+  function gira(h: FrameHand, theta: number): FrameHand {
+    const a = h.pts[0];
+    const b = h.pts[9];
+    const cx = (a.x + b.x) / 2;
+    const cy = (a.y + b.y) / 2;
+    const c = Math.cos(theta);
+    const s = Math.sin(theta);
+    const pts = h.pts.map((p, i) => {
+      if (i !== 0 && i !== 9) return { ...p };
+      const dx = p.x - cx;
+      const dy = p.y - cy;
+      return { x: cx + dx * c - dy * s, y: cy + dx * s + dy * c, z: p.z };
+    });
+    return { ...h, pts, world: null };
+  }
+
+  it('pinça no vazio: mão para DENTRO da tela aproxima a bancada; para fora, afasta', () => {
+    const ctl = wireUp();
+    const f = feeder(ctl);
+    f(noVazio(), 8);
+    expect(useEditor.getState().panning).toBe(true); // é o aperto no vazio
+    expect(useEditor.getState().zoom).toBe(1);
+    for (let k = 1.03; k <= 1.25; k += 0.03) f(escala(noVazio(), k), 3); // a mão vem
+    const perto = useEditor.getState().zoom;
+    expect(perto).toBeGreaterThan(1);
+    f(escala(noVazio(), 1), 15); // e volta para longe
+    expect(useEditor.getState().zoom).toBeLessThan(perto);
+  });
+
+  it('agarrando um COMPONENTE a profundidade não mexe na vista (a pinça edita)', () => {
+    const ctl = wireUp();
+    const f = feeder(ctl);
+    f(hand('Right', 0.8, 0.8334), 6); // pinça no terminal da bateria: célula (5,10)
+    expect(useEditor.getState().panning).toBe(false);
+    for (let k = 1.05; k <= 1.3; k += 0.05) f(escala(hand('Right', 0.8, 0.8334), k), 3);
+    expect(useEditor.getState().zoom).toBe(1);
+    expect(ctl.getSnapshot().gesto).toBe('edita');
+  });
+
+  it('soltar e pinçar de novo na MESMA profundidade não dá salto (régua nova)', () => {
+    const ctl = wireUp();
+    const f = feeder(ctl);
+    f(noVazio(), 6);
+    f(escala(noVazio(), 1.2), 8);
+    const z = useEditor.getState().zoom;
+    expect(z).toBeGreaterThan(1);
+    // abre a mão MANTENDO a palma no mesmo lugar (abrir a pinça não muda o
+    // tamanho aparente da palma — é assim na mão de verdade): só solta
+    f(escala(hand('Right', 0.72, 0.42), 1.2), 12);
+    expect(useEditor.getState().panning).toBe(false);
+    f(escala(noVazio(), 1.2), 6); // fecha de NOVO, já longe da câmera
+    expect(useEditor.getState().zoom).toBe(z); // a régua recomeçou: nada de zoom
+  });
+
+  it('girar a palma no vazio gira a bancada (3D) — e girar no plano não é zoom', () => {
+    const ctl = wireUp();
+    const rolls: number[] = [];
+    const dollies: number[] = [];
+    bindZoomTarget({
+      dolly: (x) => dollies.push(x),
+      panBy: () => {},
+      rollBy: (r) => rolls.push(r),
+      frameTo: () => {},
+      resetView: () => {},
+    });
+    useEditor.setState({ view: '3d' });
+    const f = feeder(ctl);
+    f(noVazio(), 4);
+    for (let i = 1; i <= 8; i++) f(gira(noVazio(), i * 0.12), 2);
+    expect(rolls.length).toBeGreaterThan(0);
+    expect(rolls.every((r) => r < 0)).toBe(true); // mão horária no ESPELHO: x = 1-x
+    expect(rolls.every((r) => Math.abs(r) <= 0.25)).toBe(true); // nunca um salto grande
+    // girar NO PLANO preserva a distância crua pulso×metacarpal — e o zoom é
+    // medido nela (não nos pontos já filtrados, cujo par deforma ao girar):
+    // o giro NÃO pode disparar um passo de zoom
+    expect(dollies).toEqual([]);
+    // e o sentido acompanha a mão: girando ao contrário, o giro inverte. Os
+    // primeiros quadros ainda alcançam o ângulo antigo (o filtro tem atraso),
+    // por isso o giro de volta só é medido depois de assentar.
+    f(gira(noVazio(), 8 * 0.12), 6);
+    rolls.length = 0;
+    for (let i = 7; i >= 1; i--) f(gira(noVazio(), i * 0.12), 2);
+    expect(rolls.length).toBeGreaterThan(0);
+    expect(rolls.every((r) => r > 0)).toBe(true);
+  });
+
+  it('no seletor de UMA mão o zoom de uma mão continua valendo (o caminho sem AR)', () => {
+    const ctl = wireUp();
+    ctl.setFilter('right');
+    const f = feeder(ctl);
+    f(noVazio(), 8);
+    for (let k = 1.03; k <= 1.25; k += 0.03) f(escala(noVazio(), k), 3);
+    expect(useEditor.getState().zoom).toBeGreaterThan(1);
+    // a mão IGNORADA não navega nada (mesma profundidade, mesma posição)
+    useEditor.setState({ zoom: 1, pan: { x: 0, y: 0 } });
+    const ctl2 = wireUp();
+    ctl2.setFilter('right');
+    const f2 = feeder(ctl2);
+    const esq = (k: number) => escala(hand('Left', 0.72, 0.7534), k);
+    for (let k = 1; k <= 1.25; k += 0.03) f2(esq(k), 4);
+    expect(useEditor.getState().zoom).toBe(1);
+  });
+
+  it('o painel sabe o que a pinça faz agora (navega x edita) e a régua da palma', () => {
+    const ctl = wireUp();
+    const f = feeder(ctl);
+    f(noVazio(), 4);
+    expect(ctl.getSnapshot().gesto).toBe('navega');
+    expect(ctl.getSnapshot().tamanho).toBeGreaterThan(0);
+    // e ao soltar volta a '–' (nada agarrado, nada navegando)
+    f(hand('Right', 0.35, 0.75), 12);
+    expect(ctl.getSnapshot().gesto).toBe('–');
+  });
+});
+
 describe('mãos com a câmera de TRÁS (o AR ligado): a mesa como o aluno vê', () => {
   beforeEach(() => {
     resetDoc();

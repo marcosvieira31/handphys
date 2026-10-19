@@ -5,6 +5,7 @@ import { applyPan, applyRoll, applyZoom } from '../editor/zoom';
 import { clientToBoard, miraOverTrash } from '../editor/coords';
 import { useEditor } from '../editor/store';
 import { Clutch } from './clutch';
+import { MundoNaMao } from './navigate';
 import { OneEuroFilter } from './oneEuro';
 import { PinchTracker } from './pinch';
 import { SideVote, type HandSide } from './side';
@@ -19,6 +20,12 @@ import {
 
 /** Seletor de UMA mão: quem comanda o cursor, a pinça e a calibração. */
 export type HandFilter = 'auto' | 'right' | 'left' | 'lock';
+
+/**
+ * O que a pinça está fazendo AGORA: editando um alvo ou navegando a vista
+ * (pinça no vazio = pan + zoom pela profundidade + giro pela palma).
+ */
+export type Gesto = '–' | 'edita' | 'navega';
 
 /**
  * De onde vem a câmera das mãos: 'auto' segue o AR (ligado = a de trás, a
@@ -85,6 +92,18 @@ export interface HandsStatus {
   cursor: HandPoint | null;
   /** 'travada' = mira congelada na palma (dedos fechando não deslocam o ponto). */
   mira: 'livre' | 'travada';
+  /**
+   * O que a pinça está fazendo: 'edita' = apertou um componente/fio/terminal;
+   * 'navega' = apertou o vazio (pan + zoom + giro de uma mão). O painel usa
+   * isso para o aluno saber em qual camada está antes de puxar.
+   */
+  gesto: Gesto;
+  /**
+   * Tamanho aparente da palma da mão que comanda (fração da imagem) — é a
+   * "régua" do zoom de uma mão. Nulo sem mão. Serve ao diagnóstico em aula:
+   * com ele dá para MEDIR o gesto no aparelho de verdade.
+   */
+  tamanho: number | null;
   /**
    * Fonte da razão de pinça: '3D' = coordenadas de MUNDO (tem o eixo Z, em
    * metros — estável com as pontas se tocando); '2D' = só a imagem da câmera.
@@ -234,6 +253,15 @@ export class HandsController {
     string,
     { x: OneEuroFilter[]; y: OneEuroFilter[]; z: OneEuroFilter[] }
   >();
+  /**
+   * Profundidade da palma (pulso→metacarpal) suavizada como ESCALAR, uma por
+   * mão. É de propósito que ela não sai dos pontos já suavizados: o filtro por
+   * eixo deforma o par quando a mão GIRA (cada ponta atrasa na direção do seu
+   * próprio movimento), e o "tamanho" encolhia — girar a palma disparava zoom.
+   * Girar NO PLANO preserva a distância crua, então filtrar o escalar deixa os
+   * dois canais de fato ortogonais.
+   */
+  private sizeFilters = new Map<string, OneEuroFilter>();
   /** Estado do gesto das DUAS mãos no quadro anterior: zoom (distância),
    *  enquadramento (meio) e giro de Z (ângulo da linha entre as mãos). */
   private spread: {
@@ -250,6 +278,14 @@ export class HandsController {
   /** Posição da mira (fração de tela) do quadro anterior quando o aperto-vazio
    *  virou PAN: em px, porque a célula mudaria sozinha com a vista andando. */
   private panPrev: { x: number; y: number } | null = null;
+  /**
+   * MUNDO NA MÃO: a vista de UMA mão. O pan já é medido em px aqui; este módulo
+   * acrescenta os outros dois canais do MESMO aperto no vazio — zoom pela
+   * profundidade aparente e giro pelo eixo da palma (ver navigate.ts).
+   */
+  private mundo = new MundoNaMao();
+  /** Âncora do zoom no quadro 2D (ponto sob a mão quando o aperto começou). */
+  private mundoAnchor: { x: number; y: number } | null = null;
   private driver: string | null = null;
   /** Trava de mira da mão piloto (a mira não escorrega quando os dedos convergem). */
   private clutch = new Clutch();
@@ -281,6 +317,8 @@ export class HandsController {
     ratio: null,
     cursor: null,
     mira: 'livre',
+    gesto: '–',
+    tamanho: null,
     prof: '–',
     filter: loadFilter(),
     handSide: '–',
@@ -427,8 +465,11 @@ export class HandsController {
     this.slowFilters.clear();
     this.fastFilters.clear();
     this.worldFilters.clear();
+    this.sizeFilters.clear();
     this.sideVote.clear();
     this.spread = null;
+    this.mundo.reset();
+    this.mundoAnchor = null;
     this.lockedId = null;
     this.slots.clear();
     this.lastCell.clear();
@@ -660,6 +701,8 @@ export class HandsController {
     this.pressed.clear();
     this.lastCell.clear();
     this.driver = null;
+    this.mundo.reset();
+    this.mundoAnchor = null;
     this.clutch.reset();
     this.clutchId = null;
   }
@@ -711,8 +754,6 @@ export class HandsController {
       const world = h.world ? this.smoothWorld(id, h.world, t) : null;
       const ratio = world ? pinchRatio3D(world) : pinchRatio2D(sm);
       const { pinched, edge } = this.pinch.update(id, ratio, now);
-      const wrist = sm[0] ?? { x: 0.5, y: 0.5 };
-      const mid = sm[9] ?? { x: 0.5, y: 0.5 };
       seen.set(id, {
         sm,
         fast,
@@ -721,8 +762,10 @@ export class HandsController {
         edge,
         label: h.side,
         ratio,
-        // profundidade da mão: só o que a webcam dá de verdade (aparencia)
-        size: Math.hypot(mid.x - wrist.x, mid.y - wrist.y),
+        // profundidade da mão: só o que a webcam dá de verdade (aparencia).
+        // Medida nos pontos CRUS (uma rotação no plano preserva a distância) e
+        // suavizada como escalar — ver o comentário dos `sizeFilters`.
+        size: this.sizeOf(id, h.pts, t),
         hasWorld,
         // lado por VOTO: o rótulo cru do modelo troca sozinho no meio do gesto
         handSide: this.sideVote.add(id, h.side),
@@ -753,9 +796,14 @@ export class HandsController {
       this.slowFilters.delete(side);
       this.fastFilters.delete(side);
       this.worldFilters.delete(side);
+      this.sizeFilters.delete(side);
       this.sideVote.forget(side);
       if (this.lockedId === side) this.lockedId = null; // gruda na próxima
-      if (this.driver === side) this.driver = null;
+      if (this.driver === side) {
+        this.driver = null;
+        this.mundo.reset(); // a régua de profundidade era daquela mão
+        this.mundoAnchor = null;
+      }
       if (this.clutchId === side) {
         this.clutch.reset();
         this.clutchId = null;
@@ -777,6 +825,8 @@ export class HandsController {
         this.pressed.delete(side);
         this.lastCell.delete(side);
         this.panPrev = null;
+        this.mundo.reset();
+        this.mundoAnchor = null;
       }
     }
 
@@ -784,7 +834,12 @@ export class HandsController {
     // Só mãos que COMANDAM entram (o seletor de uma mão pega só uma delas).
     const pinchedNow = pinchedAll.filter((id) => usedIds.has(id));
     if (this.driver === null || !pinchedNow.includes(this.driver)) {
-      this.driver = pinchedNow[0] ?? null;
+      const novo = pinchedNow[0] ?? null;
+      if (novo !== this.driver) {
+        this.mundo.reset(); // outra mão: outra palma, outra régua
+        this.mundoAnchor = null;
+      }
+      this.driver = novo;
     }
 
     // 4.5) TRAVA DE MIRA. A mira crua é o meio entre as pontas 4 e 8, mas elas
@@ -809,6 +864,7 @@ export class HandsController {
 
     // 5) aperto/movimento do piloto ( contention: quem nunca apertou, aperta;
     // quem já apertou, move — a soltura foi tratada no passo 3).
+    let gesto: Gesto = '–';
     const d = this.driver !== null ? seen.get(this.driver) : undefined;
     if (this.driver !== null && d?.pinched && cursorPoint) {
       const cell = this.resolveCell(cursorPoint);
@@ -821,6 +877,11 @@ export class HandsController {
           this.panPrev = useEditor.getState().panning
             ? { x: cursorPoint.x, y: cursorPoint.y }
             : null;
+          // MUNDO NA MÃO: a âncora do zoom de uma mão é o ponto do quadro sob a
+          // mão no começo do aperto (no 3D não há: o dolly não tem âncora).
+          this.mundoAnchor = this.panPrev ? this.boardAt(cursorPoint) : null;
+          this.mundo.reset();
+          gesto = this.panPrev ? 'navega' : 'edita';
         } else if (this.panPrev && useEditor.getState().panning && typeof window !== 'undefined') {
           // PINÇA E PUXA: a vista acompanha a mão (px) — mouse e toque fazem
           // o mesmo caminho pelo lado deles; componente algum é tocado.
@@ -828,8 +889,22 @@ export class HandsController {
           const dy = (cursorPoint.y - this.panPrev.y) * window.innerHeight;
           this.panPrev = { x: cursorPoint.x, y: cursorPoint.y };
           if (dx !== 0 || dy !== 0) applyPan(dx, dy, window.innerWidth);
+          // MUNDO NA MÃO: o MESMO aperto no vazio também é profundidade (mão
+          // para dentro da tela = entrar na cena) e giro da palma (bancada 3D).
+          // Só aqui: com alvo na mão a pinça edita e a vista fica quieta.
+          const nav = this.mundo.update({
+            grabbing: true,
+            size: d.size,
+            ang: angDaPalma(d.mir),
+          });
+          if (nav.zoom !== 1) applyZoom(nav.zoom, this.mundoAnchor);
+          if (nav.roll !== 0) applyRoll(nav.roll);
+          gesto = 'navega';
         } else {
+          // agarrou um alvo: a vista não anda (nem por profundidade nem por giro)
+          this.mundo.reset();
           st.moveAt(cell);
+          gesto = 'edita';
         }
         this.lastCell.set(this.driver, cell);
       }
@@ -904,6 +979,8 @@ export class HandsController {
       ratio: hover?.ratio ?? null,
       cursor: cursorPoint,
       mira: this.clutch.isFrozen ? 'travada' : 'livre',
+      gesto,
+      tamanho: hover && Number.isFinite(hover.size) ? hover.size : null,
       prof: hover ? (hover.hasWorld ? '3D' : '2D') : '–',
       filter: this.filter,
       handSide: hover?.handSide ?? '–',
@@ -1000,6 +1077,24 @@ export class HandsController {
   ): HandPoint[] {
     const b = this.bank(store, side, pts.length, opts);
     return pts.map((p, i) => ({ x: b.x[i].filter(p.x, t), y: b.y[i].filter(p.y, t) }));
+  }
+
+  /**
+   * Profundidade aparente da mão: pulso (0) → metacarpal do meio (9), medida
+   * nos pontos CRUS e suavizada como escalar. Crua porque uma rotação da mão NO
+   * PLANO preserva essa distância — e por isso ela é o canal do zoom sem
+   * contaminar (nem ser contaminada por) o canal do giro.
+   */
+  private sizeOf(id: string, pts: { x: number; y: number }[], t: number): number {
+    const a = pts[0] ?? { x: 0.5, y: 0.5 };
+    const b = pts[9] ?? { x: 0.5, y: 0.5 };
+    const cru = Math.hypot(b.x - a.x, b.y - a.y);
+    let f = this.sizeFilters.get(id);
+    if (!f) {
+      f = new OneEuroFilter({});
+      this.sizeFilters.set(id, f);
+    }
+    return f.filter(cru, t);
   }
 
   /** Mesma suavização lenta das coordenadas 2D, agora nos TRÊS eixos (metros). */
@@ -1120,6 +1215,24 @@ function midOf(pts: HandPoint[], i: number, j: number): HandPoint {
   const a = pts[i] ?? { x: 0.5, y: 0.5 };
   const b = pts[j] ?? { x: 0.5, y: 0.5 };
   return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+}
+
+/**
+ * Ângulo do EIXO DA PALMA (pulso 0 → metacarpal do meio 9) já no espaço da
+ * TELA — os mesmos pontos que o aluno vê. É o canal do giro de uma mão: girar
+ * a mão NO PLANO gira esses dois pontos juntos, sem mexer no tamanho (é por
+ * isso que o zoom pela profundidade não sente o giro). Devolve NaN quando o
+ * eixo degenera (palma de perfil, os dois pontos quase coincidentes): quadro
+ * sem amostra de giro em vez de um ângulo inventado.
+ */
+function angDaPalma(mir: HandPoint[]): number {
+  const w = mir[0];
+  const m = mir[9];
+  if (!w || !m) return NaN;
+  const dx = m.x - w.x;
+  const dy = m.y - w.y;
+  if (Math.hypot(dx, dy) < 1e-4) return NaN;
+  return Math.atan2(dy, dx);
 }
 
 /** Percentil (0 se vazio): p90 do teto, p10 do piso — robustos a tropeços. */

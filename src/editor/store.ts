@@ -14,7 +14,7 @@ import {
   type Wire,
 } from '../core/netlist';
 import { GRAB_DIST, SNAP_DIST, WIRE_GRAB, wireAt } from './coords';
-import { frameAt, zoomAbout, panPx } from './zoomMath';
+import { centrarNoQuadro, enquadrarConteudo, frameAt, zoomAbout, panPx } from './zoomMath';
 
 const LIMIT = 30; // células de 0..29 — o quadro tem borda, nada sai da grade
 
@@ -58,6 +58,9 @@ export interface EditorState {
    * nada). Não é tarefa com veredito — só o enunciado, para a turma ler.
    */
   questao: string;
+  /** Tarefas já aprovadas nesta sessão (o ✓ da lista e o progresso). */
+  feitos: string[];
+  marcarFeito: (id: string) => void;
   /** Vista ativa: o MESMO documento em 2D ou na bancada 3D. */
   view: '2d' | '3d';
   /** Zoom do quadro 2D (1 = cabe tudo, 4 = o teto) e deslocamento do centro. */
@@ -133,6 +136,19 @@ export interface EditorState {
   resetView: () => void;
 }
 
+/**
+ * Próximo id LIVRE com o prefixo dado ("r3", "w12"). O contador `seq` sozinho
+ * não basta: um exemplo ou um link entram com ids próprios (`r1`, `r2`) e o
+ * contador continuava em 0 — a primeira peça nova nascia `r1` de novo, duas
+ * linhas iguais na tabela e o clique numa selecionava a outra.
+ */
+export function idLivre(doc: CircuitDoc, prefixo: string, seq: number): { id: string; seq: number } {
+  const usados = new Set<string>([...doc.comps.map((c) => c.id), ...doc.wires.map((w) => w.id)]);
+  let n = seq + 1;
+  while (usados.has(`${prefixo}${n}`)) n++;
+  return { id: `${prefixo}${n}`, seq: n };
+}
+
 const clamp = (v: number) => Math.max(0, Math.min(LIMIT - 1, v));
 
 /** Valor inicial de cada tipo (o que um professor espera ao posicionar). */
@@ -172,6 +188,7 @@ export const useEditor = create<EditorState>((set, get) => ({
   flow: true,
   challenge: null,
   questao: '',
+  feitos: [],
   view: '2d',
   zoom: 1,
   pan: { x: 0, y: 0 },
@@ -202,9 +219,9 @@ export const useEditor = create<EditorState>((set, get) => ({
 
   place: (kind, at) => {
     const s = get();
-    const n = s.seq + 1;
+    const { id, seq: n } = idLivre(s.doc, ID_PREFIX[kind], s.seq);
     const comp: Placed = {
-      id: `${ID_PREFIX[kind]}${n}`,
+      id,
       kind,
       x: clamp(at.x),
       y: clamp(at.y),
@@ -254,9 +271,10 @@ export const useEditor = create<EditorState>((set, get) => ({
       else set({ draft: null });
       return;
     }
-    const wire: Wire = { id: `w${s.seq + 1}`, from: d.from, to };
+    const novo = idLivre(s.doc, 'w', s.seq);
+    const wire: Wire = { id: novo.id, from: d.from, to };
     set({
-      seq: s.seq + 1,
+      seq: novo.seq,
       past: [...s.past, s.doc].slice(-30),
       doc: { ...s.doc, wires: [...s.doc.wires, wire] },
       draft: null,
@@ -441,8 +459,9 @@ export const useEditor = create<EditorState>((set, get) => ({
   setValue: (id, value) => {
     const s = get();
     const c = s.doc.comps.find((k) => k.id === id);
-    if (!c || !Number.isFinite(value)) return;
+    if (!c || !Number.isFinite(value) || c.value === value) return;
     set({
+      past: [...s.past, s.doc].slice(-30), // trocar o valor também se desfaz
       doc: { ...s.doc, comps: s.doc.comps.map((k) => (k.id === id ? { ...k, value } : k)) },
     });
   },
@@ -460,17 +479,22 @@ export const useEditor = create<EditorState>((set, get) => ({
     });
   },
 
-  load: (doc) =>
-    set((s) => ({
-      doc,
-      past: [...s.past, s.doc].slice(-30),
-      selection: null,
-      draft: null,
-      placing: null,
-      carry: null,
-      wiring: false,
-      grip: null,
-    })),
+  load: (aberto) =>
+    set((s) => {
+      // o circuito aberto vai para o meio do quadro e a vista o enquadra
+      const doc = centrarNoQuadro(aberto);
+      return {
+        doc,
+        ...enquadrarConteudo(doc),
+        past: [...s.past, s.doc].slice(-30),
+        selection: null,
+        draft: null,
+        placing: null,
+        carry: null,
+        wiring: false,
+        grip: null,
+      };
+    }),
 
   clear: () =>
     set((s) => ({
@@ -493,6 +517,9 @@ export const useEditor = create<EditorState>((set, get) => ({
   setColorByVoltage: (on) => set({ colorByVoltage: on }),
   setFlow: (on) => set({ flow: on }),
   setChallenge: (id) => set({ challenge: id }),
+  marcarFeito: (id) => {
+    if (!get().feitos.includes(id)) set({ feitos: [...get().feitos, id] });
+  },
   setQuestao: (q) => set({ questao: q }),
 
   setView: (v) => set({ view: v, draft: null, grip: null, panning: false }),
@@ -509,5 +536,6 @@ export const useEditor = create<EditorState>((set, get) => ({
 
   centerView: () => set({ pan: { x: 0, y: 0 } }), // centro do quadro, zoom fica
 
-  resetView: () => set({ zoom: 1, pan: { x: 0, y: 0 } }),
+  // "caber tudo" = o circuito inteiro na tela (vazio: o quadro inteiro)
+  resetView: () => set((s) => enquadrarConteudo(s.doc)),
 }));

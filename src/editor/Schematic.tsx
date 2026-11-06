@@ -14,6 +14,7 @@ import {
 import {
   CELL,
   GRAB_DIST,
+  GRID,
   SNAP_DIST,
   WIRE_GRAB,
   clientToBoard,
@@ -21,7 +22,7 @@ import {
   overTrash,
   wireAt,
 } from './coords';
-import { formatValue, labelPos, Symbol } from './symbol';
+import { formatAmps, formatValue, formatVolts, labelPos, Symbol } from './symbol';
 import { voltageColor } from './colors';
 import { useEditor } from './store';
 import { viewBoxOf } from './zoomMath';
@@ -336,24 +337,43 @@ export function Schematic({ reading }: { reading: Reading }) {
           <path d={`M ${CELL} 0 L 0 0 0 ${CELL}`} fill="none" className="grid-line" strokeWidth={0.6} />
         </pattern>
       </defs>
-      <rect width="100%" height="100%" fill="url(#grid)" />
+      <rect width={GRID * CELL} height={GRID * CELL} fill="url(#grid)" />
       {wires}
       {targets}
       {draftLine}
       {comps}
       {ghost}
 
-      {/* etiquetas dos valores, por cima do traço mas fora do caminho do mouse */}
+      {/* etiquetas: o NOME da peça (o mesmo da tabela — "r2") e o valor, por
+          cima do traço mas fora do caminho do mouse */}
       {doc.comps.map((c) => {
-        const label = formatValue(c.kind, c.value);
-        if (!label) return null;
+        if (c.kind === 'ground') return null;
+        const valor = formatValue(c.kind, c.value);
         const pos = labelPos(c, CELL);
         return (
           <text key={`l${c.id}`} x={pos.x} y={pos.y} className="label" textAnchor={pos.anchor}>
-            {label}
+            <tspan className="label-id">{c.id}</tspan>
+            {valor ? ` ${valor}` : null}
           </text>
         );
       })}
+
+      {/* a leitura da peça SELECIONADA no próprio quadro: o olho fica na peça,
+          não precisa ir ao painel para saber quanto ela mede */}
+      {(() => {
+        if (selection?.kind !== 'comp') return null;
+        const c = doc.comps.find((k) => k.id === selection.id);
+        const rd = reading.comps.find((r) => r.id === selection.id);
+        if (!c || !rd || !rd.netB || c.kind === 'ground' || c.kind === 'switch') return null;
+        const vertical = c.rot === 90 || c.rot === 270;
+        const x = vertical ? c.x * CELL - CELL * 0.9 : c.x * CELL;
+        const y = vertical ? c.y * CELL + CELL * 0.35 : c.y * CELL - CELL * 0.85;
+        return (
+          <text x={x} y={y} className="leitura-tag" textAnchor={vertical ? 'end' : 'middle'}>
+            {formatVolts(rd.volts)} · {formatAmps(rd.amps)}
+          </text>
+        );
+      })()}
     </svg>
   );
 }

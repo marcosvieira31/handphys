@@ -154,8 +154,11 @@ export function Symbol({ comp, glow = 0, active = false }: SymbolProps) {
 export function labelPos(c: Placed, cell: number): { x: number; y: number; anchor: 'start' | 'middle' } {
   const cx = c.x * cell;
   const cy = c.y * cell;
-  if (c.rot === 90 || c.rot === 270) return { x: cx + cell * 0.8, y: cy + cell * 0.35, anchor: 'start' };
-  return { x: cx, y: cy + cell * 1.0, anchor: 'middle' };
+  // a placa longa da fonte desce mais que o corpo das outras peças
+  const folga = c.kind === 'vsource' ? 0.45 : 0;
+  if (c.rot === 90 || c.rot === 270)
+    return { x: cx + cell * (0.8 + folga), y: cy + cell * 0.35, anchor: 'start' };
+  return { x: cx, y: cy + cell * (1.0 + folga), anchor: 'middle' };
 }
 
 /** Valor legível para a etiqueta do símbolo (e para o painel). */
@@ -184,4 +187,10 @@ export function formatAmps(a: number): string {
   const abs = Math.abs(a);
   if (abs >= 1) return `${trim(a)} A`;
   return `${trim(a * 1e3)} mA`;
+}
+
+/** Tensão para leitura (pt-BR, duas casas): 4.5 → "4,50 V". A MESMA forma no
+ *  painel, na projeção, no Kirchhoff e no quadro — vírgula, como no caderno. */
+export function formatVolts(v: number): string {
+  return `${v.toFixed(2).replace('.', ',')} V`;
 }

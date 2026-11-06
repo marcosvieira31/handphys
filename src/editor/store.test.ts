@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { useEditor } from './store';
+import { idLivre, useEditor } from './store';
+import { EXAMPLES } from './examples';
 
 /**
  * O fio tem imã nos dois lados: soltar PERTO de um terminal conecta nele,
@@ -412,5 +413,48 @@ describe('bancada 3D escrevendo o enquadramento de volta (store.setFraming)', ()
     expect(dep.zoom).toBe(2.5);
     expect(dep.pan.x).toBeCloseTo(60, 10);
     expect(dep.pan.y).toBeCloseTo(-40, 10);
+  });
+});
+
+describe('rework: ids livres, valor no desfazer, enquadrar ao abrir', () => {
+  beforeEach(() => {
+    useEditor.setState({ doc: { comps: [], wires: [] }, seq: 0, past: [], zoom: 1, pan: { x: 0, y: 0 } });
+  });
+
+  it('peça nova depois de abrir um exemplo NÃO repete id', () => {
+    const ex = EXAMPLES[1].doc; // Divisor: r1, r2
+    useEditor.getState().load(ex);
+    const st = useEditor.getState();
+    st.arm('resistor');
+    st.pressAt({ x: 20, y: 20 });
+    st.releaseAt({ x: 20, y: 20 });
+    const ids = useEditor.getState().doc.comps.map((c) => c.id);
+    expect(new Set(ids).size).toBe(ids.length);
+    expect(ids).toContain('r3');
+  });
+
+  it('idLivre pula o que já existe', () => {
+    const doc = { comps: [{ id: 'r1', kind: 'resistor' as const, x: 0, y: 0, rot: 0 as const, value: 1 }], wires: [] };
+    expect(idLivre(doc, 'r', 0)).toEqual({ id: 'r2', seq: 2 });
+    expect(idLivre(doc, 'c', 0)).toEqual({ id: 'c1', seq: 1 });
+  });
+
+  it('trocar o valor entra no Desfazer (e repetir o mesmo valor não)', () => {
+    useEditor.getState().load(EXAMPLES[0].doc);
+    const antes = useEditor.getState().past.length;
+    useEditor.getState().setValue('r1', 220);
+    useEditor.getState().setValue('r1', 220);
+    expect(useEditor.getState().past.length).toBe(antes + 1);
+    useEditor.getState().undo();
+    expect(useEditor.getState().doc.comps.find((c) => c.id === 'r1')!.value).toBe(100);
+  });
+
+  it('abrir um exemplo amplia a vista sobre ele; caber tudo volta ao circuito', () => {
+    useEditor.getState().load(EXAMPLES[0].doc);
+    const z = useEditor.getState().zoom;
+    expect(z).toBeGreaterThan(1);
+    useEditor.getState().zoomBy(2);
+    useEditor.getState().resetView();
+    expect(useEditor.getState().zoom).toBeCloseTo(z);
   });
 });

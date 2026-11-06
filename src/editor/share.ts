@@ -16,6 +16,7 @@
 
 import type { CircuitDoc, CompKind, Placed, Rot, Wire } from '../core/netlist';
 import { ID_PREFIX, useEditor } from './store';
+import { centrarNoQuadro, enquadrarConteudo } from './zoomMath';
 
 /** Versão do payload: muda o formato, o link antigo passa a ser recusado. */
 export const SHARE_VERSION = 1;
@@ -193,6 +194,7 @@ export function bootFromLink(): 'none' | 'ok' | 'bad' {
   if (!payload) return 'none';
   const doc = decodeDoc(payload);
   if (!doc) return 'bad';
-  useEditor.setState({ doc });
+  const meio = centrarNoQuadro(doc); // no meio do quadro, já enquadrado
+  useEditor.setState({ doc: meio, ...enquadrarConteudo(meio) });
   return 'ok';
 }

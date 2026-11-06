@@ -2,10 +2,10 @@ import { KCL_TOL, fechaConta, malhas, porNo } from '../core/kirchhoff';
 import { KIND_LABEL } from '../core/kinds';
 import type { Reading } from '../core/netlist';
 import { IcoMalha, IcoNo } from './icons';
-import { formatAmps } from './symbol';
+import { formatAmps, formatVolts } from './symbol';
 
 /** Tensão no formato da tabela de leituras (toFixed(2), mesmo ponto). */
-const fmtV = (v: number) => `${v.toFixed(2)} V`;
+const fmtV = formatVolts;
 
 /** 0 V de verdade (folga de float): parado não sobe nem cai — como o ramo de 0 mA. */
 const parado = (v: number) => Math.abs(v) <= KCL_TOL;

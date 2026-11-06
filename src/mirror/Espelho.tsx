@@ -5,7 +5,7 @@ import { challengeById, evaluateChallenge } from '../editor/challenges';
 import { KIND_ICON } from '../editor/icons';
 import { Kirchhoff } from '../editor/Kirchhoff';
 import { Rc } from '../editor/Rc';
-import { formatAmps, formatValue } from '../editor/symbol';
+import { formatAmps, formatValue, formatVolts } from '../editor/symbol';
 import { Schematic } from '../editor/Schematic';
 import { useEditor } from '../editor/store';
 import { localChannel } from './channel';
@@ -203,7 +203,7 @@ export function Espelho() {
                       </span>
                     </td>
                     <td>{comp ? formatValue(r.kind, comp.value) : '—'}</td>
-                    <td className="num">{r.volts.toFixed(2)}</td>
+                    <td className="num">{formatVolts(r.volts)}</td>
                     <td className="num">{formatAmps(r.amps)}</td>
                   </tr>
                 );
